@@ -152,18 +152,69 @@ var FlightCore = (function () {
     ];
   }
 
+  // Childhood-photo route: cards from the places along the way, plus two notes from home for the long gaps.
+  var POSTCARDS = [
+    ['p1', 90, 'Southwest Finland', 'Tampere', 'Helaraitti'],
+    ['p2', 120, 'Salo', 'Salo', 'Halikonlahti bay'],
+    ['p4', 170, 'Turku archipelago', 'Turku', 'Aura river'],
+    ['p5', 250, 'Åland', 'Mariehamn', 'Åland islands'],
+    ['p7', 380, 'Stockholm archipelago', 'Stockholm', 'Gamla stan'],
+    ['p3', 640, 'Öland, off the left wing', 'Tampere', 'Pyynikki tower'],
+    ['p8', 900, 'Øresund', 'Copenhagen', 'Nyhavn'],
+    ['p9', 1050, 'Fehmarn Belt', 'Billund', 'Legoland'],
+    ['p6', 1330, 'Hanover', 'Salo', 'Mathildedal village'],
+    ['p10', 1600, 'the Eifel', 'Brussels', 'Grand-Place'],
+    ['p11', 1697, 'Luxembourg (LUX)', 'Luxembourg', 'Old town']
+  ];
+  // The previous route, to recognise rows nobody has edited.
+  var OLD_POSTCARDS = {
+    p1: [90, 'Turku archipelago', 'Tampere', 'Helaraitti'], p2: [255, 'Åland', 'Salo', 'Halikonlahti bay'],
+    p3: [380, 'Stockholm archipelago', 'Tampere', 'Pyynikki tower'], p4: [520, 'Gotland, off the left wing', 'Salo', 'Teijo National Park'],
+    p5: [870, 'Øresund: halfway', 'Tampere', 'Tammerkoski rapids'], p6: [1190, 'Hamburg', 'Salo', 'Mathildedal village'],
+    p7: [1530, 'Rhine, Cologne–Bonn', 'Tampere', 'Pispala ridge'], p8: [1660, 'Moselle valley', 'Salo', 'Market square'],
+    p9: [1697, 'Luxembourg (LUX)', 'Tampere', 'Tampere–Pirkkala airport']
+  };
+  var KEEP_MEANING = { p1: 1, p2: 1, p3: 1, p6: 1 }; // same card, only moved along the route
+
   function seedPostcards() {
-    return [
-      ['p1', 90, 'Turku archipelago', 'Tampere', 'Helaraitti'],
-      ['p2', 255, 'Åland', 'Salo', 'Halikonlahti bay'],
-      ['p3', 380, 'Stockholm archipelago', 'Tampere', 'Pyynikki tower'],
-      ['p4', 520, 'Gotland, off the left wing', 'Salo', 'Teijo National Park'],
-      ['p5', 870, 'Øresund: halfway', 'Tampere', 'Tammerkoski rapids'],
-      ['p6', 1190, 'Hamburg', 'Salo', 'Mathildedal village'],
-      ['p7', 1530, 'Rhine, Cologne–Bonn', 'Tampere', 'Pispala ridge'],
-      ['p8', 1660, 'Moselle valley', 'Salo', 'Market square'],
-      ['p9', 1697, 'Luxembourg (LUX)', 'Tampere', 'Tampere–Pirkkala airport']
-    ].map(function (r) { return { id: r[0], km: r[1], over: r[2], from: r[3], place: r[4], photo: '', message: '', openedAt: '' }; });
+    return POSTCARDS.map(function (r) { return { id: r[0], km: r[1], over: r[2], from: r[3], place: r[4], photo: '', message: '', openedAt: '' }; });
+  }
+
+  /**
+   * Moves a Sheet to the childhood-photo route without losing anything written.
+   * A row is changed only while it still holds the old defaults; a repurposed row also has to be empty.
+   * Edited rows stay as they are, and the new card is added next to them with a fresh id.
+   */
+  function postcardSync(data) {
+    var writes = [], have = {}, maxId = POSTCARDS.length;   // fresh ids never clash with the route's own
+    data.postcards.forEach(function (r) {
+      have[str(r.id)] = r;
+      var m = str(r.id).match(/^p(\d+)$/); if (m) maxId = Math.max(maxId, Number(m[1]));
+    });
+    function same(r, o, fields) {
+      var cur = [Number(r.km), str(r.over).trim(), str(r.from).trim(), str(r.place).trim()];
+      return fields.every(function (i) { return i === 3 && str(r.id) === 'p1' ? ['Helaraitti', 'Näsinneula tower'].indexOf(cur[3]) >= 0 : cur[i] === o[i]; });
+    }
+    function exists(n) {
+      return data.postcards.some(function (r) { return Number(r.km) === n.km && str(r.from).trim() === n.from; });
+    }
+    seedPostcards().forEach(function (n) {
+      var r = have[n.id], o = OLD_POSTCARDS[n.id];
+      var row = { id: n.id, km: n.km, over: n.over, from: n.from, place: n.place, photo: '', message: '', openedAt: '' };
+      if (!r) { if (!exists(n)) writes.push({ tab: 'Postcards', kind: 'append', row: row }); return; }
+      if (!o) return; // already a new-route card
+      if (KEEP_MEANING[n.id]) {
+        if (same(r, o, [0, 1])) writes.push({ tab: 'Postcards', kind: 'patch', by: 'id', value: n.id, patch: { km: n.km, over: n.over } });
+        return;
+      }
+      if (same(r, o, [0, 1, 2, 3]) && !str(r.message).trim() && !str(r.photo).trim()) {
+        writes.push({ tab: 'Postcards', kind: 'patch', by: 'id', value: n.id, patch: { km: n.km, over: n.over, from: n.from, place: n.place } });
+      } else if (!exists(n)) {
+        row.id = 'p' + (++maxId);           // the old card has his words in it: keep it, add the new one beside it
+        writes.push({ tab: 'Postcards', kind: 'append', row: row });
+      }
+    });
+    return writes;
   }
 
   var RETIRED = ['machine-chest-press', 'low-incline-db-press', 'flat-db-press', 'weighted-dip', 'db-row'];
@@ -419,7 +470,7 @@ var FlightCore = (function () {
 
   return {
     TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises,
-    seedPostcards: seedPostcards, upgradePlan: upgradePlan, exerciseSync: exerciseSync, toEngineInput: toEngineInput, buildState: buildState,
+    seedPostcards: seedPostcards, postcardSync: postcardSync, upgradePlan: upgradePlan, exerciseSync: exerciseSync, toEngineInput: toEngineInput, buildState: buildState,
     applyOp: applyOp, photoUrl: photoUrl, teaserUrl: teaserUrl
   };
 })();

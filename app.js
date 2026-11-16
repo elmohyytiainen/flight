@@ -114,7 +114,7 @@
         overrides: [], stamps: [], postcards: C.seedPostcards(), cheers: [], reactions: [] };
       data.postcards[0].message = 'Example note: this is where your coach writes to you.\n\nYou already did the hardest part: you started. Proud of you!';
       data.postcards[1].message = 'Example note from Salo. Keep the hips high and the chin tucked :)';
-      data.postcards[2].message = 'Example note from Tampere. Look how far the plane has come already.';
+      data.postcards[2].message = 'Example note. This is where a childhood photo from here goes :)';
       // a stand-in "photo" so the demo shows the blurred teaser of the next card
       data.postcards.forEach(function (c, i) {
         if (i >= 3) c.photo = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 30"><rect width="40" height="30" fill="#8CC3E8"/><rect y="17" width="40" height="13" fill="#2F6E9E"/><rect y="24" width="40" height="6" fill="#E9D6A8"/><circle cx="30" cy="7" r="4" fill="#FFD66B"/><rect x="13" y="13" width="5" height="11" rx="2" fill="#D9534F"/><circle cx="15.5" cy="11" r="2.6" fill="#F2C9A8"/></svg>');
@@ -662,7 +662,6 @@
     if (it.cue) h += '<p class="cue">' + esc(it.cue) + '</p>';
     h += '<div class="exlinks">' + (it.video ? '<a class="linkbtn" href="' + esc(it.video) + '" target="_blank" rel="noopener">Watch the form</a>' : '') +
       (it.options > 1 && !anyDone ? '<button class="linkbtn" data-act="choose" data-slot="' + esc(it.slot) + '" data-ctx="flight">Change exercise</button>' : '') + '</div>';
-    if (it.taxi) h += '<div class="taxihint">New movement: do 1–2 light warm-up sets first, then pick a weight for these reps with about 1 left in the tank. It becomes your working weight :)</div>';
     return h;
   }
 
@@ -680,8 +679,7 @@
     });
     h += '</div><span class="clock" id="clock">' + elapsed() + '</span></div>';
 
-    h += '<div class="strip">' + routeBar(c.cumKm, st.routeKm) + '<div class="striptext"><span><b>+' + kgFmt(c.km) + ' km</b> this workout, ' + c.reps + ' reps</span><span class="muted">' +
-      (left > 0 ? km(left) + ' km until ' + esc(who()) + ' flies to Luxembourg' : 'Flight unlocked ✈ ' + esc(who()) + ' to LUX') + '</span></div></div>';
+    h += '<div class="strip">' + routeBar(c.cumKm, st.routeKm) + '<div class="striptext"><span><b>+' + kgFmt(c.km) + ' km</b> this workout, ' + c.reps + ' reps</span></div></div>';
 
     if (elapsedMin() >= 68 && !d.timeOffer && accessoryOpen(d)) {
       h += '<section class="offer inline"><b>' + Math.round(elapsedMin()) + ' minutes in :)</b> Finish with one last accessory round, or skip the rest?' +
@@ -910,8 +908,7 @@
         '<div><b>' + esc(fmtDate(s.date)) + '</b><div class="small muted">' + s.reps + ' reps' + (s.minutes ? ', ' + s.minutes + ' min' : '') +
         (s.mode === 'deload' ? ', easier week' : s.mode === 'intro' ? ', intro' : '') + (s.prs.length ? ', 🏅 ' + plural(s.prs.length, 'PB', 'PBs') : '') + (s.goals.length ? ', 🎯 goal' : '') + '</div>' +
         reactionsFor(s.id).map(function (r) { return '<div class="rx">' + esc(reactionText(r)) + '</div>'; }).join('') + '</div>' +
-        '<div class="km">+' + Math.round(s.km) + '<small>km</small></div>' +
-        (s.photo ? '<button class="phbtn" data-act="showPhoto" data-id="' + esc(s.id) + '" aria-label="See the photo">' + IC.camera + '</button>' : '') + '</div>';
+        '<div class="km">+' + Math.round(s.km) + '<small>km</small></div></div>';
     });
     if (DEMO) h += demoLinks();
     return h + '</div>';
