@@ -136,7 +136,7 @@ var FlightEngine = (function () {
 
   function setsFor(n, mode) {
     if (mode === 'deload') return Math.max(1, Math.ceil(n / 2));
-    if (mode === 'intro') return Math.max(1, n - 1);
+    if (mode === 'intro' || mode === 'back') return Math.max(1, n - 1);
     return n;
   }
 
@@ -148,7 +148,7 @@ var FlightEngine = (function () {
     if (!m) return 1;
     return m[2] !== undefined ? (Number(m[1]) + Number(m[2])) / 2 : Number(m[1]);
   }
-  function fbAdj(fb) { return fb === 'easy' ? 1.5 : fb === 'hard' ? -0.5 : 0; }
+  function fbAdj(fb) { return fb === 'easy' ? 3 : fb === 'hard' ? -0.5 : 0; /* easy = 3+ more reps were there */ }
   /** Reps she should manage at kg with `rir` left, from the strength estimate. */
   function predReps(e, est, kg, rir) { var a = loadOf(e, kg); return a > 0 ? Math.floor(est / a * 30 - 30 - rir + 1e-9) : 0; }
   /** Working weight for `reps` with 1 in reserve. */
@@ -204,6 +204,16 @@ var FlightEngine = (function () {
     });
   }
 
+  var BREAK_DAYS = 14;
+  /** Session mode: easier week, intro week, first workout back after a 2-week break, or normal. */
+  function modeFor(st, dateStr, deloadLeft, lastDate) {
+    if (deloadLeft > 0) return 'deload';
+    var week = weekOf(dateStr, st.startDate);
+    if (week >= 1 && week <= st.introWeeks) return 'intro';
+    if (lastDate && (Date.parse(dateStr) - Date.parse(lastDate)) / 864e5 >= BREAK_DAYS) return 'back';
+    return 'normal';
+  }
+
   function newState() {
     return { kg: null, lastKg: null, lastReps: null, hard: false, topAll: false, overridden: false };
   }
@@ -233,6 +243,13 @@ var FlightEngine = (function () {
     return base + ' at ' + fmtKg(g.kg) + ' ' + e.kgLabel + reps;
   }
   function fmtKg(k) { return String(Math.round(k * 100) / 100); }
+  /** False for a set that is almost certainly a typo (e.g. 80 instead of 8 kg). */
+  function plausible(e, ref, kg, reps) {
+    if (reps > 60) return false;
+    if (ref === null || ref === undefined || ref <= 0) return true;
+    if (e.assisted) return kg === 0 || !(ref >= 5 && kg < ref / 2.5); // 0 = a real unassisted attempt
+    return kg <= ref * 2.5 + 2 * e.stepKg;
+  }
   function meets(e, g, kg, reps) { return reps >= g.reps && (e.assisted ? kg <= g.kg + 1e-9 : kg >= g.kg - 1e-9); }
 
   /**
@@ -271,7 +288,7 @@ var FlightEngine = (function () {
       applyOverridesBefore(sess.date);
       while (di < deloads.length && deloads[di] <= sess.date) { deloadLeft = st.deloadSessions; lastDeload = deloads[di]; di++; }
       var week = weekOf(sess.date, st.startDate);
-      var mode = deloadLeft > 0 ? 'deload' : (week >= 1 && week <= st.introWeeks ? 'intro' : 'normal');
+      var mode = modeFor(st, sess.date, deloadLeft, out.length ? out[out.length - 1].date : null);
       if (deloadLeft > 0) deloadLeft--;
       var sets = sess.sets || [];
       var prescribed = 0, doneN = 0, reps = 0, volume = 0, ups = [], steps = {}, improvements = [], prs = [], goalsHit = [];
@@ -288,11 +305,15 @@ var FlightEngine = (function () {
         if (!e) return;
         var done = sets.filter(function (x) { return x.ex === e.id && x.done && !x.skip; })
           .sort(function (a, b) { return num(a.set, 0) - num(b.set, 0); });
-        doneN += Math.min(done.length, p);
-        done.forEach(function (x) {
+        var all = done;
+        var ref = stOf(e.id, sess.day).kg !== null ? stOf(e.id, sess.day).kg : stOf(e.id, sess.day === 'A' ? 'B' : 'A').kg;
+        done = done.filter(function (x) { return plausible(e, ref, num(x.kg, 0), num(x.reps, 0)); });
+        doneN += Math.min(all.length, p);
+        all.forEach(function (x) {
           reps += num(x.reps, 0);
           if (!e.assisted) volume += num(x.kg, 0) * num(x.reps, 0) * e.loadMult;
         });
+        if (!done.length) return;
         var r = progress(e, slot, side, sess.day, done, p, mode, sess.date, stOf(e.id, sess.day));
         if (r.up) { ups.push(e.id); steps[e.id] = r.up; }
         if (r.improvement) improvements.push({ ex: e.id, day: sess.day, text: r.improvement });
@@ -366,10 +387,12 @@ var FlightEngine = (function () {
         if (!prev) prev = h[j]; else { prev2 = h[j]; break; }
       }
       var entry = { date: date, day: day, mode: mode, kg: workKg, reps: reps, kgs: kgs, fbs: fbs, total: sum(at), sets: at.length };
+      // a lower weight the app itself prescribed after missed reps is not a decline
+      var plannedDown = s.missed && s.lastKg !== null && (e.assisted ? workKg > s.lastKg : workKg < s.lastKg);
       if (prev && mode !== 'deload') {
         out.improvement = compare(e, prev, entry);
         // sustained: worse than last time AND worse than the time before (two weeks for a weekly lift)
-        out.decline = !!prev2 && declined(e, prev, entry) && declined(e, prev2, entry);
+        out.decline = !plannedDown && !!prev2 && declined(e, prev, entry) && declined(e, prev2, entry);
       }
       h.push(entry);
 
@@ -378,7 +401,9 @@ var FlightEngine = (function () {
       // the shared strength estimate: best set of the day, both days feed it
       var best = 0;
       done.forEach(function (x, j2) {
-        var v = oneRm(e, kgs[j2], Math.min(reps[j2], 15), Math.max(0, rirNum(x.rir) + fbAdj(x.fb)));
+        // "Too easy" on a set that missed its goal contradicts itself: ignore it
+        var adj = x.fb === 'easy' && (reps[j2] < side.min || reps[j2] < num(x.target, 0)) ? 0 : fbAdj(x.fb);
+        var v = oneRm(e, kgs[j2], Math.min(reps[j2], 15), Math.max(0, rirNum(x.rir) + adj));
         if (v > best) best = v;
       });
       if (best > 0) {
@@ -388,10 +413,18 @@ var FlightEngine = (function () {
       entry.est = hasOwn(est, e.id) ? est[e.id] : null;
 
       var hard = atIdx.some(function (j3) { return fbs[j3] === 'hard'; });
+      // "Too hard" while still making every rep: hold once, but not twice in a row
+      var hardMet = hard && complete && at.every(function (r, q) { return r >= (s.lastKg === workKg && s.lastReps ? Math.min(s.lastReps[q] || 0, side.max) : side.min); });
+      if (hard && hardMet && s.hardMet) { hard = false; hardMet = false; }
+      s.hardMet = hardMet;
+      var easy = atIdx.filter(function (j5) { return fbs[j5] === 'easy'; }).length;
+      s.easy = mode === 'normal' && easy * 2 >= atIdx.length && easy > 0;
+      // below the bottom of the range on most sets: the weight comes down next time
+      s.missed = mode !== 'deload' && at.filter(function (r) { return r < side.min; }).length * 2 > at.length;
       s.overridden = false;
       s.kg = workKg; s.lastKg = workKg; s.hard = hard;
       s.lastReps = complete ? reps.slice() : fill(prescribed, Math.min.apply(null, at));
-      s.topAll = mode !== 'intro' && complete && !hard && at.every(function (r) { return r >= side.max; });
+      s.topAll = mode === 'normal' && complete && !hard && at.every(function (r) { return r >= side.max; });
       var nx = decide(e, side, s, est[e.id], 'normal', side.sets);
       if (nx.up) out.up = nx.up;
       return out;
@@ -460,7 +493,14 @@ var FlightEngine = (function () {
     }
     var kg = s.kg;
     if (mode === 'deload') { r.targets = fill(sets, side.min); return r; }
-    if (mode !== 'intro' && !s.hard) {
+    var dir0 = e.assisted ? -1 : 1;
+    if (s.missed && est && s.lastKg === kg) {
+      var down = kgFor(e, est, mid);
+      if (dir0 * (down - kg) >= 0) down = Math.max(0, roundToStep(kg - dir0 * e.stepKg, e.stepKg));
+      r.kg = down; r.down = true; r.targets = fill(sets, side.min);
+      return r;
+    }
+    if (mode !== 'intro' && mode !== 'back' && !s.hard) {
       var dir = e.assisted ? -1 : 1, a = loadOf(e, kg);
       var small = a > 0 && e.stepKg / a > 0.08;
       var need = small ? side.min : side.min + 1, steps = 0;
@@ -472,6 +512,14 @@ var FlightEngine = (function () {
         }
       }
       if (!steps && s.topAll) steps = 1;
+      if (steps === 3 && est) {
+        // still far too light after three increments: go straight to the weight her strength points to (at most +50% load)
+        var jump = kgFor(e, est, mid), cap = e.assisted ? e.baseKg - loadOf(e, kg) * 1.5 : loadOf(e, kg) * 1.5 - e.baseKg;
+        if (dir * (jump - (kg + dir * 3 * e.stepKg)) > 0) {
+          jump = dir > 0 ? Math.min(jump, floorToStep(cap, e.stepKg)) : Math.max(jump, Math.max(0, Math.ceil(cap / e.stepKg - 1e-9) * e.stepKg));
+          if (dir * (jump - kg) > 0) steps = Math.max(3, Math.round(Math.abs(jump - kg) / e.stepKg));
+        }
+      }
       if (steps) {
         r.kg = Math.max(0, roundToStep(kg + dir * steps * e.stepKg, e.stepKg));
         r.up = steps;
@@ -517,7 +565,7 @@ var FlightEngine = (function () {
     var rir = [], failureSet = -1;
     for (var i = 0; i < sets; i++) {
       var r = e.rir || '1';
-      if (mode === 'intro') r = '2–3';
+      if (mode === 'intro' || mode === 'back') r = '2–3';
       else if (mode === 'deload') r = '3–4';
       else if (i === sets - 1 && !e.rir) {
         if (slot.failureLast.indexOf(day) >= 0 || slot.failureLast === 'AB') { r = '0'; failureSet = i; }
@@ -525,14 +573,15 @@ var FlightEngine = (function () {
       }
       rir.push(r);
     }
-    var calibrate = (slot.calibrate || e.stable) && !e.assisted && !taxi && !estimated && mode === 'normal' &&
-      targets.every(function (t) { return t >= side.max; });
+    var calibrate = !taxi && !estimated && mode === 'normal' && !dc.down && (
+      ((slot.calibrate || e.stable) && !e.assisted && targets.every(function (t) { return t >= side.max; })) ||
+      !!(s && s.easy));
     return {
       slot: slot.key, muscle: slot.muscle, pair: slot.pair, exercise: e, sets: sets, kg: taxi ? null : kg,
       taxi: taxi, estimated: estimated, targets: targets, rir: rir, failureSet: failureSet, calibrate: calibrate,
       min: side.min, max: side.max, rest: side.rest,
       lastKg: s ? s.lastKg : null, lastReps: s ? s.lastReps : null,
-      upSteps: dc.up, overridden: !!(s && s.overridden && !s.lastReps)
+      upSteps: dc.up, down: !!dc.down, overridden: !!(s && s.overridden && !s.lastReps)
     };
   }
 
@@ -541,7 +590,8 @@ var FlightEngine = (function () {
     var st = result.settings;
     day = day || nextDay(result);
     var week = weekOf(dateStr, st.startDate);
-    var mode = result.deloadLeft > 0 ? 'deload' : (week >= 1 && week <= st.introWeeks ? 'intro' : 'normal');
+    var last = result.sessions.length ? result.sessions[result.sessions.length - 1].date : null;
+    var mode = modeFor(st, dateStr, result.deloadLeft, last && last < dateStr ? last : null);
     var items = slotsOn(result.prog, day).map(function (slot) {
       var ch = choiceFor(result, slot.key, day);
       var e = ch ? result.prog.exById[ch.ex] : (lastUsed(result, slot, day) || lastUsed(result, slot, day === 'A' ? 'B' : 'A') || slot.variants[0]);

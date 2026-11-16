@@ -372,7 +372,7 @@ var FlightCore = (function () {
       var sets = (s.sets || []).slice(0, 200).map(function (x) {
         return { slot: clip(x.slot, 40), ex: clip(x.ex, 60), set: Number(x.set) || 0, kg: Number(x.kg) || 0,
           reps: Number(x.reps) || 0, done: !!x.done, fb: ['easy', 'ok', 'hard'].indexOf(x.fb) >= 0 ? x.fb : '', skip: !!x.skip,
-          rir: clip(x.rir, 6) };
+          rir: clip(x.rir, 6), target: Number(x.target) || 0 };
       });
       var row = { id: clip(s.id, 60), date: s.date, day: s.day, week: '', minutes: Number(s.minutes) || '',
         effort: s.effort ? Number(s.effort) : '', note: clip(s.note, 2000), reps: '', km: '', cumKm: '', volumeKg: '',
@@ -451,7 +451,7 @@ var FlightCore = (function () {
     var dayName = str(data.settings[c.day === 'A' ? 'dayAName' : 'dayBName']) || 'Day ' + c.day;
     var left = Math.max(0, Math.round(st.routeKm - c.cumKm));
     var lines = [];
-    lines.push('Workout ' + n + ' (' + dayName + (c.mode === 'deload' ? ', easier week' : c.mode === 'intro' ? ', intro week' : '') +
+    lines.push('Workout ' + n + ' (' + dayName + (c.mode === 'deload' ? ', easier week' : c.mode === 'intro' ? ', intro week' : c.mode === 'back' ? ', first workout after a break' : '') +
       (c.minutes ? ', ' + c.minutes + ' min' : '') + '): ' + c.reps + ' reps, +' + c.km + ' km.');
     lines.push(left > 0 ? left + ' km until ' + who + ' flies to Luxembourg.' : 'Flight unlocked: ' + who + ' to LUX!');
     lines.push(c.done + '/' + c.prescribed + ' working sets.');
@@ -459,6 +459,17 @@ var FlightCore = (function () {
     if (c.goals && c.goals.length) lines.push('🎯 GOAL REACHED: ' + c.goals.map(function (g) { return g.label; }).join(', ') + '!');
     if (c.prs.length) lines.push('New personal best: ' + c.prs.map(function (p) { return (names[p.ex] || p.ex) + ' ' + p.kg + ' kg × ' + p.reps; }).join(', ') + ' >:)');
     if (c.upgrades.length) lines.push('Heavier next time: ' + c.upgrades.map(function (id) { return names[id] || id; }).join(', ') + '.');
+    var recent = result.sessions.slice(-3).map(function (x) { return x.id; }), hardN = 0, hardMet = 0, total = 0;
+    data.sessions.forEach(function (row) {
+      if (recent.indexOf(str(row.id)) < 0) return;
+      parseSets(row.setsJson).forEach(function (x) {
+        if (!x.done || x.skip) return;
+        total++;
+        if (x.fb === 'hard') { hardN++; if (Number(x.target) > 0 && Number(x.reps) >= Number(x.target)) hardMet++; }
+      });
+    });
+    if (recent.length === 3 && total >= 20 && hardN >= total * 0.6 && hardMet >= hardN * 0.8)
+      lines.push('Heads-up: she has tapped "Too hard" on most sets for 3 workouts but still made the goal reps. Weights go up slowly while she does that, so worth a chat (or set a weight in the coach view).');
     if (result.fatigue.offer) lines.push('Several lifts dipped over the last two weeks. The app offers her an easier week.');
     if (c.effort) lines.push('Effort ' + c.effort + '/5.');
     if (c.note) lines.push('Her note: "' + c.note + '"');

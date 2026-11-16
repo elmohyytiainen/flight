@@ -530,7 +530,7 @@
       var nd = nextSessionDate(res), day = E.nextDay(res), p = E.plan(res, nd, day);
       h += '<section class="panel next"><div><div class="small muted">Next workout, ' + esc(nd === t ? 'today' : fmtLong(nd)) + '</div>' +
         '<h2>' + esc(dayName(day)) + '</h2><div class="small muted">' + plural(p.items.length, 'exercise', 'exercises') + ', ' + p.setsTotal + ' sets' +
-        (p.mode === 'intro' ? ', intro week' : p.mode === 'deload' ? ', easier week' : '') + '</div></div>' +
+        (p.mode === 'intro' ? ', intro week' : p.mode === 'back' ? ', welcome back' : p.mode === 'deload' ? ', easier week' : '') + '</div></div>' +
         '<button class="btn taxi" data-act="board">Let\'s go</button></section>';
     }
     h += weekStrip(res) + '</div>';
@@ -551,6 +551,7 @@
     var h = '<div class="screen"><header class="top"><button class="linkbtn backlink" data-act="home">' + IC.back + 'Home</button>' + syncHTML() + '</header>';
     h += '<h1 class="todayh">Today: ' + esc(dayName(day)) + '</h1><div class="small muted">' + plural(p.items.length, 'exercise', 'exercises') + ', ' + p.setsTotal + ' sets</div>';
     if (p.mode === 'intro') h += '<div class="note">Intro week: one set fewer and 2–3 reps in reserve while you learn the movements :)</div>';
+    if (p.mode === 'back') h += '<div class="note">Welcome back :) First workout after a break: one set fewer and 2–3 reps in reserve. Back to normal next time.</div>';
     if (p.mode === 'deload') h += '<div class="note">Easier week: half the sets, 3–4 reps in reserve, same weights. Recovery is part of the flight ;)</div>';
     h += '<p class="small muted choicehint">Pick one exercise per muscle. Stick with the same choice for at least a few weeks so your progress shows.</p>';
     var sn = 0;
@@ -583,7 +584,7 @@
     var e = it.exercise;
     return { slot: it.slot, muscle: it.muscle, ex: e.id, name: e.name, kgLabel: e.kgLabel, step: e.stepKg || 1, assisted: e.assisted,
       cue: e.cue, video: e.video, min: it.min, max: it.max, rest: it.rest, pair: it.pair, calibrate: it.calibrate, taxi: it.taxi,
-      estimated: it.estimated, upSteps: it.upSteps, overridden: it.overridden, lastKg: it.lastKg, lastReps: it.lastReps,
+      estimated: it.estimated, upSteps: it.upSteps, down: it.down, overridden: it.overridden, lastKg: it.lastKg, lastReps: it.lastReps,
       options: it.options.length, oneOff: false };
   }
   function setsFromPlan(it) {
@@ -638,7 +639,8 @@
     var d = S.draft;
     var end = d.finishedAt || Date.now();
     return { id: d.id, date: d.date, day: d.day, minutes: Math.max(1, Math.round((end - d.startedAt) / 60000)), effort: d.effort || null, note: d.note || '',
-      sets: d.sets.map(function (s) { return { slot: s.slot, ex: s.ex, set: s.set, kg: Number(s.kg) || 0, reps: Number(s.reps) || 0, done: !!s.done, fb: s.fb || '', skip: !!s.skip }; }) };
+      sets: d.sets.map(function (s) { return { slot: s.slot, ex: s.ex, set: s.set, kg: Number(s.kg) || 0, reps: Number(s.reps) || 0, done: !!s.done, fb: s.fb || '', skip: !!s.skip,
+        rir: s.rir || '', target: Number(s.target) || 0 }; }) };
   }
   function preview() { return E.previewSession(input(), draftSession()); }
 
@@ -655,6 +657,7 @@
     h += '<div class="tags">';
     if (it.oneOff) h += '<span class="tag">Just for today</span>';
     if (it.upSteps && !it.oneOff) h += '<span class="tag up">Heavier today >:)</span>';
+    if (it.down && !it.oneOff) h += '<span class="tag">Lighter today, so you hit the reps</span>';
     if (it.estimated) h += '<span class="tag">Estimated from your ' + esc(dayName(d.day === 'A' ? 'B' : 'A')) + ' day</span>';
     if (it.overridden) h += '<span class="tag">Weight set by your coach</span>';
     if (it.lastReps && it.lastKg !== null && it.lastKg !== undefined && !it.upSteps) h += '<span class="tag">Last time ' + it.lastReps.join(', ') + ' at ' + kgFmt(it.lastKg) + ' kg</span>';
@@ -713,7 +716,7 @@
       if (s.skip) notes.push('Skipped');
       else notes.push(esc(rirText(s.rir)));
       if (i === next && s.rir === '0') notes.push('Finish the last rep you can do with your usual form and range');
-      if (i === next && s.calib) notes.push('Calibration set: if it moves well, keep going past ' + it.max + ' and log every clean rep');
+      if (i === next && s.calib) notes.push('Last set: if it moves well, keep going past the goal and log every clean rep');
       h += '<div class="rirline">' + notes.join('. ') + '</div>';
       if (d.fbFor === i) {
         h += '<div class="fb"><span class="small muted">How was that set?</span>' + [['easy', 'Too easy'], ['ok', 'Just right'], ['hard', 'Too hard']].map(function (f) {
@@ -906,7 +909,7 @@
     list.forEach(function (s, i) {
       h += '<div class="mini"><div class="seat">' + (n - i) + '<small>' + esc(dayName(s.day)) + '</small></div>' +
         '<div><b>' + esc(fmtDate(s.date)) + '</b><div class="small muted">' + s.reps + ' reps' + (s.minutes ? ', ' + s.minutes + ' min' : '') +
-        (s.mode === 'deload' ? ', easier week' : s.mode === 'intro' ? ', intro' : '') + (s.prs.length ? ', 🏅 ' + plural(s.prs.length, 'PB', 'PBs') : '') + (s.goals.length ? ', 🎯 goal' : '') + '</div>' +
+        (s.mode === 'deload' ? ', easier week' : s.mode === 'intro' ? ', intro' : s.mode === 'back' ? ', welcome back' : '') + (s.prs.length ? ', 🏅 ' + plural(s.prs.length, 'PB', 'PBs') : '') + (s.goals.length ? ', 🎯 goal' : '') + '</div>' +
         reactionsFor(s.id).map(function (r) { return '<div class="rx">' + esc(reactionText(r)) + '</div>'; }).join('') + '</div>' +
         '<div class="km">+' + Math.round(s.km) + '<small>km</small></div></div>';
     });
@@ -1042,7 +1045,7 @@
       '<textarea id="cheerText" maxlength="280" placeholder="Friday is Volume day. Go get it."></textarea>' +
       '<div style="margin-top:10px"><button class="btn wide" data-act="sendCheer">Send cheer</button></div></section>';
     var nd = nextSessionDate(res), day = E.nextDay(res), p = E.plan(res, nd, day);
-    h += '<div class="section-h"><h2>Next: ' + esc(dayName(day)) + '</h2><span class="small muted">' + esc(fmtDate(nd)) + (p.mode !== 'normal' ? ', ' + (p.mode === 'intro' ? 'intro week' : 'easier week') : '') + '</span></div>';
+    h += '<div class="section-h"><h2>Next: ' + esc(dayName(day)) + '</h2><span class="small muted">' + esc(fmtDate(nd)) + (p.mode !== 'normal' ? ', ' + (p.mode === 'intro' ? 'intro week' : p.mode === 'back' ? 'welcome back' : 'easier week') : '') + '</span></div>';
     h += '<section class="panel" style="margin-top:0"><table class="plantable">';
     p.items.forEach(function (it) {
       var tag = it.upSteps ? ' <span class="status ok">increase</span>' : it.overridden ? ' <span class="status">you set</span>' : it.estimated ? ' <span class="status">estimated</span>' : '';
@@ -1068,7 +1071,7 @@
     list.forEach(function (x, i) {
       h += '<div class="item"><div class="l1"><b>Workout ' + (n - i) + ', ' + esc(dayName(x.day)) + '</b><span class="num">+' + kgFmt(x.km) + ' km</span></div>' +
         '<div class="l2">' + esc(fmtDate(x.date)) + (x.minutes ? ', ' + x.minutes + ' min' : '') + ', ' + x.done + '/' + x.prescribed + ' sets, ' + x.reps + ' reps' +
-        (x.effort ? ', effort ' + x.effort + '/5' : '') + (x.mode !== 'normal' ? ', ' + (x.mode === 'intro' ? 'intro' : 'easier week') : '') + '</div>' +
+        (x.effort ? ', effort ' + x.effort + '/5' : '') + (x.mode !== 'normal' ? ', ' + (x.mode === 'intro' ? 'intro' : x.mode === 'back' ? 'welcome back' : 'easier week') : '') + '</div>' +
         (x.improvements.length ? '<div class="l2">Better: ' + esc(x.improvements.map(function (m) { return exName(m.ex) + ' ' + m.text; }).join('; ')) + '</div>' : '') +
         (x.upgrades.length ? '<div class="l2">Heavier next time: ' + esc(x.upgrades.map(exName).join(', ')) + '</div>' : '') +
         (x.note ? '<q>' + esc(x.note) + '</q>' : '') +
