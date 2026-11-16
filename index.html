@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Flight">
+  <meta name="theme-color" content="#FFFFFF">
+  <title>Flight TMP → LUX</title>
+  <!-- No start_url in the manifest on purpose: the Home Screen app then reopens
+       the exact address it was saved from, including her ?k= key. -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="preload" href="fonts/barlow-condensed-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" aria-live="polite"></div>
+  <div id="rest" hidden></div>
+  <div id="modal" hidden></div>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <script src="config.js"></script>
+  <script src="engine.js"></script>
+  <script src="mapdata.js"></script>
+  <script src="core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
