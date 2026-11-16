@@ -1,6 +1,6 @@
 // Offline shell: serve the app from cache instantly, refresh the cache in the background.
 // Bump VERSION when you change any app file so phones pick up the new version.
-var VERSION = 'flight-v6';
+var VERSION = 'flight-v9';
 var SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'engine.js', 'core.js', 'mapdata.js', 'config.js',
   'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'fonts/barlow-latin-400-normal.woff2', 'fonts/barlow-latin-500-normal.woff2', 'fonts/barlow-latin-600-normal.woff2',

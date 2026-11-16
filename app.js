@@ -12,7 +12,7 @@
     if (!r) { try { r = localStorage.getItem('fl.demoRole'); } catch (e) { r = null; } }
     return r === 'coach' ? 'coach' : 'athlete';
   })();
-  var NS = 'fl.' + (DEMO ? 'demo.v4.' + DEMO_ROLE : KEY) + '.';
+  var NS = 'fl.' + (DEMO ? 'demo.v5.' + DEMO_ROLE : KEY) + '.';
   var TMP_LL = [61.4141, 23.6044], LUX_LL = [49.6233, 6.2044];
 
   // ---------- storage (wrapped: private mode or sandboxed previews can throw) ----------
@@ -111,10 +111,14 @@
       settings.startDate = start;
       settings.herName = 'Her name';
       var data = { settings: settings, slots: C.seedSlots(), exercises: C.seedExercises(), choices: [], sessions: [], sets: [],
-        overrides: [], stamps: [], postcards: C.seedPostcards(), cheers: [] };
+        overrides: [], stamps: [], postcards: C.seedPostcards(), cheers: [], reactions: [] };
       data.postcards[0].message = 'Example note: this is where your coach writes to you.\n\nYou already did the hardest part: you started. Proud of you!';
       data.postcards[1].message = 'Example note from Salo. Keep the hips high and the chin tucked :)';
       data.postcards[2].message = 'Example note from Tampere. Look how far the plane has come already.';
+      // a stand-in "photo" so the demo shows the blurred teaser of the next card
+      data.postcards.forEach(function (c, i) {
+        if (i >= 3) c.photo = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 30"><rect width="40" height="30" fill="#8CC3E8"/><rect y="17" width="40" height="13" fill="#2F6E9E"/><rect y="24" width="40" height="6" fill="#E9D6A8"/><circle cx="30" cy="7" r="4" fill="#FFD66B"/><rect x="13" y="13" width="5" height="11" rx="2" fill="#D9534F"/><circle cx="15.5" cy="11" r="2.6" fill="#F2C9A8"/></svg>');
+      });
       var rnd = 7;
       function r() { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; }
       var n = 0;
@@ -138,9 +142,10 @@
         'athlete', d + 'T18:00:00Z');
       }
       if (!empty) data.cheers.push({ id: 'c1', createdAt: nowIso(), text: 'Great week! Friday is Volume day. Go get it.', seenAt: '' });
+      if (n) data.reactions.push({ id: 'r1', at: nowIso(), sessionId: 'demo' + n, emoji: '🔥', text: 'Look at that hip thrust >:)', seenAt: '' });
       return data;
     }
-    var data = null, SK = 'fl.demo.v4.server';
+    var data = null, SK = 'fl.demo.v5.server';
     function load() {
       if (!data) { try { data = JSON.parse(localStorage.getItem(SK) || 'null'); } catch (e) { data = null; } }
       if (!data) { data = seed(); save(); }
@@ -232,6 +237,11 @@
       st.cheers.forEach(function (c) { if (c.id === op.id) c.seenAt = c.seenAt || nowIso(); });
     } else if (op.type === 'override') {
       st.overrides.push({ date: todayStr(), ex: op.ex, kg: op.kg });
+    } else if (op.type === 'react') {
+      st.reactions = st.reactions || [];
+      st.reactions.push({ id: 'local' + uid(), at: nowIso(), sessionId: op.sessionId, emoji: op.emoji || '', text: op.text || '', seenAt: '' });
+    } else if (op.type === 'reactionSeen') {
+      (st.reactions || []).forEach(function (r) { if (r.id === op.id) r.seenAt = r.seenAt || nowIso(); });
     } else if (op.type === 'cheer') {
       st.cheers.push({ id: 'local' + uid(), createdAt: nowIso(), text: op.text, seenAt: '' });
     }
@@ -407,6 +417,9 @@
   }
   function sealedAhead(res) { return S.state.postcards.filter(function (c) { return !c.delivered && c.km > res.cumKm; }); }
   function unopenedMail() { return S.state.postcards.filter(function (c) { return c.delivered && !c.openedAt && !S.seen['pc:' + c.id]; }); }
+  function reactionsFor(id) { return (S.state.reactions || []).filter(function (r) { return r.sessionId === id; }); }
+  function reactionText(r) { return (r.emoji ? r.emoji + ' ' : '') + (r.text ? '“' + r.text + '”' : ''); }
+  function unseenReactions() { return (S.state.reactions || []).filter(function (r) { return !r.seenAt && !S.seen['re:' + r.id]; }); }
   function unseenCheers() { return S.state.cheers.filter(function (c) { return !c.seenAt && !S.seen['ch:' + c.id]; }); }
   function weekStats(res) {
     var st = res.settings, cur = E.weekOf(todayStr(), st.startDate), total = 0, good = 0, thisWeek = 0;
@@ -452,7 +465,12 @@
     h += eta.landed ? '<p class="unlocked">Flight unlocked ✈ ' + esc(who()) + ' to LUX</p>'
       : '<p class="nextcard"><b>' + km(left) + ' km</b> until ' + esc(who()) + ' flies to Luxembourg.</p>';
     var next = sealedAhead(res)[0];
-    if (next && !eta.landed) h += '<p class="nextcard">Next postcard from <b>' + esc(next.from) + '</b> in <b>' + km(next.km - res.cumKm) + ' km</b> ;)</p>';
+    if (next && !eta.landed) {
+      var line = 'Next postcard from <b>' + esc(next.from) + '</b> in <b>' + km(next.km - res.cumKm) + ' km</b> ;)';
+      h += next.teaser
+        ? '<div class="teaser"><span class="teaser-pic" aria-hidden="true"><img src="' + esc(next.teaser) + '" alt=""></span><p class="nextcard">' + line + '<span class="small muted">There\'s a photo inside. No peeking ;)</span></p></div>'
+        : '<p class="nextcard">' + line + '</p>';
+    }
     return h;
   }
 
@@ -489,6 +507,12 @@
     }
     (coach ? [] : unseenCheers().slice(-1)).forEach(function (c) {
       h += '<button class="banner" data-act="cheerSeen" data-id="' + esc(c.id) + '">' + IC.cheer + '<p><b>' + esc(c.text) + '</b>From your coach :) Tap to dismiss.</p></button>';
+    });
+    (coach ? [] : unseenReactions().slice(-1)).forEach(function (r) {
+      var s = res.sessions.filter(function (x) { return x.id === r.sessionId; })[0];
+      h += '<button class="banner react" data-act="reactionSeen" data-id="' + esc(r.id) + '"><span class="emo">' + esc(r.emoji || '💬') + '</span><p><b>' +
+        esc(who()) + ' reacted to your ' + esc(s ? dayName(s.day) + ' workout, ' + fmtDate(s.date) : 'workout') + '</b>' +
+        (r.text ? '“' + esc(r.text) + '”<br>' : '') + '<span class="small muted">Tap to dismiss.</span></p></button>';
     });
     var lastId = res.sessions.length ? res.sessions[res.sessions.length - 1].id : '';
     if (!coach && res.fatigue.offer && !S.seen['fat:' + lastId] && !S.draft) {
@@ -741,6 +765,14 @@
     h += '<div class="kmbig">+' + kgFmt(c.km) + '<small>km</small></div>';
     h += '<p class="kmsplit">' + c.reps + ' reps toward ' + esc(who()) + '\'s flight. ' +
       (left > 0 ? km(left) + ' km until he flies to Luxembourg.' : '<b>Flight unlocked ✈ ' + esc(who()) + ' to LUX</b>') + '</p>';
+    if (c.prs.length) {
+      h += '<section class="panel pbpanel"><h3>🏅 New personal best!</h3><ul class="uplist">';
+      c.prs.forEach(function (p) {
+        var e = pv.result.prog.exById[p.ex];
+        h += '<li><span>' + esc(exName(p.ex)) + '</span><span class="hl">' + kgFmt(p.kg) + ' ' + esc(e ? e.kgLabel : 'kg') + ' × ' + p.reps + '</span></li>';
+      });
+      h += '</ul></section>';
+    }
     if (c.improvements.length) {
       h += '<section class="panel"><h3>Better than last time :)</h3><ul class="uplist">';
       c.improvements.forEach(function (x) { h += '<li><span>' + esc(exName(x.ex)) + '</span><span class="hl">' + esc(x.text) + '</span></li>'; });
@@ -800,6 +832,19 @@
     var res = calc(), st = res.settings, ws = weekStats(res);
     var h = '<div class="screen">' + topHTML('Log', flightSub());
     h += '<div class="pcards">' + progressCard(res, 'Push', 'chest') + progressCard(res, 'Pull', 'upper-back') + '</div>';
+    var ms = res.milestones.slice().reverse();
+    h += '<div class="section-h"><h2>Personal bests</h2><span class="small muted">' + plural(ms.length, 'milestone', 'milestones') + '</span></div>';
+    if (!ms.length) h += '<p class="empty">Your first personal best shows up here as soon as you lift heavier than ever before >:)</p>';
+    else {
+      h += '<div class="badges">';
+      ms.slice(0, 8).forEach(function (m) {
+        var e = res.prog.exById[m.ex];
+        h += '<div class="badge"><span class="medal">🏅</span><div><b>' + esc(exName(m.ex)) + '</b><div class="small">' + kgFmt(m.kg) + ' ' + esc(e ? e.kgLabel : 'kg') +
+          ' × ' + m.reps + '</div><div class="small muted">' + esc(dayName(m.day)) + ', ' + esc(fmtDate(m.date)) + '</div></div></div>';
+      });
+      h += '</div>';
+      if (ms.length > 8) h += '<p class="small muted">And ' + (ms.length - 8) + ' earlier ones.</p>';
+    }
     var mins = res.sessions.map(function (s) { return s.minutes; }).filter(function (m) { return m; });
     h += '<div class="stats"><div class="stat"><b>' + res.completedCount + '</b><span>Workouts</span></div>' +
       '<div class="stat"><b>' + ws.thisWeek + ' of ' + ws.perWeek + '</b><span>This week' + (ws.total ? ', ' + ws.good + ' of ' + ws.total + ' full weeks' : '') + '</span></div>' +
@@ -849,7 +894,8 @@
     list.forEach(function (s, i) {
       h += '<div class="mini"><div class="seat">' + (n - i) + '<small>' + esc(dayName(s.day)) + '</small></div>' +
         '<div><b>' + esc(fmtDate(s.date)) + '</b><div class="small muted">' + s.reps + ' reps' + (s.minutes ? ', ' + s.minutes + ' min' : '') +
-        (s.mode === 'deload' ? ', easier week' : s.mode === 'intro' ? ', intro' : '') + (s.upgrades.length ? ', ' + plural(s.upgrades.length, 'increase', 'increases') : '') + '</div></div>' +
+        (s.mode === 'deload' ? ', easier week' : s.mode === 'intro' ? ', intro' : '') + (s.prs.length ? ', 🏅 ' + plural(s.prs.length, 'PB', 'PBs') : '') + '</div>' +
+        reactionsFor(s.id).map(function (r) { return '<div class="rx">' + esc(reactionText(r)) + '</div>'; }).join('') + '</div>' +
         '<div class="km">+' + Math.round(s.km) + '<small>km</small></div>' +
         (s.photo ? '<button class="phbtn" data-act="showPhoto" data-id="' + esc(s.id) + '" aria-label="See the photo">' + IC.camera + '</button>' : '') + '</div>';
     });
@@ -951,7 +997,10 @@
         (x.improvements.length ? '<div class="l2">Better: ' + esc(x.improvements.map(function (m) { return exName(m.ex) + ' ' + m.text; }).join('; ')) + '</div>' : '') +
         (x.upgrades.length ? '<div class="l2">Heavier next time: ' + esc(x.upgrades.map(exName).join(', ')) + '</div>' : '') +
         (x.note ? '<q>' + esc(x.note) + '</q>' : '') +
-        (x.photo ? '<button class="btn ghost small" style="margin-top:8px" data-act="showPhoto" data-id="' + esc(x.id) + '">' + IC.camera + 'See her photo</button>' : '') + '</div>';
+        (x.prs.length ? '<div class="l2">🏅 Personal best: ' + esc(x.prs.map(function (p) { return exName(p.ex) + ' ' + kgFmt(p.kg) + ' kg × ' + p.reps; }).join(', ')) + '</div>' : '') +
+        reactionsFor(x.id).map(function (r) { return '<div class="rx">You: ' + esc(reactionText(r)) + (r.seenAt ? ' <span class="small muted">seen</span>' : '') + '</div>'; }).join('') +
+        '<div class="row2">' + (x.photo ? '<button class="btn ghost small" data-act="showPhoto" data-id="' + esc(x.id) + '">' + IC.camera + 'See her photo</button>' : '') +
+        '<button class="btn ghost small" data-act="react" data-id="' + esc(x.id) + '" data-n="' + (n - i) + '">React</button></div></div>';
     });
     h += '</div>';
     if (DEMO) h += demoLinks();
@@ -1119,6 +1168,17 @@
       '<div class="row"><button class="btn ghost" data-act="closeModal">Keep going</button><button class="btn" data-act="finishAnyway">Finish</button></div>');
   }
 
+  function reactSheet(id, n) {
+    S.reactEmoji = S.reactEmoji === undefined ? '🔥' : S.reactEmoji;
+    S.reactFor = { id: id, n: n };
+    var emojis = ['❤️', '🔥', '💪', '👏', '😍', '🤩'];
+    showModal('<h2>React to workout ' + esc(n) + '</h2><p class="small muted">She sees it on her home screen the next time she opens the app.</p>' +
+      '<div class="emojis">' + emojis.map(function (e) { return '<button class="chip emo' + (S.reactEmoji === e ? ' on' : '') + '" data-act="reactEmoji" data-v="' + e + '">' + e + '</button>'; }).join('') +
+      '<button class="chip' + (S.reactEmoji === '' ? ' on' : '') + '" data-act="reactEmoji" data-v="">None</button></div>' +
+      '<textarea id="reactText" maxlength="280" placeholder="Add a comment (optional)">' + esc(S.reactDraft || '') + '</textarea>' +
+      '<div class="row"><button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn" data-act="sendReact">Send</button></div>');
+  }
+
   function overrideSheet(ex, kg, name) {
     showModal('<h2>' + esc(name) + '</h2><p class="muted">Set the weight for her next workouts on both days. Progression continues from there.</p>' +
       '<input class="field" id="ovKg" type="number" inputmode="decimal" step="any" min="0" value="' + esc(kg) + '" aria-label="Weight in kg">' +
@@ -1211,7 +1271,7 @@
     window.scrollTo(0, 0);
     var pv = preview();
     animatePlane(pv.session.cumBefore, pv.session.cumKm);
-    if (pv.session.upgrades.length || pv.session.improvements.length) setTimeout(confetti, 2600);
+    if (pv.session.prs.length || pv.session.upgrades.length || pv.session.improvements.length) setTimeout(confetti, 2600);
   }
 
   function saveFlight() {
@@ -1352,6 +1412,14 @@
         break;
       }
       case 'override': overrideSheet(t.dataset.ex, t.dataset.kg, t.dataset.name); break;
+      case 'react': S.reactDraft = ''; reactSheet(t.dataset.id, t.dataset.n); break;
+      case 'reactEmoji': { var rt = document.getElementById('reactText'); S.reactDraft = rt ? rt.value : ''; S.reactEmoji = t.dataset.v; reactSheet(S.reactFor.id, S.reactFor.n); break; }
+      case 'sendReact': {
+        var tx2 = (document.getElementById('reactText') || {}).value || '';
+        if (S.reactEmoji || tx2.trim()) enqueue({ type: 'react', sessionId: S.reactFor.id, emoji: S.reactEmoji, text: tx2.trim() });
+        S.reactDraft = ''; closeModal(); break;
+      }
+      case 'reactionSeen': S.seen['re:' + t.dataset.id] = 1; store.set('seen', S.seen); enqueue({ type: 'reactionSeen', id: t.dataset.id }); render(); break;
       case 'saveOverride': {
         var v = Number(document.getElementById('ovKg').value);
         if (isFinite(v) && v >= 0) enqueue({ type: 'override', ex: t.dataset.ex, kg: v });

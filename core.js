@@ -23,10 +23,11 @@ var FlightCore = (function () {
     Overrides: ['date', 'exercise', 'kg', 'note'],
     Stamps: ['date', 'type'],
     Postcards: ['id', 'km', 'over', 'from', 'place', 'photo', 'message', 'openedAt'],
-    Cheers: ['id', 'createdAt', 'text', 'seenAt']
+    Cheers: ['id', 'createdAt', 'text', 'seenAt'],
+    Reactions: ['id', 'at', 'sessionId', 'emoji', 'text', 'seenAt']
   };
   var KEY = { Settings: 'settings', Slots: 'slots', Exercises: 'exercises', Choices: 'choices', Sessions: 'sessions',
-    Sets: 'sets', Overrides: 'overrides', Stamps: 'stamps', Postcards: 'postcards', Cheers: 'cheers' };
+    Sets: 'sets', Overrides: 'overrides', Stamps: 'stamps', Postcards: 'postcards', Cheers: 'cheers', Reactions: 'reactions' };
 
   // ---------- seeds ----------
   function yt(q) { return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' form'); }
@@ -234,6 +235,13 @@ var FlightCore = (function () {
     var m = p.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?.*id=)([\w-]{20,})/);
     return m ? 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w1200' : p;
   }
+  // A tiny version of a sealed card's photo: enough for a blurred hint, not enough to see it.
+  function teaserUrl(p) {
+    p = str(p).trim();
+    if (!p) return '';
+    var m = p.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?.*id=)([\w-]{20,})/);
+    return m ? 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w24' : p;
+  }
 
   var PUBLIC_SETTINGS = ['herName', 'travellerName', 'flightNo', 'dayAName', 'dayBName', 'startDate', 'introWeeks',
     'trainingWeekdays', 'routeKm', 'kmPerRep'];
@@ -254,13 +262,21 @@ var FlightCore = (function () {
         delivered: delivered, deliveredOn: delivered ? crossedOn(km) : '', openedAt: str(p.openedAt) };
       if (delivered || role === 'coach') { c.message = str(p.message); c.photo = photoUrl(p.photo); }
       if (role === 'coach') c.written = written;
+      c._photo = p.photo;
       return c;
     });
+    // Only the next sealed card on the route gets a blurred teaser.
+    var nextUp = cards.filter(function (c) { return !c.delivered && c.km > cum; })[0];
+    if (nextUp && str(nextUp._photo).trim()) nextUp.teaser = teaserUrl(nextUp._photo);
+    cards.forEach(function (c) { delete c._photo; });
     return {
       role: role, today: today, settings: settings, slots: data.slots, exercises: data.exercises,
       choices: input.choices, sessions: input.sessions, overrides: input.overrides, stamps: input.stamps,
       postcards: cards,
       cheers: data.cheers.map(function (r) { return { id: str(r.id), createdAt: str(r.createdAt), text: str(r.text), seenAt: str(r.seenAt) }; }),
+      reactions: (data.reactions || []).map(function (r) {
+        return { id: str(r.id), at: str(r.at), sessionId: str(r.sessionId), emoji: str(r.emoji), text: str(r.text), seenAt: str(r.seenAt) };
+      }),
       summary: { cumKm: cum, completed: result.completedCount, reps: result.totalReps, landedOn: result.landedOn }
     };
   }
@@ -271,11 +287,12 @@ var FlightCore = (function () {
   function clip(s, n) { return str(s).slice(0, n); }
 
   var ROLE_OPS = {
-    athlete: ['saveSession', 'stamp', 'postcardOpened', 'cheerSeen', 'choice', 'deload', 'photo'],
-    coach: ['cheer', 'override', 'choice', 'deload']
+    athlete: ['saveSession', 'stamp', 'postcardOpened', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen'],
+    coach: ['cheer', 'override', 'choice', 'deload', 'react']
   };
 
   function applyOp(data, op, role, nowIso) {
+    if (!data.reactions) data.reactions = [];
     if (!op || !op.type) bad('missing op');
     if ((ROLE_OPS[role] || []).indexOf(op.type) < 0) bad('not allowed: ' + op.type);
     var writes = [], notify = null, photo = null;
@@ -349,6 +366,12 @@ var FlightCore = (function () {
       var url = str(op.dataUrl);
       if (!known || !/^data:image\/(jpeg|png|webp);base64,/.test(url) || url.length > 3000000) bad('invalid photo');
       photo = { sessionId: str(op.sessionId), dataUrl: url };
+    } else if (op.type === 'react') {
+      var sid = str(op.sessionId), emo = clip(op.emoji, 8).trim(), txt = clip(op.text, 280).trim();
+      if (!data.sessions.some(function (r) { return str(r.id) === sid; }) || (!emo && !txt)) bad('invalid reaction');
+      append('Reactions', { id: 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), at: nowIso, sessionId: sid, emoji: emo, text: txt, seenAt: '' });
+    } else if (op.type === 'reactionSeen') {
+      patch('Reactions', 'id', clip(op.id, 40), { seenAt: nowIso });
     } else if (op.type === 'postcardOpened') {
       patch('Postcards', 'id', clip(op.id, 20), { openedAt: nowIso });
     } else if (op.type === 'cheerSeen') {
@@ -379,6 +402,7 @@ var FlightCore = (function () {
     lines.push(left > 0 ? left + ' km until ' + who + ' flies to Luxembourg.' : 'Flight unlocked: ' + who + ' to LUX!');
     lines.push(c.done + '/' + c.prescribed + ' working sets.');
     if (c.improvements.length) lines.push('Improvements: ' + c.improvements.map(function (x) { return (names[x.ex] || x.ex) + ': ' + x.text; }).join('; ') + '.');
+    if (c.prs.length) lines.push('New personal best: ' + c.prs.map(function (p) { return (names[p.ex] || p.ex) + ' ' + p.kg + ' kg × ' + p.reps; }).join(', ') + ' >:)');
     if (c.upgrades.length) lines.push('Heavier next time: ' + c.upgrades.map(function (id) { return names[id] || id; }).join(', ') + '.');
     if (result.fatigue.offer) lines.push('Several lifts dipped over the last two weeks. The app offers her an easier week.');
     if (c.effort) lines.push('Effort ' + c.effort + '/5.');
@@ -392,7 +416,7 @@ var FlightCore = (function () {
   return {
     TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises,
     seedPostcards: seedPostcards, upgradePlan: upgradePlan, exerciseSync: exerciseSync, toEngineInput: toEngineInput, buildState: buildState,
-    applyOp: applyOp, photoUrl: photoUrl
+    applyOp: applyOp, photoUrl: photoUrl, teaserUrl: teaserUrl
   };
 })();
 

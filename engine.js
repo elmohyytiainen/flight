@@ -218,7 +218,7 @@ var FlightEngine = (function () {
     var overrides = (input.overrides || []).slice().sort(function (a, b) { return String(a.date) < String(b.date) ? -1 : 1; });
     var deloads = (input.stamps || []).filter(function (s) { return s.type === 'deload'; })
       .map(function (s) { return String(s.date).slice(0, 10); }).sort();
-    var states = {}, hist = {}, est = {}, oi = 0, di = 0, deloadLeft = 0, lastDeload = null;
+    var states = {}, hist = {}, est = {}, pbs = {}, milestones = [], oi = 0, di = 0, deloadLeft = 0, lastDeload = null;
     var declines = [];
 
     function stOf(ex, day) { var k = ex + '|' + day; if (!states[k]) states[k] = newState(); return states[k]; }
@@ -244,7 +244,7 @@ var FlightEngine = (function () {
       var mode = deloadLeft > 0 ? 'deload' : (week >= 1 && week <= st.introWeeks ? 'intro' : 'normal');
       if (deloadLeft > 0) deloadLeft--;
       var sets = sess.sets || [];
-      var prescribed = 0, doneN = 0, reps = 0, volume = 0, ups = [], steps = {}, improvements = [];
+      var prescribed = 0, doneN = 0, reps = 0, volume = 0, ups = [], steps = {}, improvements = [], prs = [];
 
       slotsOn(prog, sess.day).forEach(function (slot) {
         var side = slot[sess.day];
@@ -267,6 +267,7 @@ var FlightEngine = (function () {
         if (r.up) { ups.push(e.id); steps[e.id] = r.up; }
         if (r.improvement) improvements.push({ ex: e.id, day: sess.day, text: r.improvement });
         if (r.decline) declines.push({ date: sess.date, ex: e.id, day: sess.day });
+        if (r.pr) { prs.push(r.pr); milestones.push({ date: sess.date, day: sess.day, sessionId: sess.id, ex: e.id, kg: r.pr.kg, reps: r.pr.reps }); }
       });
 
       var completed = prescribed > 0 && doneN / prescribed >= st.completeShare - 1e-9;
@@ -280,7 +281,7 @@ var FlightEngine = (function () {
       out.push({
         id: sess.id, date: sess.date, day: sess.day, week: week, mode: mode, minutes: num(sess.minutes, null),
         prescribed: prescribed, done: doneN, completed: completed, reps: reps, km: km,
-        volume: Math.round(volume), upgrades: ups, steps: steps, improvements: improvements,
+        volume: Math.round(volume), upgrades: ups, steps: steps, improvements: improvements, prs: prs,
         cumBefore: before, cumKm: cum, effort: sess.effort, note: sess.note, photo: !!sess.photo
       });
     });
@@ -301,6 +302,19 @@ var FlightEngine = (function () {
       var mixed = at.length < done.length;
       var complete = done.length >= prescribed && !mixed;
       var out = {};
+
+      // personal best: the heaviest weight she has ever done a working set with (least assistance for assisted lifts)
+      var top = null;
+      done.forEach(function (x, j4) {
+        if (num(x.reps, 0) < 1) return;
+        var k = kgs[j4];
+        if (top === null || (e.assisted ? k < top.kg : k > top.kg) || (k === top.kg && reps[j4] > top.reps)) top = { kg: k, reps: reps[j4] };
+      });
+      if (top && (top.kg > 0 || e.assisted)) {
+        var pb = hasOwn(pbs, e.id) ? pbs[e.id] : null;
+        if (pb !== null && (e.assisted ? top.kg < pb : top.kg > pb)) out.pr = { ex: e.id, kg: top.kg, reps: top.reps };
+        if (pb === null || (e.assisted ? top.kg < pb : top.kg > pb)) pbs[e.id] = top.kg;
+      }
 
       var h = hasOwn(hist, e.id) ? hist[e.id] : (hist[e.id] = []);
       var prev = null, prev2 = null;
@@ -351,7 +365,7 @@ var FlightEngine = (function () {
     }
 
     return {
-      settings: st, prog: prog, sessions: out, states: states, hist: hist, est: est, choices: input.choices || [],
+      settings: st, prog: prog, sessions: out, states: states, hist: hist, est: est, milestones: milestones, choices: input.choices || [],
       cumKm: cum, landedOn: landedOn, totalVolume: Math.round(totalVolume), totalReps: totalReps,
       completedCount: completedCount, deloadLeft: deloadLeft, fatigue: fatigue
     };
