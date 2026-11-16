@@ -1,4 +1,4 @@
-/* Flight TMP → LUX — the app. Needs FlightEngine, MAPDATA, FlightCore (demo only), FLIGHT_CONFIG. */
+/* Flight TMP → LUX — the app (v3). Needs FlightEngine, MAPDATA, FlightCore (demo only), FLIGHT_CONFIG. */
 (function () {
   'use strict';
 
@@ -12,7 +12,7 @@
     if (!r) { try { r = localStorage.getItem('fl.demoRole'); } catch (e) { r = null; } }
     return r === 'coach' ? 'coach' : 'athlete';
   })();
-  var NS = 'fl.' + (DEMO ? 'demo.v2.' + DEMO_ROLE : KEY) + '.';
+  var NS = 'fl.' + (DEMO ? 'demo.v4.' + DEMO_ROLE : KEY) + '.';
   var TMP_LL = [61.4141, 23.6044], LUX_LL = [49.6233, 6.2044];
 
   // ---------- storage (wrapped: private mode or sandboxed previews can throw) ----------
@@ -56,6 +56,10 @@
     close: '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
     envelope: '<svg viewBox="0 0 40 40" class="ic" aria-hidden="true"><rect x="4" y="9" width="32" height="22" rx="3" fill="var(--taxi)" stroke="var(--ink)" stroke-width="2"/><path d="M5 11l15 11 15-11" fill="none" stroke="var(--ink)" stroke-width="2"/></svg>',
     cheer: '<svg viewBox="0 0 40 40" class="ic" aria-hidden="true"><circle cx="20" cy="20" r="17" fill="var(--ink)"/><path d="M20 9l3.2 7.3 7.8.7-5.9 5.2 1.8 7.8L20 26l-6.9 4 1.8-7.8L9 17l7.8-.7Z" fill="var(--taxi)"/></svg>',
+    dumbbell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 9.5v5M6.5 7v10M17.5 7v10M20.5 9.5v5M6.5 12h11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
+    undo: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 7L4 12l5 5M4 12h10a6 6 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 -3)"/></svg>',
+    list: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+    camera: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="13.2" r="3.4" fill="none" stroke="currentColor" stroke-width="1.9"/></svg>',
     tabHome: '<svg viewBox="-12 -12 24 24" aria-hidden="true"><path class="accent" d="' + PLANE + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" transform="rotate(-35)"/></svg>',
     tabLog: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="accent" x="4" y="3" width="16" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     tabCoach: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="accent" cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 20c1.2-4 4-6 7.5-6s6.3 2 7.5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
@@ -81,55 +85,62 @@
       return withTimeout(fetch(CFG.apiUrl, {
         method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ k: KEY, today: todayStr(), ops: ops })
-      }).then(function (r) { return r.json(); }), 25000).then(checked);
+      }).then(function (r) { return r.json(); }), 45000).then(checked);
+    },
+    photo: function (id) {
+      return withTimeout(fetch(CFG.apiUrl + '?a=photo&k=' + encodeURIComponent(KEY) + '&id=' + encodeURIComponent(id), { cache: 'no-store' })
+        .then(function (r) { return r.json(); }), 30000).then(function (j) { if (!j.ok) throw new Error(j.error); return j.dataUrl; });
     }
   };
 
   var Demo = (function () {
+    var START = { 'incline-db-press': 8, 'incline-smith-press': 20, 'incline-bb-press': 20, 'incline-machine-press': 25,
+      'cable-row': 30, 'one-arm-db-row': 10, 'wide-cable-row': 27.5, 'machine-row': 30, 'neutral-pulldown': 32.5,
+      'overhand-pulldown': 30, 'assisted-chinup': 30, 'hip-thrust-machine': 50, 'hip-thrust': 50, 'back-extension': 0, 'rdl': 35,
+      'lateral-raise': 4, 'machine-lateral-raise': 10, 'cable-lateral-raise': 2.5, 'cable-crunch': 20, 'machine-crunch': 20,
+      'decline-crunch': 0, 'incline-curl': 5, 'preacher-curl': 10, 'cable-curl': 10, 'rope-pressdown': 12.5, 'bar-pressdown': 15,
+      'overhead-extension': 10 };
     function seed() {
       var C = window.FlightCore;
       var t = todayStr();
-      var dow = (dateObj(t).getDay() + 6) % 7; // 0 = Monday
-      var empty = false;
-      try { empty = localStorage.getItem('fl.demoEmpty') === '1'; } catch (e) { /* ignore */ }
-      var start = E.addDays(t, -dow - (empty ? 0 : 21)); // this Monday, or a Monday three weeks ago
+      var empty = demoEmpty();
+      var dow = (dateObj(t).getDay() + 6) % 7;
+      var start = E.addDays(t, -dow - (empty ? 0 : 21));
       var settings = {};
       C.seedSettings({ athleteKey: 'demo', coachKey: 'demo' }).forEach(function (r) { settings[r.key] = r.value; });
       settings.startDate = start;
-      settings.passengerName = 'Her name';
-      var data = { settings: settings, program: C.seedProgram(), sessions: [], sets: [], overrides: [], stamps: [],
-        postcards: C.seedPostcards(), cheers: [] };
+      settings.herName = 'Her name';
+      var data = { settings: settings, slots: C.seedSlots(), exercises: C.seedExercises(), choices: [], sessions: [], sets: [],
+        overrides: [], stamps: [], postcards: C.seedPostcards(), cheers: [] };
       data.postcards[0].message = 'Example note: this is where your coach writes to you.\n\nYou already did the hardest part: you started. Proud of you!';
-      data.postcards[1].message = 'Example note from Salo.\n\nKeep the hips high and the chin tucked. See you at the halfway layover.';
-      data.postcards[2].message = 'Example note from Tampere. Look how far you\'ve flown already.';
-      var startKg = { 'hip-thrust': 40, 'incline-db-press': 7, 'lat-pulldown': 30, 'cable-kickback': 10, 'db-shoulder-press': 5,
-        'lateral-raise': 3, 'hip-abduction': 35, 'rdl': 30, 'split-squat': 6, 'cable-row': 30, 'db-bench-press': 8,
-        'back-extension': 0, 'cable-curl': 10, 'rope-pushdown': 12.5 };
-      var n = 0, rnd = 7;
+      data.postcards[1].message = 'Example note from Salo. Keep the hips high and the chin tucked :)';
+      data.postcards[2].message = 'Example note from Tampere. Look how far the plane has come already.';
+      var rnd = 7;
       function r() { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; }
+      var n = 0;
       for (var d = start; !empty && d < t; d = E.addDays(d, 1)) {
         var wd = dateObj(d).getDay();
         if (wd === 2) data.stamps.push({ date: d, type: 'ballet' });
         if (wd === 3 || wd === 0) data.stamps.push({ date: d, type: 'run' });
         if (wd !== 1 && wd !== 5) continue;
-        var res = E.replay(C.toEngineInput(data));
-        var p = E.plan(res, d);
+        var p = E.plan(E.replay(C.toEngineInput(data)), d);
         var sets = [];
         p.items.forEach(function (it) {
           it.targets.forEach(function (tg, i) {
-            sets.push({ ex: it.exercise.id, set: i + 1, kg: it.taxi ? startKg[it.exercise.id] : it.kg,
-              reps: r() < 0.82 ? tg : Math.max(1, tg - 1), done: true, swap: '' });
+            var reps = r() < 0.75 ? tg + (r() < 0.3 ? 1 : 0) : Math.max(1, tg - 1);
+            sets.push({ slot: it.slot, ex: it.exercise.id, set: i + 1, kg: it.kg === null ? START[it.exercise.id] : it.kg,
+              reps: reps, done: true, fb: '' });
           });
         });
         n++;
-        C.applyOp(data, { type: 'saveSession', session: { id: 'demo' + n, date: d, day: p.day, effort: 2 + Math.round(r() * 2),
-          mood: ['🙂', '😄', '🔥', '😐'][n % 4], note: n === 2 ? 'Hip thrust felt great. Lat pulldown machine was busy, so I waited.' : '', sets: sets } },
+        C.applyOp(data, { type: 'saveSession', session: { id: 'demo' + n, date: d, day: p.day, minutes: 58 + Math.round(r() * 14),
+          effort: 2 + Math.round(r() * 2), note: n === 2 ? 'Machine row was taken, so I waited a bit.' : '', sets: sets } },
         'athlete', d + 'T18:00:00Z');
       }
-      if (!empty) data.cheers.push({ id: 'c1', createdAt: nowIso(), text: 'Great week! Friday is RDL day. Go get them.', seenAt: '' });
+      if (!empty) data.cheers.push({ id: 'c1', createdAt: nowIso(), text: 'Great week! Friday is Volume day. Go get it.', seenAt: '' });
       return data;
     }
-    var data = null, SK = 'fl.demo.v2.server';
+    var data = null, SK = 'fl.demo.v4.server';
     function load() {
       if (!data) { try { data = JSON.parse(localStorage.getItem(SK) || 'null'); } catch (e) { data = null; } }
       if (!data) { data = seed(); save(); }
@@ -146,15 +157,24 @@
       ops: function (ops) {
         load();
         ops.forEach(function (op) {
-          try { window.FlightCore.applyOp(data, op, DEMO_ROLE, nowIso()); } catch (e) { console.warn('demo op skipped', op.type, e.message); }
+          try {
+            var out = window.FlightCore.applyOp(data, op, DEMO_ROLE, nowIso());
+            if (out.photo) data.sessions.forEach(function (r) { if (r.id === out.photo.sessionId) r.photo = out.photo.dataUrl; });
+          } catch (e) { console.warn('demo op skipped', op.type, e.message); }
         });
         save();
         return new Promise(function (res) { setTimeout(function () { res(state()); }, 250); });
       },
       reset: function (empty) {
         data = null;
-        try { localStorage.setItem('fl.demoEmpty', empty ? '1' : '0'); } catch (e) { /* ignore */ }
-        try { Object.keys(localStorage).forEach(function (k) { if (k.indexOf('fl.demo.') === 0) localStorage.removeItem(k); }); } catch (e) { /* ignore */ }
+        try {
+          localStorage.setItem('fl.demoEmpty', empty ? '1' : '0');
+          Object.keys(localStorage).forEach(function (k) { if (k.indexOf('fl.demo.') === 0) localStorage.removeItem(k); });
+        } catch (e) { /* ignore */ }
+      },
+      photo: function (id) {
+        var row = load().sessions.filter(function (r) { return r.id === id; })[0];
+        return row && row.photo ? Promise.resolve(row.photo) : Promise.reject(new Error('no_photo'));
       },
       switchRole: function () {
         try { localStorage.setItem('fl.demoRole', DEMO_ROLE === 'coach' ? 'athlete' : 'coach'); } catch (e) { /* ignore */ }
@@ -180,10 +200,12 @@
 
   function role() { return S.state ? S.state.role : (DEMO ? DEMO_ROLE : 'athlete'); }
 
-  function calc() {
+  function input() {
     var st = S.state;
-    return E.replay({ settings: st.settings, program: st.program, sessions: st.sessions, overrides: st.overrides });
+    return { settings: st.settings, slots: st.slots, exercises: st.exercises, choices: st.choices, sessions: st.sessions,
+      overrides: st.overrides, stamps: st.stamps };
   }
+  function calc() { return E.replay(input()); }
 
   // ---------- sync ----------
   function localApply(op) {
@@ -192,10 +214,18 @@
     if (op.type === 'saveSession') {
       var s = op.session;
       st.sessions = st.sessions.filter(function (x) { return x.id !== s.id; });
-      st.sessions.push({ id: s.id, date: s.date, day: s.day, effort: s.effort, mood: s.mood, note: s.note, savedAt: nowIso(), sets: s.sets });
+      st.sessions.push({ id: s.id, date: s.date, day: s.day, minutes: s.minutes, effort: s.effort, note: s.note, savedAt: nowIso(), sets: s.sets });
     } else if (op.type === 'stamp') {
       st.stamps = st.stamps.filter(function (x) { return !(x.date === op.date && x.type === op.stampType); });
       if (op.on) st.stamps.push({ date: op.date, type: op.stampType });
+    } else if (op.type === 'deload') {
+      if (!st.stamps.some(function (x) { return x.date === op.date && x.type === 'deload'; })) st.stamps.push({ date: op.date, type: 'deload' });
+    } else if (op.type === 'photo') {
+      st.sessions.forEach(function (x) { if (x.id === op.sessionId) x.photo = true; });
+      S.localPhotos = S.localPhotos || {};
+      S.localPhotos[op.sessionId] = op.dataUrl;
+    } else if (op.type === 'choice') {
+      st.choices.push({ at: op.at, slot: op.slot, day: op.day, ex: op.ex });
     } else if (op.type === 'postcardOpened') {
       st.postcards.forEach(function (p) { if (p.id === op.id) p.openedAt = p.openedAt || nowIso(); });
     } else if (op.type === 'cheerSeen') {
@@ -361,10 +391,12 @@
 
   // ---------- derived ----------
   function settings() { return E.normSettings(S.state.settings); }
+  function who() { return S.state.settings.travellerName || 'Elmo'; }
+  function dayName(day) { return S.state.settings[day === 'A' ? 'dayAName' : 'dayBName'] || ('Day ' + day); }
+  function exName(id) { var e = S.state.exercises.filter(function (x) { return String(x.id) === id; })[0]; return e ? e.name : id; }
   function completedOn(res, ds) { return res.sessions.filter(function (s) { return s.date === ds && s.completed; }); }
   function nextSessionDate(res) {
-    var st = res.settings, t = todayStr();
-    var d = t;
+    var st = res.settings, t = todayStr(), d = t;
     if (completedOn(res, t).length) d = E.addDays(t, 1);
     if (d < st.startDate) d = st.startDate;
     for (var i = 0; i < 14; i++) {
@@ -373,212 +405,205 @@
     }
     return d;
   }
-  function dayTitle(day) {
-    var exs = S.state.program.filter(function (e) { return String(e.day).toUpperCase() === day && String(e.active).toUpperCase() !== 'FALSE'; })
-      .sort(function (a, b) { return a.order - b.order; });
-    return exs.slice(0, 2).map(function (e) { return e.name; }).join(', ') + (exs.length > 2 ? ' and more' : '');
-  }
-  function sealedAhead(res) {
-    return S.state.postcards.filter(function (c) { return !c.delivered && c.km > res.cumKm; });
-  }
-  function unopenedMail() {
-    return S.state.postcards.filter(function (c) { return c.delivered && !c.openedAt && !S.seen['pc:' + c.id]; });
-  }
-  function unseenCheers() {
-    return S.state.cheers.filter(function (c) { return !c.seenAt && !S.seen['ch:' + c.id]; });
-  }
-  function onTimeWeeks(res) {
-    var st = res.settings, cur = E.weekOf(todayStr(), st.startDate), total = 0, good = 0;
-    for (var w = 1; w < cur; w++) {
-      total++;
+  function sealedAhead(res) { return S.state.postcards.filter(function (c) { return !c.delivered && c.km > res.cumKm; }); }
+  function unopenedMail() { return S.state.postcards.filter(function (c) { return c.delivered && !c.openedAt && !S.seen['pc:' + c.id]; }); }
+  function unseenCheers() { return S.state.cheers.filter(function (c) { return !c.seenAt && !S.seen['ch:' + c.id]; }); }
+  function weekStats(res) {
+    var st = res.settings, cur = E.weekOf(todayStr(), st.startDate), total = 0, good = 0, thisWeek = 0;
+    for (var w = 1; w <= cur; w++) {
       var n = res.sessions.filter(function (s) { return s.completed && s.week === w; }).length;
+      if (w === cur) { thisWeek = n; continue; }
+      total++;
       if (n >= st.trainingWeekdays.length) good++;
     }
-    return { good: good, total: total };
+    return { good: good, total: total, thisWeek: thisWeek, perWeek: st.trainingWeekdays.length };
+  }
+  function setsText(h, unit) {
+    var at = h.reps.filter(function (r, i) { return h.kgs[i] === h.kg; });
+    var same = at.every(function (r) { return r === at[0]; });
+    return (same ? at.length + ' × ' + at[0] : at.join(', ')) + ' at ' + kgFmt(h.kg) + ' ' + (unit || 'kg');
+  }
+  function rirText(r) {
+    if (r === '0') return 'Failure set: 0 in reserve';
+    return r + ' in reserve';
   }
 
-  // ---------- views ----------
+  // ---------- small pieces ----------
   function topHTML(title, sub) {
     return '<header class="top"><div class="who"><h1>' + esc(title) + '</h1><div class="small muted">' + esc(sub) + '</div></div>' + syncHTML() + '</header>';
   }
   function demoEmpty() { try { return localStorage.getItem('fl.demoEmpty') === '1'; } catch (e) { return false; } }
-  function flightSub() {
-    var s = S.state.settings;
-    return 'Flight ' + (s.flightNo || 'FL 1697') + ', Tampere to Luxembourg';
+  function flightSub() { return 'Flight ' + (S.state.settings.flightNo || 'AY 1697') + ', Tampere to Luxembourg'; }
+
+  function routeBar(cum, routeKm) {
+    var pct = Math.min(100, cum / routeKm * 100);
+    return '<div class="routebar" aria-hidden="true"><span class="fill" style="width:' + pct.toFixed(1) + '%"></span>' +
+      '<span class="pl" style="left:' + pct.toFixed(1) + '%">' + IC.plane + '</span></div>';
   }
 
   function flightlineHTML(res) {
     var st = res.settings;
-    var hasToday = completedOn(res, todayStr()).length > 0;
-    var eta = E.eta(res, todayStr(), hasToday);
-    var pct = Math.min(100, res.cumKm / st.routeKm * 100);
+    var eta = E.eta(res, todayStr(), completedOn(res, todayStr()).length > 0);
+    var left = Math.max(0, st.routeKm - res.cumKm);
     var h = '<div class="flightline"><div><div class="big">' + km(res.cumKm) + '<small>of ' + km(st.routeKm) + ' km</small></div></div>';
-    if (eta.landed) h += '<div class="eta muted small">Landed<b>' + fmtDate(eta.date) + '</b></div>';
+    if (eta.landed) h += '<div class="eta muted small">Unlocked<b>' + fmtDate(eta.date) + '</b></div>';
     else h += '<div class="eta muted small">Landing<b>' + fmtDate(eta.date) + '</b>about ' + plural(eta.sessionsLeft, 'workout', 'workouts') + ' to go</div>';
-    h += '</div><div class="progress"><span style="width:' + pct.toFixed(1) + '%"></span></div>';
+    h += '</div><div class="progress"><span style="width:' + Math.min(100, res.cumKm / st.routeKm * 100).toFixed(1) + '%"></span></div>';
+    h += eta.landed ? '<p class="unlocked">Flight unlocked ✈ ' + esc(who()) + ' to LUX</p>'
+      : '<p class="nextcard"><b>' + km(left) + ' km</b> until ' + esc(who()) + ' flies to Luxembourg.</p>';
     var next = sealedAhead(res)[0];
-    if (next) h += '<div class="nextcard">Next postcard from <b>' + esc(next.from) + '</b> in <b>' + km(next.km - res.cumKm) + ' km</b> ;)</div>';
-    else if (!eta.landed) h += '<div class="nextcard">Every postcard on this route has been delivered.</div>';
+    if (next && !eta.landed) h += '<p class="nextcard">Next postcard from <b>' + esc(next.from) + '</b> in <b>' + km(next.km - res.cumKm) + ' km</b> ;)</p>';
     return h;
   }
 
-  function viewHome() {
-    var res = calc(), st = res.settings, t = todayStr();
-    var h = '<div class="screen">' + topHTML('TMP → LUX', flightSub()) + mapSVG(res.cumKm) + flightlineHTML(res);
+  function weekStrip(res) {
+    var st = res.settings, t = todayStr();
+    var dow = (dateObj(t).getDay() + 6) % 7, monday = E.addDays(t, -dow);
+    var h = '<section class="panel"><h3>This week</h3><div class="week">';
+    for (var i = 0; i < 7; i++) {
+      var d = E.addDays(monday, i), wd = E.weekday(d), ti = st.trainingWeekdays.indexOf(wd);
+      var done = completedOn(res, d).length > 0, marks = '';
+      if (S.state.stamps.some(function (s) { return s.date === d && s.type === 'ballet'; })) marks += '<i class="mk ballet">' + IC.ballet + '</i>';
+      if (S.state.stamps.some(function (s) { return s.date === d && s.type === 'run'; })) marks += '<i class="mk run">' + IC.run + '</i>';
+      var label = ti === 0 ? dayName('A') : ti === 1 ? dayName('B') : '';
+      h += '<button class="day' + (ti >= 0 ? ' plan' : '') + (done ? ' done' : '') + (d === t ? ' today' : '') + '" data-act="day" data-date="' + d +
+        '" aria-label="' + esc(fmtLong(d) + (label ? ', ' + label : '')) + '"><span class="d">' +
+        dateObj(d).toLocaleDateString('en-GB', { weekday: 'short' }).slice(0, 2) + '</span><span class="n">' + dateObj(d).getDate() + '</span>' +
+        (ti >= 0 || done ? '<i class="mk db">' + IC.dumbbell + '</i>' : '') + (label ? '<span class="lbl">' + esc(label) + '</span>' : '') +
+        '<span class="marks">' + marks + '</span></button>';
+    }
+    h += '</div><div class="legend"><span><i class="mk db">' + IC.dumbbell + '</i>Gym</span><span><i class="mk ballet">' + IC.ballet +
+      '</i>Ballet</span><span><i class="mk run">' + IC.run + '</i>Run</span><span>Tap a day to add ballet or a run</span></div></section>';
+    return h;
+  }
 
-    var coach = role() === 'coach';
+  // ---------- home ----------
+  function viewHome() {
+    var res = calc(), t = todayStr(), coach = role() === 'coach';
+    var h = '<div class="screen">' + topHTML('TMP → LUX', flightSub()) + mapSVG(res.cumKm) + flightlineHTML(res);
     var mail = coach ? [] : unopenedMail();
     if (mail.length) {
-      var c0 = mail[0];
-      h += '<button class="banner mail" data-act="postcard" data-id="' + esc(c0.id) + '">' + IC.envelope +
-        '<p><b>' + (mail.length > 1 ? plural(mail.length, 'postcard', 'postcards') + ' waiting for you ;)' : 'You have mail from ' + esc(c0.from) + ' ;)') +
+      h += '<button class="banner mail" data-act="postcard" data-id="' + esc(mail[0].id) + '">' + IC.envelope + '<p><b>' +
+        (mail.length > 1 ? plural(mail.length, 'postcard', 'postcards') + ' waiting for you ;)' : 'You have mail from ' + esc(mail[0].from) + ' ;)') +
         '</b>Tap to open.</p></button>';
     }
     (coach ? [] : unseenCheers().slice(-1)).forEach(function (c) {
-      h += '<button class="banner" data-act="cheerSeen" data-id="' + esc(c.id) + '">' + IC.cheer +
-        '<p><b>' + esc(c.text) + '</b>From your coach :) Tap to dismiss.</p></button>';
+      h += '<button class="banner" data-act="cheerSeen" data-id="' + esc(c.id) + '">' + IC.cheer + '<p><b>' + esc(c.text) + '</b>From your coach :) Tap to dismiss.</p></button>';
     });
-
+    var lastId = res.sessions.length ? res.sessions[res.sessions.length - 1].id : '';
+    if (!coach && res.fatigue.offer && !S.seen['fat:' + lastId] && !S.draft) {
+      h += '<section class="panel offer"><h3>Take an easier week?</h3><p class="small">A few lifts have dipped over the last two weeks. ' +
+        'An easier week has half the sets with 3–4 reps in reserve, then you\'re back to your best weights.</p>' +
+        '<div class="row2"><button class="btn small taxi" data-act="deload">Take an easier week</button><button class="btn small ghost" data-act="fatigueLater" data-id="' + esc(lastId) + '">Not now</button></div></section>';
+    }
     if (coach) {
       h += '';
     } else if (S.draft) {
-      h += '<section class="panel next"><div><h2>Workout in progress</h2><div class="muted small">Day ' + esc(S.draft.day) + ', started ' +
+      h += '<section class="panel next"><div><h2>Workout in progress</h2><div class="muted small">' + esc(dayName(S.draft.day)) + ', started ' +
         new Date(S.draft.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + '</div></div>' +
         '<button class="btn taxi" data-act="resume">Resume</button></section>';
-    } else if (res.landedOn) {
-      h += '<section class="panel"><h2>Touchdown in Luxembourg :)</h2><p class="muted">Landed on ' + fmtLong(res.landedOn) +
-        '. Your coach is planning the return flight. You can keep logging workouts in the meantime.</p>' +
-        '<button class="btn ghost wide" data-act="board">Log a workout</button></section>';
     } else {
       var nd = nextSessionDate(res), day = E.nextDay(res), p = E.plan(res, nd, day);
-      var when = nd === t ? 'Today' : fmtLong(nd);
-      h += '<section class="panel next"><div><div class="small muted">Next workout, ' + esc(when) + '</div><h2>Day ' + day + '</h2>' +
-        '<div class="small muted">' + esc(dayTitle(day)) + '</div><div class="small muted">' + plural(p.items.length, 'exercise', 'exercises') + ', ' +
-        p.setsTotal + ' sets' + (p.layover ? ', layover week' : '') + '</div></div>' +
+      h += '<section class="panel next"><div><div class="small muted">Next workout, ' + esc(nd === t ? 'today' : fmtLong(nd)) + '</div>' +
+        '<h2>' + esc(dayName(day)) + '</h2><div class="small muted">' + plural(p.items.length, 'exercise', 'exercises') + ', ' + p.setsTotal + ' sets' +
+        (p.mode === 'intro' ? ', intro week' : p.mode === 'deload' ? ', easier week' : '') + '</div></div>' +
         '<button class="btn taxi" data-act="board">Let\'s go</button></section>';
     }
-
-    // week strip
-    var dow = (dateObj(t).getDay() + 6) % 7, monday = E.addDays(t, -dow);
-    h += '<section class="panel"><h3>This week</h3><div class="week">';
-    for (var i = 0; i < 7; i++) {
-      var d = E.addDays(monday, i), wd = E.weekday(d);
-      var marks = '';
-      if (completedOn(res, d).length) marks += IC.plane.replace('<svg', '<svg style="color:var(--ink)"');
-      if (S.state.stamps.some(function (s) { return s.date === d && s.type === 'ballet'; })) marks += IC.ballet.replace('<svg', '<svg style="color:var(--mail-red)"');
-      if (S.state.stamps.some(function (s) { return s.date === d && s.type === 'run'; })) marks += IC.run.replace('<svg', '<svg style="color:var(--go)"');
-      var cls = 'day' + (st.trainingWeekdays.indexOf(wd) >= 0 ? ' plan' : '') + (d === t ? ' today' : '');
-      h += '<button class="' + cls + '" data-act="day" data-date="' + d + '" aria-label="' + esc(fmtLong(d)) + '"><span class="d">' +
-        dateObj(d).toLocaleDateString('en-GB', { weekday: 'short' }).slice(0, 2) + '</span><span class="n">' + dateObj(d).getDate() +
-        '</span><span class="marks">' + marks + '</span></button>';
-    }
-    h += '</div><div class="legend"><span>' + IC.plane.replace('<svg', '<svg style="color:var(--ink)"') + 'Gym</span><span>' +
-      IC.ballet.replace('<svg', '<svg style="color:var(--mail-red)"') + 'Ballet</span><span>' +
-      IC.run.replace('<svg', '<svg style="color:var(--go)"') + 'Run</span><span>Tap a day to add ballet or a run</span></div></section>';
-    h += '</div>';
+    h += weekStrip(res) + '</div>';
     return h;
+  }
+
+  // ---------- boarding pass (today's workout before starting) ----------
+  function itemLine(it) {
+    if (it.taxi) return it.sets + ' × ' + it.targets[0] + ', find your weight';
+    var same = it.targets.every(function (x) { return x === it.targets[0]; });
+    return (same ? it.sets + ' × ' + it.targets[0] : it.targets.join(', ')) + ' at ' + kgFmt(it.kg) + ' ' + it.exercise.kgLabel;
   }
 
   function viewBoard() {
     var res = calc(), t = todayStr();
     var day = S.boardDay || E.nextDay(res);
     var p = E.plan(res, t, day);
-    var s = S.state.settings, st = res.settings;
     var h = '<div class="screen"><header class="top"><button class="linkbtn backlink" data-act="home">' + IC.back + 'Home</button>' + syncHTML() + '</header>';
-    h += '<article class="pass"><div class="head"><div class="route"><div><div class="code">TMP</div><div class="small muted">Tampere</div></div>' +
-      '<svg class="arc" viewBox="0 0 120 30" preserveAspectRatio="none" aria-hidden="true"><path d="M4 26Q60-6 116 26" fill="none" stroke="var(--ink-2)" stroke-width="1.5" stroke-dasharray="3 4"/>' +
-      '<g transform="translate(60 10) scale(.8)"><path d="' + PLANE + '" fill="var(--ink)"/></g></svg>' +
-      '<div style="text-align:right"><div class="code">LUX</div><div class="small muted">Luxembourg</div></div></div>' +
-      '<div class="meta"><div class="pax">Passenger<b>' + esc(s.passengerName || 'Add your name in the Sheet') + '</b></div>' +
-      '<div>Flight<b>' + esc(s.flightNo || 'FL 1697') + '</b></div><div>Departed<b>' + esc(fmtDate(st.startDate)) + '</b></div><div>Seat<b>1A</b></div></div>' +
-      '<div class="passbar"><div class="progress"><span style="width:' + Math.min(100, res.cumKm / st.routeKm * 100).toFixed(1) + '%"></span></div>' +
-      '<span class="small muted">' + km(res.cumKm) + ' of ' + km(st.routeKm) + ' km flown</span></div></div>' +
-      '<div class="tear"></div><div class="body"><h2 style="margin-bottom:10px">Today: Day ' + day + '</h2>';
-    if (p.items.some(function (it) { return it.taxi; })) {
-      h += '<div class="note">Taxi week: for each exercise, pick a weight you could lift about 10 times with 2–3 reps to spare. The app remembers it :)</div>';
-    }
-    if (p.layover) h += '<div class="note">Layover week: two sets per exercise at your usual weights. Recovery is part of the flight ;)</div>';
-    h += '<ol>';
-    p.items.forEach(function (it) {
-      var reps = it.targets.every(function (x) { return x === it.targets[0]; }) ? it.sets + ' × ' + it.targets[0] : it.targets.join(', ') + ' reps';
-      h += '<li><span>' + esc(it.exercise.name) + '</span><span class="t">' + esc(reps) + (it.taxi ? '' : ' at ' + kgFmt(it.kg) + ' ' + esc(it.exercise.kgLabel)) + '</span></li>';
+    h += '<h1 class="todayh">Today: ' + esc(dayName(day)) + '</h1><div class="small muted">' + plural(p.items.length, 'exercise', 'exercises') + ', ' + p.setsTotal + ' sets</div>';
+    if (p.mode === 'intro') h += '<div class="note">Intro week: one set fewer and 2–3 reps in reserve while you learn the movements :)</div>';
+    if (p.mode === 'deload') h += '<div class="note">Easier week: half the sets, 3–4 reps in reserve, same weights. Recovery is part of the flight ;)</div>';
+    h += '<p class="small muted choicehint">Pick one exercise per muscle. Stick with the same choice for at least a few weeks so your progress shows.</p>';
+    var sn = 0;
+    p.blocks.forEach(function (b) {
+      var paired = b.items.length > 1;
+      if (paired) sn++;
+      h += '<section class="pblock' + (paired ? ' paired' : '') + '">' +
+        (paired ? '<div class="pairlbl">Superset ' + sn + ': ' + b.items.map(function (it) { return esc(it.muscle); }).join(' + ') + '<span>back to back, then rest</span></div>' : '');
+      b.items.forEach(function (it, k) {
+        h += '<div class="prow">' + (paired ? '<span class="letter">' + 'AB'.charAt(k) + '</span>' : '') +
+          '<div><div class="small muted">' + esc(it.muscle) + '</div><b>' + esc(it.exercise.name) + '</b>' +
+          '<div class="small">' + esc(itemLine(it)) + '</div></div>' +
+          (it.options.length > 1 ? '<button class="linkbtn" data-act="choose" data-slot="' + esc(it.slot) + '" data-ctx="pass" data-day="' + day + '">Change</button>' : '') + '</div>';
+      });
+      h += '</section>';
     });
-    h += '</ol><div class="daypick"><button class="chip' + (day === 'A' ? ' on' : '') + '" data-act="boardDay" data-day="A">Day A</button>' +
-      '<button class="chip' + (day === 'B' ? ' on' : '') + '" data-act="boardDay" data-day="B">Day B</button></div>' +
-      '<div style="margin-top:16px"><button class="btn taxi wide" data-act="start" data-day="' + day + '">Start workout</button></div></div></article></div>';
+    h += '<div class="daypick"><button class="chip' + (day === 'A' ? ' on' : '') + '" data-act="boardDay" data-day="A">' + esc(dayName('A')) + '</button>' +
+      '<button class="chip' + (day === 'B' ? ' on' : '') + '" data-act="boardDay" data-day="B">' + esc(dayName('B')) + '</button></div>' +
+      '<div style="margin-top:16px"><button class="btn taxi wide" data-act="start" data-day="' + day + '">Start workout</button></div></div>';
     return h;
+  }
+
+  // ---------- the workout ----------
+  function defaultKg(e) {
+    if (e.startKg !== null && e.startKg !== undefined) return e.startKg;
+    if (e.assisted) return 30;
+    return /hand|side/.test(e.kgLabel) ? 4 : 20;
+  }
+  function itemFromPlan(it) {
+    var e = it.exercise;
+    return { slot: it.slot, muscle: it.muscle, ex: e.id, name: e.name, kgLabel: e.kgLabel, step: e.stepKg || 1, assisted: e.assisted,
+      cue: e.cue, video: e.video, min: it.min, max: it.max, rest: it.rest, pair: it.pair, calibrate: it.calibrate, taxi: it.taxi,
+      estimated: it.estimated, upSteps: it.upSteps, overridden: it.overridden, lastKg: it.lastKg, lastReps: it.lastReps,
+      options: it.options.length, oneOff: false };
+  }
+  function setsFromPlan(it) {
+    var kg = it.kg === null ? defaultKg(it.exercise) : it.kg, out = [];
+    for (var i = 0; i < it.sets; i++) out.push({ slot: it.slot, ex: it.exercise.id, set: i + 1, kg: kg, reps: it.targets[i], target: it.targets[i],
+      rir: it.rir[i], calib: it.calibrate && i === it.sets - 1, done: false, fb: '', skip: false });
+    return out;
   }
 
   function startFlight(day) {
     var res = calc(), t = todayStr(), p = E.plan(res, t, day);
-    var draft = { id: t + '-' + uid(), date: t, day: day, startedAt: Date.now(), cur: 0, items: [], sets: [] };
-    p.items.forEach(function (it) {
-      var e = it.exercise;
-      var defKg = it.taxi ? (e.startKg !== null ? e.startKg : (/hand|side/.test(e.kgLabel) ? 4 : 20)) : it.kg;
-      draft.items.push({ ex: e.id, name: e.name, kgLabel: e.kgLabel, step: e.stepKg || 1, rest: e.restSec, repMin: e.repMin, repMax: e.repMax,
-        cue: e.cue, video: e.video, alts: e.alternatives, taxi: it.taxi, upgraded: it.upgraded, rerouted: it.rerouted,
-        overridden: it.overridden, lastKg: it.lastKg, lastReps: it.lastReps, swap: '' });
-      it.targets.forEach(function (tg, i) { draft.sets.push({ ex: e.id, set: i + 1, kg: defKg, reps: tg, target: tg, done: false }); });
-    });
-    S.draft = draft;
-    store.set('draft', draft);
+    var d = { id: t + '-' + uid(), date: t, day: day, mode: p.mode, startedAt: Date.now(), items: {}, sets: [], undo: [],
+      fbFor: null, lower: null, view: null, timeOffer: false,
+      blocks: p.blocks.map(function (b, i) { return { id: 'b' + i, slots: b.items.map(function (x) { return x.slot; }), paired: b.items.length > 1, separated: false }; }) };
+    p.items.forEach(function (it) { d.items[it.slot] = itemFromPlan(it); d.sets = d.sets.concat(setsFromPlan(it)); });
+    S.draft = d;
+    store.set('draft', d);
     S.view = 'flight';
-    keepAwake();
-    unlockAudio();
-    render();
-    window.scrollTo(0, 0);
+    keepAwake(); unlockAudio(); render(); window.scrollTo(0, 0);
   }
 
-  function viewFlight() {
-    var d = S.draft, it = d.items[d.cur];
-    var mySets = d.sets.filter(function (x) { return x.ex === it.ex; });
-    var curIdx = -1;
-    for (var i = 0; i < mySets.length; i++) if (!mySets[i].done) { curIdx = i; break; }
-    var h = '<div class="flightview"><div class="flightbar"><button class="linkbtn" data-act="home" aria-label="Back to departures" style="color:var(--ink);padding:4px">' + IC.close + '</button><div class="dots">';
-    d.items.forEach(function (x, j) {
-      var all = d.sets.filter(function (s) { return s.ex === x.ex; }).every(function (s) { return s.done; });
-      h += '<i class="' + (j === d.cur ? 'cur' : all ? 'done' : '') + '"></i>';
+  function blockIndexOfSlot(d, slot) { for (var i = 0; i < d.blocks.length; i++) if (d.blocks[i].slots.indexOf(slot) >= 0) return i; return -1; }
+  function blockOrder(d, b) {
+    var per = b.slots.map(function (k) {
+      return d.sets.map(function (s, i) { return i; }).filter(function (i) { return d.sets[i].slot === k; });
     });
-    h += '</div><span class="clock" id="clock">' + elapsed() + '</span></div>';
-
-    h += '<div class="exhead"><div class="small muted">Exercise ' + (d.cur + 1) + ' of ' + d.items.length + '</div><h1>' + esc(it.swap || it.name) + '</h1><div class="tags">';
-    if (it.swap) h += '<span class="tag">Swapped for ' + esc(it.name) + '</span>';
-    if (it.upgraded && !it.swap) h += '<span class="tag up">Heavier today: +' + kgFmt(it.step) + ' kg &gt;:)</span>';
-    if (it.rerouted && !it.swap) h += '<span class="tag down">Lighter today: reset 10%</span>';
-    if (it.overridden && !it.swap) h += '<span class="tag">Weight set by your coach</span>';
-    if (it.lastKg !== null && it.lastKg !== undefined && it.lastReps) h += '<span class="tag">Last time ' + it.lastReps.join(', ') + ' reps at ' + kgFmt(it.lastKg) + ' kg</span>';
-    h += '</div>';
-    if (it.cue) h += '<p class="cue">' + esc(it.cue) + '</p>';
-    h += '<div class="exlinks">' + (it.video ? '<a class="linkbtn" href="' + esc(it.video) + '" target="_blank" rel="noopener">Watch the form</a>' : '') +
-      (it.alts && it.alts.length ? '<button class="linkbtn" data-act="swap">Swap exercise</button>' : '') + '</div></div>';
-    if (it.taxi) h += '<div class="taxihint">Find your weight: about 10 reps with 2–3 to spare. Adjust it between sets if needed :)</div>';
-
-    h += '<div class="sets">';
-    mySets.forEach(function (s, k) {
-      var gi = d.sets.indexOf(s);
-      var cls = 'setrow' + (s.done ? ' done' : '') + (k === curIdx ? ' cur' : '');
-      h += '<div class="' + cls + '"><span class="no">' + s.set + '</span>' +
-        stepper(gi, 'kg', s.kg, it.kgLabel) + stepper(gi, 'reps', s.reps, 'reps, goal ' + s.target) +
-        '<button class="check" data-act="check" data-i="' + gi + '" aria-label="Set ' + s.set + (s.done ? ' done' : ' not done') + '" aria-pressed="' + s.done + '">' + IC.check + '</button></div>';
-    });
-    h += '</div>';
-
-    var allDone = mySets.every(function (s) { return s.done; });
-    var last = d.cur === d.items.length - 1;
-    h += '<div class="navrow"><button class="btn ghost" data-act="prev"' + (d.cur === 0 ? ' disabled style="opacity:.4"' : '') + '>Previous</button>';
-    h += last ? '<button class="btn ' + (allDone ? 'taxi' : '') + '" data-act="finish">Finish workout</button>'
-      : '<button class="btn ' + (allDone ? 'taxi' : 'ghost') + '" data-act="next">Next exercise</button>';
-    h += '</div>';
-    if (!last) h += '<div class="finishrow"><button class="linkbtn" data-act="finish">Finish early</button></div>';
-    return h + '</div>';
+    var idx = [];
+    if (b.paired && !b.separated) {
+      var rounds = Math.max.apply(null, per.map(function (a) { return a.length; }));
+      for (var r = 0; r < rounds; r++) per.forEach(function (a) { if (a[r] !== undefined) idx.push(a[r]); });
+    } else per.forEach(function (a) { idx = idx.concat(a); });
+    return idx;
   }
-
-  function stepper(i, field, val, label) {
-    return '<div class="stepper"><button data-act="inc" data-i="' + i + '" data-f="' + field + '" data-d="-1" aria-label="Less ' + field + '">−</button>' +
-      '<label><input inputmode="decimal" type="number" step="any" min="0" data-i="' + i + '" data-f="' + field + '" value="' + esc(val) + '" aria-label="' + field + '">' +
-      '<small>' + esc(label) + '</small></label><button data-act="inc" data-i="' + i + '" data-f="' + field + '" data-d="1" aria-label="More ' + field + '">+</button></div>';
+  function stepOrder(d) { var idx = []; d.blocks.forEach(function (b) { idx = idx.concat(blockOrder(d, b)); }); return idx; }
+  function nextStep(d) {
+    var o = stepOrder(d);
+    for (var i = 0; i < o.length; i++) if (!d.sets[o[i]].done && !d.sets[o[i]].skip) return o[i];
+    return undefined;
   }
-
+  function open(s) { return !s.done && !s.skip; }
+  function accessoryOpen(d) {
+    return d.blocks.some(function (b) { return b.paired && b.slots.some(function (k) { return d.sets.some(function (s) { return s.slot === k && open(s); }); }); });
+  }
+  function elapsedMin() { return S.draft ? (Date.now() - S.draft.startedAt) / 60000 : 0; }
   function elapsed() {
     if (!S.draft) return '';
     var s = Math.floor((Date.now() - S.draft.startedAt) / 1000);
@@ -587,179 +612,356 @@
 
   function draftSession() {
     var d = S.draft;
-    var swaps = {};
-    d.items.forEach(function (it) { if (it.swap) swaps[it.ex] = it.swap; });
-    return { id: d.id, date: d.date, day: d.day, effort: d.effort || null, mood: d.mood || '', note: d.note || '',
-      sets: d.sets.map(function (s) { return { ex: s.ex, set: s.set, kg: Number(s.kg) || 0, reps: Number(s.reps) || 0, done: !!s.done, swap: swaps[s.ex] || '' }; }) };
+    var end = d.finishedAt || Date.now();
+    return { id: d.id, date: d.date, day: d.day, minutes: Math.max(1, Math.round((end - d.startedAt) / 60000)), effort: d.effort || null, note: d.note || '',
+      sets: d.sets.map(function (s) { return { slot: s.slot, ex: s.ex, set: s.set, kg: Number(s.kg) || 0, reps: Number(s.reps) || 0, done: !!s.done, fb: s.fb || '', skip: !!s.skip }; }) };
+  }
+  function preview() { return E.previewSession(input(), draftSession()); }
+
+  function stepper(i, field, val, label, disabled) {
+    var dis = disabled ? ' disabled' : '';
+    return '<div class="stepper"><button data-act="inc" data-i="' + i + '" data-f="' + field + '" data-d="-1" aria-label="Less ' + field + '"' + dis + '>−</button>' +
+      '<label><input inputmode="decimal" type="number" step="any" min="0" data-i="' + i + '" data-f="' + field + '" value="' + esc(val) + '" aria-label="' + field + '"' + dis + '>' +
+      '<small>' + esc(label) + '</small></label><button data-act="inc" data-i="' + i + '" data-f="' + field + '" data-d="1" aria-label="More ' + field + '"' + dis + '>+</button></div>';
   }
 
-  function preview() {
-    var st = S.state;
-    return E.previewSession({ settings: st.settings, program: st.program, sessions: st.sessions, overrides: st.overrides }, draftSession());
-  }
-
-  function viewLanding() {
-    var pv = preview(), c = pv.session, d = S.draft, st = pv.result.settings;
-    var n = pv.result.sessions.length;
-    var h = '<div class="screen"><header class="top"><div class="who"><h1>' + (c.completed ? 'Nice work :)' : 'Holding pattern') + '</h1>' +
-      '<div class="small muted">Workout ' + n + ', Day ' + esc(d.day) + '</div></div>' + syncHTML() + '</header>' + mapSVG(c.cumKm);
-    if (c.completed) {
-      h += '<div class="kmbig">+' + kgFmt(c.km.total) + '<small>km</small></div>';
-      h += '<p class="muted kmsplit">' + kgFmt(c.km.cruise) + ' cruise + ' + kgFmt(c.km.tailwind) + ' tailwind' + (c.km.jet ? ' + ' + kgFmt(c.km.jet) + ' jet stream' : '') +
-        '. Now ' + km(c.cumKm) + ' of ' + km(st.routeKm) + ' km, and you lifted ' + km(c.volume) + ' kg today.</p>';
-    } else {
-      var need = Math.ceil(c.prescribed * st.completeShare);
-      h += '<p style="margin-top:14px">' + c.done + ' of ' + c.prescribed + ' sets are ticked. The plane needs ' + need +
-        ' to move, so it circles for now. Your sets are still saved.</p><button class="btn ghost wide" data-act="resume">Back to the workout</button>';
-    }
-    if (c.upgrades.length) {
-      h += '<section class="panel"><h3>Heavier next time &gt;:)</h3><ul class="uplist">';
-      c.upgrades.forEach(function (id) {
-        var it = d.items.filter(function (x) { return x.ex === id; })[0];
-        var nk = pv.result.exState[id] ? pv.result.exState[id].kg : null;
-        h += '<li><span>' + esc(it ? it.name : id) + '</span><span class="num">' + kgFmt(nk) + ' kg</span></li>';
-      });
-      h += '</ul></section>';
-    }
-    h += '<div class="rate"><h3>How hard was it?</h3><div class="scale">';
-    ['Easy', 'Steady', 'Hard', 'Very hard', 'Max &gt;:)'].forEach(function (l, i) {
-      h += '<button class="' + (d.effort === i + 1 ? 'on' : '') + '" data-act="effort" data-v="' + (i + 1) + '"><b>' + (i + 1) + '</b>' + l + '</button>';
-    });
-    h += '</div></div><div class="rate"><h3>How do you feel?</h3><div class="scale">';
-    [['😴', 'Tired'], ['😐', 'Meh'], ['🙂', 'Good'], ['😄', 'Great'], ['🔥', 'On fire']].forEach(function (m) {
-      h += '<button class="' + (d.mood === m[0] ? 'on' : '') + '" data-act="mood" data-v="' + m[0] + '"><span class="emo">' + m[0] + '</span>' + m[1] + '</button>';
-    });
-    h += '</div></div><div class="rate"><h3>Note for your coach</h3><textarea id="note" placeholder="Sore knee, felt strong, machine was taken…">' + esc(d.note || '') + '</textarea></div>';
-    h += '<div style="margin-top:18px"><button class="btn taxi wide" data-act="save">Save workout</button></div></div>';
+  function exHead(it, single, d) {
+    var anyDone = d.sets.some(function (s) { return s.slot === it.slot && s.done; });
+    var h = single ? '<h1>' + esc(it.name) + '</h1>' : '<h2 class="exname">' + esc(it.name) + '</h2>';
+    h += '<div class="tags">';
+    if (it.oneOff) h += '<span class="tag">Just for today</span>';
+    if (it.upSteps && !it.oneOff) h += '<span class="tag up">Heavier today >:)</span>';
+    if (it.estimated) h += '<span class="tag">Estimated from your ' + esc(dayName(d.day === 'A' ? 'B' : 'A')) + ' day</span>';
+    if (it.overridden) h += '<span class="tag">Weight set by your coach</span>';
+    if (it.lastReps && it.lastKg !== null && it.lastKg !== undefined && !it.upSteps) h += '<span class="tag">Last time ' + it.lastReps.join(', ') + ' at ' + kgFmt(it.lastKg) + ' kg</span>';
+    h += '</div>';
+    if (it.cue) h += '<p class="cue">' + esc(it.cue) + '</p>';
+    h += '<div class="exlinks">' + (it.video ? '<a class="linkbtn" href="' + esc(it.video) + '" target="_blank" rel="noopener">Watch the form</a>' : '') +
+      (it.options > 1 && !anyDone ? '<button class="linkbtn" data-act="choose" data-slot="' + esc(it.slot) + '" data-ctx="flight">Change exercise</button>' : '') + '</div>';
+    if (it.taxi) h += '<div class="taxihint">New movement: do 1–2 light warm-up sets first, then pick a weight for these reps with about 1 left in the tank. It becomes your working weight :)</div>';
     return h;
   }
 
-  function viewLog() {
-    var res = calc(), st = res.settings;
-    var h = '<div class="screen">' + topHTML('Flight log', flightSub());
-    var ot = onTimeWeeks(res);
-    h += '<div class="stats"><div class="stat"><b>' + res.completedCount + '</b><span>Workouts</span></div>' +
-      '<div class="stat"><b>' + km(res.cumKm) + ' km</b><span>Flown of ' + km(st.routeKm) + '</span></div>' +
-      '<div class="stat"><b>' + (ot.total ? ot.good + ' of ' + ot.total : '—') + '</b><span>Weeks with both workouts</span></div>' +
-      '<div class="stat"><b>' + (res.totalVolume >= 10000 ? kgFmt(res.totalVolume / 1000) + ' t' : km(res.totalVolume) + ' kg') + '</b><span>Cargo lifted</span></div></div>';
-    if (res.totalVolume > 0) {
-      var moose = Math.round(res.totalVolume / 400);
-      h += '<p class="cargo">That is about ' + plural(moose, 'moose', 'moose') + ' (at roughly 400 kg each)' +
-        (res.totalVolume > 42000 ? ', or more than an empty Airbus A320.' : '.') + '</p>';
+  function viewFlight() {
+    var d = S.draft, next = nextStep(d);
+    var bi = d.view !== null && d.view !== undefined ? d.view : (next !== undefined ? blockIndexOfSlot(d, d.sets[next].slot) : d.blocks.length - 1);
+    var b = d.blocks[bi], order = blockOrder(d, b);
+    var pv = preview(), c = pv.session, st = pv.result.settings, left = Math.max(0, st.routeKm - c.cumKm);
+
+    var h = '<div class="flightview"><div class="flightbar"><button class="linkbtn" data-act="home" aria-label="Back to home" style="color:var(--ink);padding:4px">' + IC.close + '</button><div class="dots">';
+    d.blocks.forEach(function (x, j) {
+      var sets = d.sets.filter(function (s) { return x.slots.indexOf(s.slot) >= 0; });
+      var all = sets.every(function (s) { return !open(s); });
+      h += '<i class="' + (j === bi ? 'cur' : all ? 'done' : '') + '"></i>';
+    });
+    h += '</div><span class="clock" id="clock">' + elapsed() + '</span></div>';
+
+    h += '<div class="strip">' + routeBar(c.cumKm, st.routeKm) + '<div class="striptext"><span><b>+' + kgFmt(c.km) + ' km</b> this workout, ' + c.reps + ' reps</span><span class="muted">' +
+      (left > 0 ? km(left) + ' km until ' + esc(who()) + ' flies to Luxembourg' : 'Flight unlocked ✈ ' + esc(who()) + ' to LUX') + '</span></div></div>';
+
+    if (elapsedMin() >= 68 && !d.timeOffer && accessoryOpen(d)) {
+      h += '<section class="offer inline"><b>' + Math.round(elapsedMin()) + ' minutes in :)</b> Finish with one last accessory round, or skip the rest?' +
+        '<div class="row2"><button class="btn small" data-act="lastRound">One last round</button><button class="btn small ghost" data-act="skipRest">Skip the rest</button>' +
+        '<button class="linkbtn" data-act="timeLater">Keep going</button></div></section>';
     }
-    // postcards
-    var cards = S.state.postcards;
-    var got = cards.filter(function (c) { return c.delivered; });
-    h += '<div class="section-h"><h2>Postcard box</h2><span class="small muted">' + got.length + ' of ' + cards.length + '</span></div><div class="box">';
-    cards.forEach(function (c) {
-      if (c.delivered) {
-        h += '<button class="thumb" data-act="postcard" data-id="' + esc(c.id) + '">' + (c.photo ? '<img src="' + esc(c.photo) + '" alt="" loading="lazy">' : frontArt(c, true)) +
-          '<span>' + esc(c.place) + '</span></button>';
-      } else {
-        h += '<div class="thumb sealed">Sealed ;)<br>' + km(c.km) + ' km</div>';
+
+    var its = b.slots.map(function (k) { return d.items[k]; });
+    var rounds = Math.max.apply(null, its.map(function (it) { return d.sets.filter(function (s) { return s.slot === it.slot; }).length; }));
+    var curRound = next !== undefined && b.slots.indexOf(d.sets[next].slot) >= 0 ? d.sets[next].set : null;
+    h += '<div class="exhead"><div class="small muted">' + (b.paired ? 'Superset: ' + its.map(function (it) { return esc(it.muscle); }).join(' + ') : esc(its[0].muscle)) +
+      ', ' + esc(dayName(d.day)) + (curRound ? '. Round ' + curRound + ' of ' + rounds : '') + (b.separated ? ' (split)' : '') + '</div>';
+    if (b.paired) its.forEach(function (it, k) { h += '<div class="pairex"><span class="letter">' + 'AB'.charAt(k) + '</span><div>' + exHead(it, false, d) + '</div></div>'; });
+    else h += exHead(its[0], true, d);
+    h += '</div>';
+
+    if (d.view !== null && d.view !== undefined && next !== undefined && d.view !== blockIndexOfSlot(d, d.sets[next].slot)) {
+      h += '<div class="finishrow"><button class="btn small ghost" data-act="toCurrent">Back to the current exercise</button></div>';
+    }
+
+    h += '<div class="sets">';
+    order.forEach(function (i) {
+      var s = d.sets[i], it = d.items[s.slot], k = b.slots.indexOf(s.slot);
+      var cls = 'setrow' + (s.done ? ' done' : '') + (s.skip ? ' skipped' : '') + (i === next ? ' cur' : '');
+      var label = s.set + (b.paired ? 'AB'.charAt(k) : '');
+      h += '<div class="' + cls + '"><span class="no">' + label + '</span>' +
+        stepper(i, 'kg', s.kg, it.kgLabel, s.skip) + stepper(i, 'reps', s.reps, 'reps, goal ' + s.target, s.skip) +
+        '<button class="check" data-act="confirm" data-i="' + i + '" aria-label="Confirm set ' + label + '"' + (i === next ? '' : ' disabled') + '>' + IC.check + '</button></div>';
+      var notes = [];
+      if (b.paired) notes.push(esc(it.name));
+      if (s.skip) notes.push('Skipped');
+      else notes.push(esc(rirText(s.rir)));
+      if (i === next && s.rir === '0') notes.push('Finish the last rep you can do with your usual form and range');
+      if (i === next && s.calib) notes.push('Calibration set: if it moves well, keep going past ' + it.max + ' and log every clean rep');
+      h += '<div class="rirline">' + notes.join('. ') + '</div>';
+      if (d.fbFor === i) {
+        h += '<div class="fb"><span class="small muted">How was that set?</span>' + [['easy', 'Too easy'], ['ok', 'Just right'], ['hard', 'Too hard']].map(function (f) {
+          return '<button class="chip' + (s.fb === f[0] ? ' on' : '') + '" data-act="fb" data-i="' + i + '" data-v="' + f[0] + '">' + f[1] + '</button>';
+        }).join('') + '</div>';
+      }
+      if (d.lower && d.lower.after === i) {
+        h += '<div class="offer inline">That was below ' + it.min + ' reps. Lower to <b>' + kgFmt(d.lower.kg) + ' kg</b> for the remaining sets?' +
+          '<div class="row2"><button class="btn small" data-act="lower">Lower the weight</button><button class="btn small ghost" data-act="keepWeight">Keep it</button></div></div>';
       }
     });
     h += '</div>';
-    // strength
-    h += '<div class="section-h"><h2>Strength</h2><span class="small muted">working weight</span></div><section class="panel" style="margin-top:0;padding-top:6px;padding-bottom:6px">';
-    var any = false;
-    res.program.forEach(function (e) {
-      var s = res.exState[e.id];
-      if (!s || !s.history.length) return;
-      any = true;
-      var hist = s.history.map(function (x) { return x.kg; });
-      h += '<div class="exprog"><div class="nm">' + esc(e.name) + '<small>Started at ' + kgFmt(hist[0]) + ' ' + esc(e.kgLabel) + '</small></div>' + spark(hist) +
-        '<div class="kg">' + kgFmt(s.kg) + '</div></div>';
-    });
-    if (!any) h += '<p class="empty">Your weights show up here after your first workout.</p>';
-    h += '</section>';
-    // passes
-    h += '<div class="section-h"><h2>Workouts</h2></div>';
-    var list = res.sessions.slice().reverse();
-    if (!list.length) h += '<p class="empty">No workouts yet. They show up here after your first one :)</p>';
-    var n = res.sessions.length;
-    list.forEach(function (s, i) {
-      h += '<div class="mini' + (s.completed ? '' : ' hold') + '"><div class="seat">' + (n - i) + '<small>Day ' + s.day + '</small></div>' +
-        '<div><b>' + esc(fmtDate(s.date)) + '</b><div class="small muted">' + (s.completed ? km(s.volume) + ' kg lifted' : 'Plane was holding') +
-        (s.effort ? ', effort ' + s.effort + '/5' : '') + (s.mood ? ' ' + esc(s.mood) : '') + (s.upgrades.length ? ', ' + plural(s.upgrades.length, 'upgrade', 'upgrades') : '') + '</div></div>' +
-        '<div class="km">' + (s.completed ? '+' + Math.round(s.km.total) : '0') + '<small>km</small></div></div>';
-    });
-    if (DEMO) h += demoLinks();
-    h += '</div>';
+
+    h += '<div class="navrow"><button class="btn ghost" data-act="undo"' + (d.undo.length ? '' : ' disabled') + '>' + IC.undo + 'Undo last set</button>' +
+      '<button class="btn ghost" data-act="overview">' + IC.list + 'Overview</button></div>';
+    h += '<div class="finishrow"><button class="btn ' + (next === undefined ? 'taxi wide' : 'ghost wide') + '" data-act="finish">Finish workout</button></div></div>';
     return h;
   }
 
+  function confirmSet(i) {
+    var d = S.draft;
+    if (i !== nextStep(d)) return; // sequence is enforced here, not only by the disabled button
+    var s = d.sets[i], it = d.items[s.slot];
+    s.done = true; s.doneAt = Date.now();
+    d.undo.push(i); d.fbFor = i; d.view = null; d.lower = null;
+    var rest = d.sets.filter(function (x) { return x.slot === s.slot && open(x); });
+    if (!it.taxi && Number(s.reps) < it.min && rest.length) {
+      var lk = it.assisted ? Number(s.kg) + it.step : Math.max(0, Number(s.kg) - it.step);
+      d.lower = { slot: s.slot, kg: Math.round(lk * 100) / 100, after: i };
+    }
+    var n = nextStep(d);
+    if (n === undefined) stopRest();
+    else {
+      var cb = d.blocks[blockIndexOfSlot(d, s.slot)], ns = d.sets[n];
+      if (cb.paired && !cb.separated && cb.slots.indexOf(ns.slot) >= 0 && ns.set === s.set) startRest(30, 'Switch', d.items[ns.slot].name);
+      else startRest(it.rest || 90, 'Rest', 'Next: ' + d.items[ns.slot].name + ', ' + ns.reps + ' reps at ' + kgFmt(ns.kg) + ' kg');
+    }
+    store.set('draft', d);
+  }
+
+  // ---------- after the workout ----------
+  function viewLanding() {
+    var pv = preview(), c = pv.session, d = S.draft, st = pv.result.settings;
+    var n = pv.result.sessions.length, left = Math.max(0, st.routeKm - c.cumKm);
+    var h = '<div class="screen"><header class="top"><div class="who"><h1>Nice work :)</h1><div class="small muted">Workout ' + n + ', ' + esc(dayName(d.day)) +
+      ', ' + Math.max(1, Math.round(((d.finishedAt || Date.now()) - d.startedAt) / 60000)) + ' min</div></div>' + syncHTML() + '</header>' + mapSVG(c.cumKm);
+    h += '<div class="kmbig">+' + kgFmt(c.km) + '<small>km</small></div>';
+    h += '<p class="kmsplit">' + c.reps + ' reps toward ' + esc(who()) + '\'s flight. ' +
+      (left > 0 ? km(left) + ' km until he flies to Luxembourg.' : '<b>Flight unlocked ✈ ' + esc(who()) + ' to LUX</b>') + '</p>';
+    if (c.improvements.length) {
+      h += '<section class="panel"><h3>Better than last time :)</h3><ul class="uplist">';
+      c.improvements.forEach(function (x) { h += '<li><span>' + esc(exName(x.ex)) + '</span><span class="hl">' + esc(x.text) + '</span></li>'; });
+      h += '</ul></section>';
+    }
+    if (c.upgrades.length) {
+      h += '<section class="panel"><h3>Heavier next time >:)</h3><ul class="uplist">';
+      c.upgrades.forEach(function (id) {
+        var s = pv.result.states[id + '|' + d.day];
+        h += '<li><span>' + esc(exName(id)) + '</span><span class="num">' + (s ? kgFmt(s.kg) + ' kg' : '') + '</span></li>';
+      });
+      h += '</ul></section>';
+    }
+    if (c.done < c.prescribed) h += '<p class="small muted">' + c.done + ' of ' + c.prescribed + ' sets done. Every rep you logged still counts.</p>';
+    h += '<div class="rate"><h3>How hard was it?</h3><div class="scale">';
+    ['Easy', 'Steady', 'Hard', 'Very hard', 'Max >:)'].forEach(function (l, i) {
+      h += '<button class="' + (d.effort === i + 1 ? 'on' : '') + '" data-act="effort" data-v="' + (i + 1) + '"><b>' + (i + 1) + '</b>' + esc(l) + '</button>';
+    });
+    h += '</div></div><div class="rate"><h3>Note for your coach</h3><textarea id="note" placeholder="Sore knee, felt strong, machine was taken…">' + esc(d.note || '') + '</textarea></div>';
+    h += '<div class="rate"><h3>Photo for your coach 😇</h3>' + (d.photo
+      ? '<div class="photoprev"><img src="' + d.photo + '" alt="Your workout photo"><button class="linkbtn" data-act="removePhoto">Remove photo</button></div>'
+      : '<label class="btn ghost wide photobtn">' + IC.camera + 'Add a photo (optional)<input type="file" accept="image/*" id="photoIn" hidden></label>' +
+        (S.photoBusy ? '<p class="small muted">Preparing the photo…</p>' : '')) + '</div>';
+    h += '<div style="margin-top:18px"><button class="btn taxi wide" data-act="save">Save workout</button></div>' +
+      '<p style="text-align:center"><button class="linkbtn" data-act="resume">Back to the workout</button></p></div>';
+    return h;
+  }
+
+  // ---------- log ----------
+  function chosenFor(res, slot, day) {
+    var p = E.plan(res, todayStr(), day);
+    var it = p.items.filter(function (x) { return x.slot === slot; })[0];
+    return it ? it.exercise : null;
+  }
+  function lastTwo(res, exId, day) {
+    var h = (res.hist[exId] || []).filter(function (x) { return x.day === day && x.mode !== 'deload'; });
+    return [h[h.length - 1] || null, h[h.length - 2] || null];
+  }
+  function progressCard(res, label, slot) {
+    var e = chosenFor(res, slot, 'A');
+    if (!e) return '';
+    var h = '<div class="pcard"><div class="small muted">' + esc(label) + '</div><h3>' + esc(e.name) + '</h3>';
+    ['A', 'B'].forEach(function (day) {
+      var two = lastTwo(res, e.id, day), cur = two[0], prev = two[1];
+      h += '<div class="pline"><span class="dtag">' + esc(dayName(day)) + '</span>';
+      if (!cur) h += '<span class="muted small">No ' + esc(dayName(day)) + ' result yet</span></div>';
+      else {
+        var imp = prev ? E.compare(e, prev, cur) : null;
+        h += '<span><b>' + esc(setsText(cur, e.kgLabel === 'kg' ? 'kg' : e.kgLabel)) + '</b><span class="small muted"> ' + esc(fmtDate(cur.date)) + '</span>' +
+          (imp ? '<span class="hl">' + esc(imp) + '</span>' : prev ? '<span class="small muted">Same as last time</span>' : '<span class="small muted">First result</span>') + '</span></div>';
+      }
+    });
+    return h + '</div>';
+  }
+
+  function viewLog() {
+    var res = calc(), st = res.settings, ws = weekStats(res);
+    var h = '<div class="screen">' + topHTML('Log', flightSub());
+    h += '<div class="pcards">' + progressCard(res, 'Push', 'chest') + progressCard(res, 'Pull', 'upper-back') + '</div>';
+    var mins = res.sessions.map(function (s) { return s.minutes; }).filter(function (m) { return m; });
+    h += '<div class="stats"><div class="stat"><b>' + res.completedCount + '</b><span>Workouts</span></div>' +
+      '<div class="stat"><b>' + ws.thisWeek + ' of ' + ws.perWeek + '</b><span>This week' + (ws.total ? ', ' + ws.good + ' of ' + ws.total + ' full weeks' : '') + '</span></div>' +
+      '<div class="stat"><b>' + (mins.length ? Math.round(mins.reduce(function (a, b) { return a + b; }, 0) / mins.length) + ' min' : '—') + '</b><span>Average workout</span></div>' +
+      '<div class="stat"><b>' + km(res.cumKm) + ' km</b><span>' + res.totalReps.toLocaleString('en-GB') + ' reps so far</span></div></div>';
+
+    // working sets this week by muscle
+    var t = todayStr(), monday = E.addDays(t, -((dateObj(t).getDay() + 6) % 7)), count = {};
+    S.state.sessions.forEach(function (s) {
+      if (s.date < monday || s.date > E.addDays(monday, 6)) return;
+      (s.sets || []).forEach(function (x) { if (x.done && !x.skip) count[x.slot] = (count[x.slot] || 0) + 1; });
+    });
+    h += '<div class="section-h"><h2>Working sets this week</h2></div><section class="panel" style="margin-top:0"><div class="musclegrid">';
+    res.prog.slots.forEach(function (sl) { h += '<div><span>' + esc(sl.muscle) + '</span><b>' + (count[sl.key] || 0) + '</b></div>'; });
+    h += '</div></section>';
+
+    // postcards
+    var cards = S.state.postcards, got = cards.filter(function (c) { return c.delivered; });
+    h += '<div class="section-h"><h2>Postcard box</h2><span class="small muted">' + got.length + ' of ' + cards.length + '</span></div><div class="box">';
+    cards.forEach(function (c) {
+      if (c.delivered) h += '<button class="thumb" data-act="postcard" data-id="' + esc(c.id) + '">' + (c.photo ? '<img src="' + esc(c.photo) + '" alt="" loading="lazy">' : frontArt(c, true)) + '<span>' + esc(c.place) + '</span></button>';
+      else h += '<div class="thumb sealed">Sealed ;)<br>' + km(c.km) + ' km</div>';
+    });
+    h += '</div>';
+
+    // exercises
+    h += '<div class="section-h"><h2>Exercises</h2><span class="small muted">tap for details</span></div><section class="panel" style="margin-top:0;padding-top:6px;padding-bottom:6px">';
+    var any = false;
+    res.prog.slots.forEach(function (sl) {
+      sl.variants.forEach(function (e) {
+        var hist = res.hist[e.id];
+        if (!hist || !hist.length) return;
+        any = true;
+        var a = res.states[e.id + '|A'], b = res.states[e.id + '|B'];
+        h += '<button class="exprog" data-act="exDetail" data-ex="' + esc(e.id) + '"><div class="nm">' + esc(e.name) + '<small>' +
+          [a && a.kg !== null ? dayName('A') + ' ' + kgFmt(a.kg) : '', b && b.kg !== null ? dayName('B') + ' ' + kgFmt(b.kg) : ''].filter(Boolean).join(', ') + ' ' + esc(e.kgLabel) +
+          '</small></div>' + spark(hist.map(function (x) { return x.kg; })) + '<div class="kg">' + hist.length + '<small>results</small></div></button>';
+      });
+    });
+    if (!any) h += '<p class="empty">Your exercises show up here after your first workout :)</p>';
+    h += '</section>';
+
+    // workouts
+    h += '<div class="section-h"><h2>Workouts</h2></div>';
+    var list = res.sessions.slice().reverse(), n = res.sessions.length;
+    if (!list.length) h += '<p class="empty">No workouts yet. They show up here after your first one :)</p>';
+    list.forEach(function (s, i) {
+      h += '<div class="mini"><div class="seat">' + (n - i) + '<small>' + esc(dayName(s.day)) + '</small></div>' +
+        '<div><b>' + esc(fmtDate(s.date)) + '</b><div class="small muted">' + s.reps + ' reps' + (s.minutes ? ', ' + s.minutes + ' min' : '') +
+        (s.mode === 'deload' ? ', easier week' : s.mode === 'intro' ? ', intro' : '') + (s.upgrades.length ? ', ' + plural(s.upgrades.length, 'increase', 'increases') : '') + '</div></div>' +
+        '<div class="km">+' + Math.round(s.km) + '<small>km</small></div>' +
+        (s.photo ? '<button class="phbtn" data-act="showPhoto" data-id="' + esc(s.id) + '" aria-label="See the photo">' + IC.camera + '</button>' : '') + '</div>';
+    });
+    if (DEMO) h += demoLinks();
+    return h + '</div>';
+  }
+
   function demoLinks() {
-    return '<p style="text-align:center;margin-top:24px;display:flex;gap:20px;justify-content:center">' +
+    return '<p style="text-align:center;margin-top:24px;display:flex;gap:20px;justify-content:center;flex-wrap:wrap">' +
       '<button class="linkbtn" data-act="switchRole">' + (DEMO_ROLE === 'coach' ? 'Switch to her view' : 'Switch to the coach view') + '</button>' +
       '<button class="linkbtn" data-act="resetDemo">Restart with example data</button>' +
       '<button class="linkbtn" data-act="resetDemoEmpty">Restart from 0 km</button></p>';
   }
 
-  function spark(vals) {
-    var w = 96, h = 30;
+  function spark(vals, w, hgt) {
+    w = w || 96; hgt = hgt || 30;
     if (vals.length === 1) vals = [vals[0], vals[0]];
     var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals), span = max - min || 1;
-    var pts = vals.map(function (v, i) { return [i / (vals.length - 1) * w, h - 3 - (v - min) / span * (h - 6)]; });
+    var pts = vals.map(function (v, i) { return [i / (vals.length - 1) * w, hgt - 3 - (v - min) / span * (hgt - 6)]; });
     var last = pts[pts.length - 1];
-    return '<svg viewBox="0 0 ' + w + ' ' + h + '" aria-hidden="true"><polyline class="spark" points="' + pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') +
-      '"/><circle class="spark-end" cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="3.5"/></svg>';
+    return '<svg viewBox="0 0 ' + w + ' ' + hgt + '" style="width:' + w + 'px;height:' + hgt + 'px" aria-hidden="true"><polyline class="spark" points="' +
+      pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/><circle class="spark-end" cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="3.5"/></svg>';
   }
 
+  function exDetail(id) {
+    var res = calc(), e = res.prog.exById[id], hist = res.hist[id] || [];
+    if (!e) return;
+    var unit = e.kgLabel;
+    var h = '<h2>' + esc(e.name) + '</h2><p class="small muted">Working weight over time, both days. ' + (e.assisted ? 'Lower is better here: less assistance.' : '') + '</p>';
+    h += '<div class="bigspark">' + spark(hist.map(function (x) { return x.kg; }), 300, 70) + '</div>';
+    var best = null, bestReps = {};
+    hist.forEach(function (x) {
+      x.reps.forEach(function (r, i) {
+        var kg = x.kgs[i];
+        if (!best || (e.assisted ? kg < best.kg : kg > best.kg) || (kg === best.kg && r > best.reps)) best = { kg: kg, reps: r, day: x.day, date: x.date };
+        if (!bestReps[kg] || r > bestReps[kg].reps) bestReps[kg] = { reps: r, day: x.day };
+      });
+    });
+    if (best) h += '<h3>Personal record</h3><p><b>' + kgFmt(best.kg) + ' ' + esc(unit) + ' × ' + best.reps + '</b> <span class="small muted">' + esc(dayName(best.day)) + ', ' + esc(fmtDate(best.date)) + '</span></p>';
+    var kgs = Object.keys(bestReps).map(Number).sort(function (a, b) { return b - a; });
+    if (kgs.length) {
+      h += '<h3>Best reps at each weight</h3><table class="plantable">';
+      kgs.forEach(function (k) { h += '<tr><td>' + kgFmt(k) + ' ' + esc(unit) + '</td><td class="r"><b>' + bestReps[k].reps + '</b> reps <span class="small muted">' + esc(dayName(bestReps[k].day)) + '</span></td></tr>'; });
+      h += '</table>';
+    }
+    h += '<h3 style="margin-top:14px">Recent sets</h3><table class="plantable">';
+    hist.slice(-5).reverse().forEach(function (x) {
+      h += '<tr><td>' + esc(fmtDate(x.date)) + '<div class="small muted">' + esc(dayName(x.day)) + '</div></td><td class="r">' +
+        x.reps.map(function (r, i) { return r + (x.kgs[i] !== x.kg ? ' @' + kgFmt(x.kgs[i]) : ''); }).join(', ') + ' at ' + kgFmt(x.kg) + ' ' + esc(unit) + '</td></tr>';
+    });
+    h += '</table><div class="row"><button class="btn ghost" data-act="closeModal">Close</button></div>';
+    showModal(h);
+  }
+
+  // ---------- coach ----------
   function viewCoach() {
-    var res = calc(), st = res.settings, s = S.state.settings;
-    var h = '<div class="screen">' + topHTML('Coach console', (s.passengerName ? s.passengerName + ', ' : '') + 'flight ' + (s.flightNo || 'FL 1697')) + mapSVG(res.cumKm) + flightlineHTML(res);
+    var res = calc(), s = S.state.settings;
+    var h = '<div class="screen">' + topHTML('Coach console', (s.herName ? s.herName + ', ' : '') + 'flight ' + (s.flightNo || 'AY 1697')) + mapSVG(res.cumKm) + flightlineHTML(res);
     if (s.sheetUrl) h += '<p><a class="btn ghost wide" href="' + esc(s.sheetUrl) + '" target="_blank" rel="noopener">Open the Sheet</a></p>';
-
-    h += '<section class="panel"><h3>Send a cheer</h3><p class="small muted" style="margin:4px 0 10px">It shows on her departures screen until she taps it.</p>' +
-      '<textarea id="cheerText" maxlength="280" placeholder="Friday is RDL day. Go get them."></textarea>' +
+    h += '<section class="panel"><h3>Easier week</h3>';
+    if (res.deloadLeft > 0) h += '<p class="small">Scheduled: her next ' + plural(res.deloadLeft, 'workout is', 'workouts are') + ' easier (half the sets, 3–4 in reserve).</p>';
+    else {
+      if (res.fatigue.offer) h += '<p class="small"><b>Several lifts dipped over two weeks:</b> ' + esc(res.fatigue.lifts.map(function (x) { return exName(x.ex) + ' (' + dayName(x.day) + ')'; }).join(', ')) + '. She is offered an easier week.</p>';
+      else h += '<p class="small muted">Half the sets at 3–4 reps in reserve for her next two workouts, then back to her best weights.</p>';
+      h += '<button class="btn small ghost" data-act="deload">Schedule an easier week</button>';
+    }
+    h += '</section>';
+    h += '<section class="panel"><h3>Send a cheer</h3><p class="small muted" style="margin:4px 0 10px">It shows on her home screen until she taps it.</p>' +
+      '<textarea id="cheerText" maxlength="280" placeholder="Friday is Volume day. Go get it."></textarea>' +
       '<div style="margin-top:10px"><button class="btn wide" data-act="sendCheer">Send cheer</button></div></section>';
-
     var nd = nextSessionDate(res), day = E.nextDay(res), p = E.plan(res, nd, day);
-    h += '<div class="section-h"><h2>Next: Day ' + day + '</h2><span class="small muted">' + esc(fmtDate(nd)) + (p.layover ? ', layover' : '') + '</span></div>';
+    h += '<div class="section-h"><h2>Next: ' + esc(dayName(day)) + '</h2><span class="small muted">' + esc(fmtDate(nd)) + (p.mode !== 'normal' ? ', ' + (p.mode === 'intro' ? 'intro week' : 'easier week') : '') + '</span></div>';
     h += '<section class="panel" style="margin-top:0"><table class="plantable">';
     p.items.forEach(function (it) {
-      var tag = it.upgraded ? ' <span class="status ok">upgrade</span>' : it.rerouted ? ' <span class="status warn">reset</span>' : it.overridden ? ' <span class="status">you set</span>' : '';
-      h += '<tr><td>' + esc(it.exercise.name) + tag + '<div class="small muted">' + it.targets.join(', ') + ' reps' + (it.taxi ? ', she picks the weight' : ' at ' + kgFmt(it.kg) + ' ' + esc(it.exercise.kgLabel)) + '</div></td>' +
-        '<td class="r"><button class="btn ghost small" data-act="override" data-ex="' + esc(it.exercise.id) + '" data-kg="' + (it.kg === null ? '' : it.kg) + '" data-name="' + esc(it.exercise.name) + '">Set kg</button></td></tr>';
+      var tag = it.upSteps ? ' <span class="status ok">increase</span>' : it.overridden ? ' <span class="status">you set</span>' : it.estimated ? ' <span class="status">estimated</span>' : '';
+      h += '<tr><td><span class="small muted">' + esc(it.muscle) + (it.pair ? ', superset' : '') + '</span><br>' + esc(it.exercise.name) + tag + '<div class="small muted">' + esc(itemLine(it)) +
+        ', last set ' + esc(rirText(it.rir[it.rir.length - 1])) + '</div></td><td class="r"><button class="btn ghost small" data-act="override" data-ex="' + esc(it.exercise.id) +
+        '" data-kg="' + (it.kg === null ? '' : it.kg) + '" data-name="' + esc(it.exercise.name) + '">Set kg</button></td></tr>';
     });
     h += '</table></section>';
-
     h += '<div class="section-h"><h2>Postcards</h2></div><section class="panel" style="margin-top:0">';
-    var avg = E.eta(res, todayStr(), false).avgKm || 65;
+    var avg = E.eta(res, todayStr(), false).avgKm || 70;
     S.state.postcards.forEach(function (c) {
       var status, cls = '';
       if (c.openedAt) { status = 'Opened'; cls = 'ok'; }
       else if (c.delivered) { status = 'Delivered'; cls = 'ok'; }
-      else if (!c.written) { var left = c.km - res.cumKm; status = left <= 0 ? 'Passed, write it now' : left < avg * 2 ? 'Empty, due in ' + km(left) + ' km' : 'Empty'; cls = left < avg * 2 ? 'warn' : ''; }
+      else if (!c.written) { var left = c.km - res.cumKm; status = left <= 0 ? 'Passed, write it now!' : left < avg * 2 ? 'Empty, due in ' + km(left) + ' km' : 'Empty'; cls = left < avg * 2 ? 'warn' : ''; }
       else status = 'Written, sealed';
-      h += '<div class="cardrow"><div><b>' + esc(c.place) + '</b>, ' + esc(c.from) + '<div class="small muted">Delivered over ' + esc(c.over) + ' at ' + km(c.km) + ' km</div></div>' +
-        '<span class="status ' + cls + '">' + esc(status) + '</span></div>';
+      h += '<div class="cardrow"><div><b>' + esc(c.place) + '</b>, ' + esc(c.from) + '<div class="small muted">Delivered over ' + esc(c.over) + ' at ' + km(c.km) + ' km</div></div><span class="status ' + cls + '">' + esc(status) + '</span></div>';
     });
     h += '<p class="small muted" style="margin:10px 0 0">Write notes and add photo links in the Postcards tab of the Sheet.</p></section>';
-
     h += '<div class="section-h"><h2>Her workouts</h2></div><div class="feed">';
-    var list = res.sessions.slice().reverse(), n = res.sessions.length, names = {};
-    res.program.forEach(function (e) { names[e.id] = e.name; });
-    if (!list.length) h += '<p class="empty">Her sessions appear here as soon as she saves them.</p>';
+    var list = res.sessions.slice().reverse(), n = res.sessions.length;
+    if (!list.length) h += '<p class="empty">Her workouts appear here as soon as she saves them.</p>';
     list.forEach(function (x, i) {
-      h += '<div class="item"><div class="l1"><b>Workout ' + (n - i) + ', Day ' + x.day + '</b><span class="num">' + (x.completed ? '+' + kgFmt(x.km.total) + ' km' : 'holding') + '</span></div>' +
-        '<div class="l2">' + esc(fmtDate(x.date)) + ', week ' + x.week + ', ' + x.done + '/' + x.prescribed + ' sets, ' + km(x.volume) + ' kg' +
-        (x.effort ? ', effort ' + x.effort + '/5' : '') + (x.mood ? ' ' + esc(x.mood) : '') + '</div>' +
-        (x.upgrades.length ? '<div class="l2">Upgrades: ' + esc(x.upgrades.map(function (id) { return names[id] || id; }).join(', ')) + '</div>' : '') +
-        (x.rerouted.length ? '<div class="l2">Reset 10%: ' + esc(x.rerouted.map(function (id) { return names[id] || id; }).join(', ')) + '</div>' : '') +
-        (x.note ? '<q>' + esc(x.note) + '</q>' : '') + '</div>';
+      h += '<div class="item"><div class="l1"><b>Workout ' + (n - i) + ', ' + esc(dayName(x.day)) + '</b><span class="num">+' + kgFmt(x.km) + ' km</span></div>' +
+        '<div class="l2">' + esc(fmtDate(x.date)) + (x.minutes ? ', ' + x.minutes + ' min' : '') + ', ' + x.done + '/' + x.prescribed + ' sets, ' + x.reps + ' reps' +
+        (x.effort ? ', effort ' + x.effort + '/5' : '') + (x.mode !== 'normal' ? ', ' + (x.mode === 'intro' ? 'intro' : 'easier week') : '') + '</div>' +
+        (x.improvements.length ? '<div class="l2">Better: ' + esc(x.improvements.map(function (m) { return exName(m.ex) + ' ' + m.text; }).join('; ')) + '</div>' : '') +
+        (x.upgrades.length ? '<div class="l2">Heavier next time: ' + esc(x.upgrades.map(exName).join(', ')) + '</div>' : '') +
+        (x.note ? '<q>' + esc(x.note) + '</q>' : '') +
+        (x.photo ? '<button class="btn ghost small" style="margin-top:8px" data-act="showPhoto" data-id="' + esc(x.id) + '">' + IC.camera + 'See her photo</button>' : '') + '</div>';
     });
     h += '</div>';
     if (DEMO) h += demoLinks();
-    h += '</div>';
-    return h;
+    return h + '</div>';
   }
 
   function tabsHTML() {
     var tabs = role() === 'coach'
-      ? [['coach', 'Coach', IC.tabCoach], ['home', 'Her view', IC.tabHome], ['log', 'Flight log', IC.tabLog]]
-      : [['home', 'Departures', IC.tabHome], ['log', 'Flight log', IC.tabLog]];
+      ? [['coach', 'Coach', IC.tabCoach], ['home', 'Her view', IC.tabHome], ['log', 'Log', IC.tabLog]]
+      : [['home', 'Home', IC.tabHome], ['log', 'Log', IC.tabLog]];
     return '<div class="tabs"><nav>' + tabs.map(function (t) {
       return '<button class="' + (S.view === t[0] ? 'on' : '') + '" data-act="tab" data-v="' + t[0] + '">' + t[2] + t[1] + '</button>';
     }).join('') + '</nav></div>';
@@ -792,12 +994,12 @@
   function openPostcard(id) {
     var c = S.state.postcards.filter(function (x) { return x.id === id; })[0];
     if (!c) return;
-    var name = S.state.settings.passengerName || 'the passenger in seat 1A';
+    var name = S.state.settings.herName || 'you';
     var h = '<div class="postcard-modal"><div class="pc-wrap"><div class="pc" id="pc" data-act="flip" role="button" tabindex="0" aria-label="Postcard, tap to turn over">' +
       '<div class="pc-face pc-front">' + (c.photo ? '<img src="' + esc(c.photo) + '" alt="' + esc(c.place) + '">' : frontArt(c)) +
       '<div class="cap"><small>Greetings from ' + esc(c.from) + '</small>' + esc(c.place) + '</div></div>' +
       '<div class="pc-face pc-back"><div class="inner"><div class="msg">' + esc(c.message || '') + '</div><div class="side">' + stampSVG() + postmarkSVG(c.from, c.deliveredOn) +
-      '<div class="addr">To ' + esc(name) + ',<br>somewhere over ' + esc(c.over) + '</div></div></div></div></div></div>' +
+      '<div class="addr">To ' + esc(name) + ',<br>from somewhere over ' + esc(c.over) + '</div></div></div></div></div></div>' +
       '<p class="pc-hint" id="pcHint">Tap the card to turn it over</p><button class="btn ghost wide pc-close" data-act="closeModal">Close</button></div>';
     showModal(h, true);
     if (role() === 'athlete' && !c.openedAt && !S.seen['pc:' + c.id]) {
@@ -820,42 +1022,105 @@
 
   function daySheet(ds) {
     var res = calc();
-    var flights = res.sessions.filter(function (s) { return s.date === ds; });
+    var w = res.sessions.filter(function (s) { return s.date === ds; });
     var has = function (t) { return S.state.stamps.some(function (s) { return s.date === ds && s.type === t; }); };
     var h = '<h2>' + esc(fmtLong(ds)) + '</h2>';
-    if (flights.length) h += '<p class="muted">' + flights.map(function (f) { return 'Day ' + f.day + ': ' + (f.completed ? '+' + kgFmt(f.km.total) + ' km' : 'the plane was holding'); }).join('. ') + '</p>';
+    if (w.length) h += '<p class="muted">' + w.map(function (f) { return dayName(f.day) + ': ' + f.reps + ' reps, +' + kgFmt(f.km) + ' km'; }).join('. ') + '</p>';
     else h += '<p class="muted">Ballet and runs don\'t move the plane, but your coach sees them ;)</p>';
     h += '<div class="toggles">';
-    [['ballet', 'Ballet', IC.ballet, 'var(--mail-red)'], ['run', 'Run', IC.run, 'var(--go)']].forEach(function (t) {
+    [['ballet', 'Ballet', IC.ballet], ['run', 'Run', IC.run]].forEach(function (t) {
       var on = has(t[0]);
       h += '<button class="toggle' + (on ? ' on' : '') + '" data-act="stamp" data-date="' + ds + '" data-type="' + t[0] + '" data-on="' + (on ? 0 : 1) + '" aria-pressed="' + on + '">' +
-        t[2].replace('<svg', '<svg style="color:' + t[3] + '"') + t[1] + '<span class="box2">' + (on ? IC.check : '') + '</span></button>';
+        '<i class="mk ' + t[0] + '">' + t[2] + '</i>' + t[1] + '<span class="box2">' + (on ? IC.check : '') + '</span></button>';
     });
     h += '</div><div class="row"><button class="btn ghost" data-act="closeModal">Done</button></div>';
     showModal(h);
+  }
+
+  /** Exercise chooser for one slot. ctx 'pass' (before the workout) or 'flight' (during it). */
+  function chooser(slot, ctx, day) {
+    S.chooseCtx = { slot: slot, ctx: ctx, day: day || (S.draft ? S.draft.day : 'A') };
+    if (!S.chooseScope || (ctx === 'pass' && S.chooseScope === 'today')) S.chooseScope = ctx === 'flight' ? 'today' : 'both';
+    renderChooser();
+  }
+  function renderChooser() {
+    var cc = S.chooseCtx, res = calc();
+    var date = cc.ctx === 'flight' ? S.draft.date : todayStr();
+    var it = E.plan(res, date, cc.day).items.filter(function (x) { return x.slot === cc.slot; })[0];
+    if (!it) return;
+    var current = cc.ctx === 'flight' ? S.draft.items[cc.slot].ex : it.exercise.id;
+    var h = '<h2>' + esc(it.muscle) + '</h2><p class="muted small">Pick one exercise. Stick with the same choice for at least a few weeks so your progress shows :)</p>';
+    var scopes = (cc.ctx === 'flight' ? [['today', 'Just today']] : []).concat([['both', 'Both days'], ['only', 'Only on ' + dayName(cc.day) + ' days']]);
+    h += '<div class="scopes">' + scopes.map(function (s) {
+      return '<button class="chip' + (S.chooseScope === s[0] ? ' on' : '') + '" data-act="scope" data-v="' + s[0] + '">' + esc(s[1]) + '</button>';
+    }).join('') + '</div><div class="toggles">';
+    it.options.forEach(function (o) {
+      var on = o.exercise.id === current;
+      h += '<button class="toggle' + (on ? ' on' : '') + '" data-act="pick" data-ex="' + esc(o.exercise.id) + '"><span class="opt"><b>' + esc(o.exercise.name) + '</b>' +
+        '<span class="small muted">' + (o.exercise.rank === 1 ? 'Recommended. ' : '') + esc(itemLine(o)) + '</span></span><span class="box2">' + (on ? IC.check : '') + '</span></button>';
+    });
+    h += '</div><div class="row"><button class="btn ghost" data-act="closeModal">Done</button></div>';
+    showModal(h);
+  }
+  function pick(exId) {
+    var cc = S.chooseCtx, scope = S.chooseScope;
+    if (cc.ctx === 'flight') {
+      var d = S.draft;
+      if (d.sets.some(function (s) { return s.slot === cc.slot && s.done; })) return;
+      var p = E.plan(calc(), d.date, d.day), it = p.items.filter(function (x) { return x.slot === cc.slot; })[0];
+      var o = it.options.filter(function (x) { return x.exercise.id === exId; })[0];
+      if (!o) return;
+      var fresh = setsFromPlan(o);
+      var keep = d.sets.filter(function (s) { return s.slot !== cc.slot; });
+      var first = d.sets.map(function (s) { return s.slot; }).indexOf(cc.slot);
+      d.sets = keep.slice(0, first).concat(fresh, keep.slice(first));
+      d.items[cc.slot] = itemFromPlan(o);
+      d.items[cc.slot].oneOff = scope === 'today';
+      d.undo = d.undo.filter(function () { return false; }); // indexes changed
+      d.fbFor = null; d.lower = null;
+      store.set('draft', d);
+    }
+    if (scope !== 'today') enqueue({ type: 'choice', slot: cc.slot, day: scope === 'only' ? cc.day : 'AB', ex: exId, at: nowIso() });
+    closeModal();
+  }
+
+  function overview() {
+    var d = S.draft, next = nextStep(d), cur = next !== undefined ? blockIndexOfSlot(d, d.sets[next].slot) : -1;
+    var h = '<h2>Workout overview</h2><p class="small muted">Move unfinished exercises, skip one, or split a superset when a machine is busy.</p><div class="blocks">';
+    d.blocks.forEach(function (b, i) {
+      var sets = d.sets.filter(function (s) { return b.slots.indexOf(s.slot) >= 0; });
+      var done = sets.filter(function (s) { return s.done; }).length, opened = sets.filter(open).length, skipped = sets.filter(function (s) { return s.skip; }).length;
+      var names = b.slots.map(function (k) { return d.items[k].name; }).join(' + ');
+      var movable = opened > 0;
+      h += '<div class="blk' + (i === cur ? ' cur' : '') + '"><div class="bt"><b>' + esc(names) + '</b><div class="small muted">' + done + ' of ' + sets.length + ' sets done' +
+        (skipped ? ', ' + skipped + ' skipped' : '') + (b.paired ? (b.separated ? ', split' : ', superset') : '') + '</div></div><div class="ba">' +
+        (movable && i > 0 ? '<button class="ib" data-act="moveBlock" data-i="' + i + '" data-d="-1" aria-label="Move up">↑</button>' : '') +
+        (movable && i < d.blocks.length - 1 ? '<button class="ib" data-act="moveBlock" data-i="' + i + '" data-d="1" aria-label="Move down">↓</button>' : '') +
+        (b.paired && opened ? '<button class="linkbtn" data-act="splitBlock" data-i="' + i + '">' + (b.separated ? 'Rejoin' : 'Split') + '</button>' : '') +
+        (opened ? '<button class="linkbtn" data-act="skipBlock" data-i="' + i + '">Skip</button>' : skipped ? '<button class="linkbtn" data-act="unskipBlock" data-i="' + i + '">Unskip</button>' : '') +
+        '<button class="linkbtn" data-act="viewBlock" data-i="' + i + '">View</button></div></div>';
+    });
+    h += '</div><div class="row"><button class="btn ghost" data-act="closeModal">Close</button><button class="btn" data-act="finish">Finish workout</button></div>';
+    showModal(h);
+  }
+  function moveBlock(i, dir) {
+    var d = S.draft, j = i + dir;
+    if (j < 0 || j >= d.blocks.length) return;
+    var other = d.blocks[j], otherOpen = d.sets.some(function (s) { return other.slots.indexOf(s.slot) >= 0 && open(s); });
+    if (!otherOpen) return; // finished exercises stay where they were done
+    var t = d.blocks[i]; d.blocks[i] = other; d.blocks[j] = t;
+    store.set('draft', d);
   }
 
   function confirmFinish() {
-    var d = S.draft, done = d.sets.filter(function (s) { return s.done; }).length, total = d.sets.length;
-    var need = Math.ceil(total * settings().completeShare);
-    if (done >= need) { goLanding(); return; }
-    showModal('<h2>Finish now?</h2><p>' + done + ' of ' + total + ' sets are logged. The plane needs ' + need + ' to fly. You can finish anyway, and your sets are still saved.</p>' +
-      '<div class="row"><button class="btn ghost" data-act="closeModal">Keep going</button><button class="btn" data-act="finishAnyway">Finish anyway</button></div>');
-  }
-
-  function swapSheet() {
-    var it = S.draft.items[S.draft.cur];
-    var h = '<h2>Swap exercise</h2><p class="muted">Machine taken? Pick an alternative. It counts for your cargo, and your progress on ' + esc(it.name) + ' waits for next time.</p><div class="toggles">';
-    it.alts.forEach(function (a) {
-      h += '<button class="toggle' + (it.swap === a ? ' on' : '') + '" data-act="doSwap" data-v="' + esc(a) + '">' + esc(a) + '<span class="box2">' + (it.swap === a ? IC.check : '') + '</span></button>';
-    });
-    h += '<button class="toggle' + (!it.swap ? ' on' : '') + '" data-act="doSwap" data-v="">' + esc(it.name) + ' (original)<span class="box2">' + (!it.swap ? IC.check : '') + '</span></button>';
-    h += '</div><div class="row"><button class="btn ghost" data-act="closeModal">Done</button></div>';
-    showModal(h);
+    var d = S.draft, left = d.sets.filter(open).length;
+    if (!left) { goLanding(); return; }
+    showModal('<h2>Finish now?</h2><p>' + plural(left, 'set is', 'sets are') + ' still open. Every rep you logged still counts, and the open sets are left out.</p>' +
+      '<div class="row"><button class="btn ghost" data-act="closeModal">Keep going</button><button class="btn" data-act="finishAnyway">Finish</button></div>');
   }
 
   function overrideSheet(ex, kg, name) {
-    showModal('<h2>' + esc(name) + '</h2><p class="muted">Set the weight for her next session. The app continues its normal progression from there.</p>' +
+    showModal('<h2>' + esc(name) + '</h2><p class="muted">Set the weight for her next workouts on both days. Progression continues from there.</p>' +
       '<input class="field" id="ovKg" type="number" inputmode="decimal" step="any" min="0" value="' + esc(kg) + '" aria-label="Weight in kg">' +
       '<div class="row"><button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn" data-act="saveOverride" data-ex="' + esc(ex) + '">Save weight</button></div>', true);
   }
@@ -879,23 +1144,22 @@
       });
     } catch (e) { /* no sound */ }
   }
-  function startRest(sec, nextLabel) {
+  function startRest(sec, kind, nextLabel) {
     stopRest();
     restEnd = Date.now() + sec * 1000;
     var el = document.getElementById('rest');
     el.hidden = false;
-    el.className = '';
-    el.innerHTML = '<span class="t" id="restT"></span><span class="lbl"><b>Rest</b>' + esc(nextLabel) + '</span>' +
+    el.className = kind === 'Switch' ? 'switch' : '';
+    el.innerHTML = '<span class="t" id="restT"></span><span class="lbl"><b>' + esc(kind) + '</b>' + esc(nextLabel) + '</span>' +
       '<button data-act="restAdd">+15 s</button><button data-act="restSkip">Skip</button>';
     var beeped = false;
     function tick() {
-      var left = Math.ceil((restEnd - Date.now()) / 1000);
-      var t = document.getElementById('restT');
+      var left = Math.ceil((restEnd - Date.now()) / 1000), t = document.getElementById('restT');
       if (!t) return;
-      if (left > 0) { t.textContent = Math.floor(left / 60) + ':' + pad(left % 60); el.className = ''; }
+      if (left > 0) { t.textContent = Math.floor(left / 60) + ':' + pad(left % 60); el.classList.remove('over'); }
       else {
         t.textContent = 'Go >:)';
-        el.className = 'over';
+        el.classList.add('over');
         if (!beeped) { beeped = true; beep(); }
         if (left < -25) stopRest();
       }
@@ -942,29 +1206,65 @@
     S.draft.finishedAt = Date.now();
     store.set('draft', S.draft);
     S.view = 'landing';
+    closeModalSilently();
     render();
     window.scrollTo(0, 0);
     var pv = preview();
-    if (pv.session.completed) {
-      animatePlane(pv.session.cumBefore, pv.session.cumKm);
-      if (pv.session.upgrades.length) setTimeout(confetti, 2600);
-    }
+    animatePlane(pv.session.cumBefore, pv.session.cumKm);
+    if (pv.session.upgrades.length || pv.session.improvements.length) setTimeout(confetti, 2600);
   }
 
   function saveFlight() {
     var note = document.getElementById('note');
     if (note) S.draft.note = note.value;
-    var sess = draftSession();
-    var passed = preview().session;
+    var sess = draftSession(), photo = S.draft.photo || null;
     S.draft = null;
     store.del('draft');
     releaseAwake();
     S.view = 'home';
-    S.autoMail = passed.completed;
+    S.autoMail = true;
     enqueue({ type: 'saveSession', session: sess });
+    if (photo) enqueue({ type: 'photo', sessionId: sess.id, dataUrl: photo });
     render();
     window.scrollTo(0, 0);
   }
+
+  /** Shrinks a photo to at most 1280 px on the long side as JPEG, so it stays small and syncs fast. */
+  function preparePhoto(file) {
+    return new Promise(function (resolve, reject) {
+      var rd = new FileReader();
+      rd.onerror = reject;
+      rd.onload = function () {
+        var img = new Image();
+        img.onerror = reject;
+        img.onload = function () {
+          var s = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight));
+          var c = document.createElement('canvas');
+          c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          resolve(c.toDataURL('image/jpeg', 0.78));
+        };
+        img.src = rd.result;
+      };
+      rd.readAsDataURL(file);
+    });
+  }
+
+  function showPhoto(id) {
+    var local = S.localPhotos && S.localPhotos[id];
+    showModal('<h2>Workout photo</h2><div class="photoview" id="photoView">' + (local ? '<img src="' + local + '" alt="Workout photo">' : '<p class="muted">Loading the photo…</p>') +
+      '</div><div class="row"><button class="btn ghost" data-act="closeModal">Close</button></div>');
+    if (local) return;
+    API.photo(id).then(function (url) {
+      var v = document.getElementById('photoView');
+      if (v) v.innerHTML = '<img src="' + url + '" alt="Workout photo">';
+    }, function () {
+      var v = document.getElementById('photoView');
+      if (v) v.innerHTML = '<p class="muted">The photo couldn\'t be loaded. It may still be syncing from her phone.</p>';
+    });
+  }
+
+  function slotOf(i) { return S.draft.sets[i].slot; }
 
   // ---------- events ----------
   var app = document.getElementById('app');
@@ -974,6 +1274,7 @@
       if (ev.target.id === 'modal' && !document.getElementById('pc')) closeModal();
       return;
     }
+    if (t.disabled) return;
     var a = t.dataset.act, d = S.draft;
     switch (a) {
       case 'tab': S.view = t.dataset.v; render(); window.scrollTo(0, 0); break;
@@ -981,37 +1282,54 @@
       case 'board': S.boardDay = null; S.view = 'board'; render(); window.scrollTo(0, 0); break;
       case 'boardDay': S.boardDay = t.dataset.day; render(); break;
       case 'start': startFlight(t.dataset.day); break;
-      case 'resume': S.view = 'flight'; keepAwake(); unlockAudio(); render(); break;
+      case 'resume': if (d) { d.finishedAt = null; store.set('draft', d); } S.view = 'flight'; keepAwake(); unlockAudio(); render(); break;
       case 'inc': {
-        var s = d.sets[+t.dataset.i], it = d.items.filter(function (x) { return x.ex === s.ex; })[0];
-        var f = t.dataset.f, step = f === 'kg' ? it.step : 1;
+        var s = d.sets[+t.dataset.i], it = d.items[s.slot], f = t.dataset.f, step = f === 'kg' ? it.step : 1;
         s[f] = Math.max(0, Math.round((Number(s[f]) + step * Number(t.dataset.d)) * 100) / 100);
-        if (f === 'kg') d.sets.forEach(function (o) { if (o.ex === s.ex && !o.done && o.set > s.set) o.kg = s.kg; }); // carry weight to later sets
+        if (f === 'kg' && !s.done) d.sets.forEach(function (o) { if (o.slot === s.slot && open(o) && o.set > s.set) o.kg = s.kg; });
         store.set('draft', d); render(); break;
       }
-      case 'check': {
-        unlockAudio();
-        var cs = d.sets[+t.dataset.i];
-        cs.done = !cs.done;
-        store.set('draft', d);
-        if (cs.done) {
-          var rest = d.items[d.cur].rest || 90;
-          var nxt = d.sets.filter(function (o) { return o.ex === cs.ex && !o.done; })[0];
-          if (nxt) startRest(rest, 'Next: set ' + nxt.set + ', ' + nxt.reps + ' reps at ' + kgFmt(nxt.kg) + ' kg');
-          else if (d.cur < d.items.length - 1) startRest(rest, 'Next: ' + (d.items[d.cur + 1].name));
-          else stopRest();
-        } else stopRest();
-        render(); break;
+      case 'confirm': unlockAudio(); confirmSet(+t.dataset.i); render(); break;
+      case 'fb': { var fs = d.sets[+t.dataset.i]; fs.fb = fs.fb === t.dataset.v ? '' : t.dataset.v; store.set('draft', d); render(); break; }
+      case 'lower': if (d.lower) { d.sets.forEach(function (o) { if (o.slot === d.lower.slot && open(o)) o.kg = d.lower.kg; }); d.lower = null; store.set('draft', d); render(); } break;
+      case 'keepWeight': d.lower = null; store.set('draft', d); render(); break;
+      case 'undo': {
+        var ui = d.undo.pop();
+        if (ui !== undefined) { d.sets[ui].done = false; d.sets[ui].fb = ''; d.fbFor = null; d.lower = null; d.view = null; stopRest(); }
+        store.set('draft', d); render(); break;
       }
-      case 'prev': if (d.cur > 0) { d.cur--; store.set('draft', d); render(); window.scrollTo(0, 0); } break;
-      case 'next': if (d.cur < d.items.length - 1) { d.cur++; store.set('draft', d); render(); window.scrollTo(0, 0); } break;
+      case 'overview': overview(); break;
+      case 'moveBlock': moveBlock(+t.dataset.i, +t.dataset.d); overview(); render(); break;
+      case 'splitBlock': d.blocks[+t.dataset.i].separated = !d.blocks[+t.dataset.i].separated; store.set('draft', d); overview(); render(); break;
+      case 'skipBlock': d.sets.forEach(function (o) { if (d.blocks[+t.dataset.i].slots.indexOf(o.slot) >= 0 && open(o)) o.skip = true; }); stopRest(); store.set('draft', d); overview(); render(); break;
+      case 'unskipBlock': d.sets.forEach(function (o) { if (d.blocks[+t.dataset.i].slots.indexOf(o.slot) >= 0) o.skip = false; }); store.set('draft', d); overview(); render(); break;
+      case 'viewBlock': d.view = +t.dataset.i; store.set('draft', d); closeModal(); window.scrollTo(0, 0); break;
+      case 'toCurrent': d.view = null; store.set('draft', d); render(); break;
+      case 'lastRound': {
+        var nx = nextStep(d), firstAcc = -1;
+        d.blocks.forEach(function (b, bi) { if (firstAcc < 0 && b.paired && d.sets.some(function (o) { return b.slots.indexOf(o.slot) >= 0 && open(o); })) firstAcc = bi; });
+        if (firstAcc >= 0) {
+          var fb = d.blocks[firstAcc];
+          var r = Math.min.apply(null, d.sets.filter(function (o) { return fb.slots.indexOf(o.slot) >= 0 && open(o); }).map(function (o) { return o.set; }));
+          d.sets.forEach(function (o) {
+            var bi2 = blockIndexOfSlot(d, o.slot);
+            if (!open(o) || !d.blocks[bi2].paired) return;
+            if (bi2 !== firstAcc || o.set > r) o.skip = true;
+          });
+        }
+        d.timeOffer = true; store.set('draft', d); render(); break;
+      }
+      case 'skipRest': d.sets.forEach(function (o) { if (open(o) && d.blocks[blockIndexOfSlot(d, o.slot)].paired) o.skip = true; }); d.timeOffer = true; stopRest(); store.set('draft', d); render(); break;
+      case 'timeLater': d.timeOffer = true; store.set('draft', d); render(); break;
       case 'finish': confirmFinish(); break;
       case 'finishAnyway': closeModalSilently(); goLanding(); break;
-      case 'swap': swapSheet(); break;
-      case 'doSwap': d.items[d.cur].swap = t.dataset.v; store.set('draft', d); closeModal(); break;
+      case 'choose': chooser(t.dataset.slot, t.dataset.ctx, t.dataset.day); break;
+      case 'scope': S.chooseScope = t.dataset.v; renderChooser(); break;
+      case 'pick': pick(t.dataset.ex); break;
       case 'effort': d.effort = +t.dataset.v; keepNote(); store.set('draft', d); render(); break;
-      case 'mood': d.mood = t.dataset.v; keepNote(); store.set('draft', d); render(); break;
       case 'save': saveFlight(); break;
+      case 'removePhoto': d.photo = null; store.set('draft', d); render(); break;
+      case 'showPhoto': showPhoto(t.dataset.id); break;
       case 'restAdd': restEnd = Math.max(restEnd, Date.now()) + 15000; break;
       case 'restSkip': stopRest(); break;
       case 'postcard': openPostcard(t.dataset.id); break;
@@ -1023,8 +1341,11 @@
       }
       case 'closeModal': closeModal(); break;
       case 'cheerSeen': S.seen['ch:' + t.dataset.id] = 1; store.set('seen', S.seen); enqueue({ type: 'cheerSeen', id: t.dataset.id }); render(); break;
+      case 'deload': enqueue({ type: 'deload', date: todayStr() }); render(); break;
+      case 'fatigueLater': S.seen['fat:' + t.dataset.id] = 1; store.set('seen', S.seen); render(); break;
       case 'day': daySheet(t.dataset.date); break;
       case 'stamp': enqueue({ type: 'stamp', date: t.dataset.date, stampType: t.dataset.type, on: t.dataset.on === '1' }); daySheet(t.dataset.date); render(); break;
+      case 'exDetail': exDetail(t.dataset.ex); break;
       case 'sendCheer': {
         var tx = document.getElementById('cheerText');
         if (tx && tx.value.trim()) { enqueue({ type: 'cheer', text: tx.value.trim() }); tx.value = ''; render(); }
@@ -1053,15 +1374,31 @@
     if (el.dataset && el.dataset.f && S.draft) {
       var s = S.draft.sets[+el.dataset.i], v = Math.max(0, Number(String(el.value).replace(',', '.')) || 0);
       s[el.dataset.f] = v;
-      if (el.dataset.f === 'kg') S.draft.sets.forEach(function (o) { if (o.ex === s.ex && !o.done && o.set > s.set) o.kg = v; });
+      if (el.dataset.f === 'kg' && !s.done) S.draft.sets.forEach(function (o) { if (o.slot === s.slot && open(o) && o.set > s.set) o.kg = v; });
       store.set('draft', S.draft);
       render();
     }
   });
+  app.addEventListener('change', function (ev) {
+    if (ev.target.id !== 'photoIn' || !ev.target.files || !ev.target.files[0] || !S.draft) return;
+    keepNote();
+    S.photoBusy = true; render();
+    preparePhoto(ev.target.files[0]).then(function (url) {
+      S.photoBusy = false;
+      S.draft.photo = url;
+      store.set('draft', S.draft);
+      render();
+    }, function () { S.photoBusy = false; render(); });
+  });
   app.addEventListener('input', function (ev) {
     if (ev.target.id === 'note' && S.draft) { S.draft.note = ev.target.value; store.set('draft', S.draft); }
   });
-  setInterval(function () { var c = document.getElementById('clock'); if (c) c.textContent = elapsed(); }, 1000);
+  setInterval(function () {
+    var c = document.getElementById('clock');
+    if (c) c.textContent = elapsed();
+    if (S.view === 'flight' && S.draft && !S.draft.timeOffer && elapsedMin() >= 68 && !document.querySelector('.offer.inline [data-act=lastRound]') &&
+      document.getElementById('modal').hidden && accessoryOpen(S.draft)) render();
+  }, 1000);
 
   // ---------- render ----------
   function render() {
@@ -1078,6 +1415,10 @@
         (S.sync === 'offline' || S.sync === 'error' ? 'No connection yet. Open the app again when you have signal. After the first load it works offline too.' : 'Loading the flight plan…') + '</p></div>';
       return;
     }
+    if (!S.state.slots) { // the Sheet hasn't been upgraded yet
+      app.innerHTML = '<div class="err"><h1>Almost ready</h1><p class="muted">The Sheet needs one update first. Ask your coach to run Flight → Upgrade in the Sheet.</p></div>';
+      return;
+    }
     var v = S.view || (role() === 'coach' ? 'coach' : 'home');
     if ((v === 'flight' || v === 'landing') && !S.draft) v = 'home';
     if (v === 'coach' && role() !== 'coach') v = 'home';
@@ -1092,8 +1433,9 @@
   if (!DEMO && 'serviceWorker' in navigator) {
     try { navigator.serviceWorker.register('sw.js').catch(function () { /* offline shell unavailable */ }); } catch (e) { /* ignore */ }
   }
-  if (S.draft) S.view = 'flight';
+  if (S.draft && !S.draft.blocks) { S.draft = null; store.del('draft'); } // a draft from the old version
+  if (S.draft) S.view = S.draft.finishedAt ? 'landing' : 'flight';
   render();
   if (DEMO || KEY) flush();
-  window.FlightApp = { S: S, render: render }; // for debugging
+  window.FlightApp = { S: S, render: render };
 })();

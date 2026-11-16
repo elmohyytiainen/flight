@@ -1,119 +1,157 @@
 /*
- * FlightCore — the backend's logic, independent of where data is stored.
+ * FlightCore v3 — the backend's logic, independent of where data is stored.
  *
- * Works on `data`, an in-memory copy of the Sheet:
- *   { settings: {key: value}, program: [...], sessions: [...], sets: [...],
- *     overrides: [...], stamps: [...], postcards: [...], cheers: [...] }
- * Each array holds row objects keyed by the tab's column headers (TABS below).
+ * Works on `data`, an in-memory copy of the Sheet: { settings: {key: value}, slots, exercises,
+ * choices, sessions, sets, overrides, stamps, postcards, cheers } (arrays of row objects).
+ * applyOp() changes `data` and returns writes for the storage adapter (Sheet or demo storage).
  *
- * applyOp() changes `data` and returns a list of writes, which the storage
- * adapter replays: the Apps Script adapter writes them into the Sheet, the
- * demo adapter into the browser's storage.
- *
- * This exact file runs in the web app (core.js, demo mode only) and in Apps
- * Script (pasted as Core.gs). Needs FlightEngine.
+ * Runs in the web app (core.js, demo mode) and in Apps Script (pasted as Core.gs). Needs FlightEngine.
  */
 var FlightCore = (function () {
   'use strict';
 
   var TABS = {
     Settings: ['key', 'value', 'note'],
-    Program: ['day', 'order', 'id', 'name', 'sets', 'repMin', 'repMax', 'stepKg', 'loadMult', 'kgLabel',
-      'restSec', 'startKg', 'cue', 'video', 'alternatives', 'active'],
-    Sessions: ['id', 'date', 'day', 'week', 'effort', 'mood', 'note', 'volumeKg', 'upgrades', 'km', 'cumKm',
-      'completed', 'savedAt', 'setsJson'],
-    Sets: ['sessionId', 'date', 'day', 'exercise', 'exerciseName', 'set', 'kg', 'reps', 'done', 'swap'],
+    Slots: ['slot', 'muscle', 'orderA', 'orderB', 'pair', 'setsA', 'repMinA', 'repMaxA', 'setsB', 'repMinB', 'repMaxB',
+      'restA', 'restB', 'rirLastA', 'rirLastB', 'lastRirStableOnly', 'failureLast', 'calibrate', 'active'],
+    Exercises: ['id', 'slot', 'name', 'rank', 'stepKg', 'loadMult', 'baseKg', 'kgLabel', 'assisted', 'stable', 'rir',
+      'startKg', 'cue', 'video', 'active'],
+    Choices: ['at', 'slot', 'day', 'exercise'],
+    Sessions: ['id', 'date', 'day', 'week', 'minutes', 'effort', 'note', 'reps', 'km', 'cumKm', 'volumeKg', 'upgrades',
+      'completed', 'savedAt', 'setsJson', 'photo'],
+    Sets: ['sessionId', 'date', 'day', 'slot', 'exercise', 'exerciseName', 'set', 'kg', 'reps', 'done', 'feedback'],
     Overrides: ['date', 'exercise', 'kg', 'note'],
     Stamps: ['date', 'type'],
     Postcards: ['id', 'km', 'over', 'from', 'place', 'photo', 'message', 'openedAt'],
     Cheers: ['id', 'createdAt', 'text', 'seenAt']
   };
+  var KEY = { Settings: 'settings', Slots: 'slots', Exercises: 'exercises', Choices: 'choices', Sessions: 'sessions',
+    Sets: 'sets', Overrides: 'overrides', Stamps: 'stamps', Postcards: 'postcards', Cheers: 'cheers' };
 
-  // Which data key each tab maps to
-  var KEY = { Settings: 'settings', Program: 'program', Sessions: 'sessions', Sets: 'sets',
-    Overrides: 'overrides', Stamps: 'stamps', Postcards: 'postcards', Cheers: 'cheers' };
-
-  // ---------- seed content (what setup() writes into a fresh Sheet) ----------
-
+  // ---------- seeds ----------
   function yt(q) { return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' form'); }
+
+  var SETTING_NOTES = {
+    herName: 'Her name, written on the postcards',
+    travellerName: 'Who flies to LUX when the bar fills (shown on the boarding pass and in the app)',
+    flightNo: 'Flight number on the boarding pass',
+    dayAName: 'Label for Day A (Monday)',
+    dayBName: 'Label for Day B (Friday)',
+    startDate: 'First Monday of the program',
+    introWeeks: 'Intro weeks at the start: one set fewer, 2–3 reps in reserve, no weight increases. 0, 1 or 2',
+    trainingWeekdays: 'Weekdays for the landing estimate and calendar: 0=Sun, 1=Mon ... 5=Fri',
+    routeKm: 'Tampere-Pirkkala (TMP) to Luxembourg (LUX), great circle',
+    kmPerRep: 'km earned per rep on a confirmed working set',
+    coachEmail: 'Where workout reports are emailed. Blank = no email',
+    appUrl: 'Web address of the app (GitHub Pages), used to build the links',
+    athleteKey: 'Secret key in her link. Change it and resend the link if it leaks',
+    coachKey: 'Secret key in your coach link'
+  };
+  var FLIGHT_NO = 'AY 1697';
 
   function seedSettings(keys) {
     return [
-      ['passengerName', '', 'Her name, printed on the boarding pass'],
-      ['flightNo', 'FL 1697', 'Flight number on the boarding pass'],
-      ['startDate', '2026-11-23', 'First Monday of Block 1 (week 1 = taxi week)'],
-      ['trainingWeekdays', '1,5', 'Weekdays used for the landing estimate: 0=Sun, 1=Mon ... 5=Fri'],
-      ['layoverWeek', 7, 'Deload week: 2 sets per exercise, no weight increases. 0 = none'],
-      ['routeKm', 1697, 'Tampere-Pirkkala (TMP) to Luxembourg (LUX), great circle'],
-      ['kmCruise', 35, 'km for any completed session'],
-      ['kmTailwind', 30, 'km at baseline volume; scales with volume / week-1 volume'],
-      ['jetPerUpgrade', 5, 'Bonus km per weight upgrade earned in a session'],
-      ['jetCap', 15, 'Max bonus km per session'],
-      ['vBaseA', '', 'Baseline volume for Day A in kg. Blank = her first completed Day A'],
-      ['vBaseB', '', 'Baseline volume for Day B in kg. Blank = her first completed Day B'],
-      ['coachEmail', keys.coachEmail || '', 'Where landing reports are emailed. Blank = no email'],
-      ['appUrl', keys.appUrl || '', 'Web address of the app (GitHub Pages), used to build the links'],
-      ['athleteKey', keys.athleteKey, 'Secret key in her link. Change it and resend the link if it leaks'],
-      ['coachKey', keys.coachKey, 'Secret key in your coach link']
-    ].map(function (r) { return { key: r[0], value: r[1], note: r[2] }; });
+      ['herName', keys.herName || ''], ['travellerName', 'Elmo'], ['flightNo', FLIGHT_NO],
+      ['dayAName', 'Heavy'], ['dayBName', 'Volume'], ['startDate', '2026-11-23'], ['introWeeks', 1],
+      ['trainingWeekdays', '1,5'], ['routeKm', 1697], ['kmPerRep', FlightEngine.DEFAULTS.kmPerRep],
+      ['coachEmail', keys.coachEmail || ''], ['appUrl', keys.appUrl || ''],
+      ['athleteKey', keys.athleteKey], ['coachKey', keys.coachKey]
+    ].map(function (r) { return { key: r[0], value: r[1], note: SETTING_NOTES[r[0]] || '' }; });
   }
 
-  function ex(day, order, id, name, sets, repMin, repMax, stepKg, loadMult, kgLabel, restSec, startKg, cue, alts) {
-    return { day: day, order: order, id: id, name: name, sets: sets, repMin: repMin, repMax: repMax,
-      stepKg: stepKg, loadMult: loadMult, kgLabel: kgLabel, restSec: restSec, startKg: startKg,
-      cue: cue, video: yt(name), alternatives: alts, active: true };
+  function slot(o) {
+    return { slot: o.slot, muscle: o.muscle, orderA: o.oA, orderB: o.oB, pair: o.pair || '',
+      setsA: o.a[0], repMinA: o.a[1], repMaxA: o.a[2], setsB: o.b[0], repMinB: o.b[1], repMaxB: o.b[2],
+      restA: o.restA, restB: o.restB, rirLastA: o.rirA || '', rirLastB: o.rirB || '',
+      lastRirStableOnly: !!o.stableOnly, failureLast: o.failure || '', calibrate: !!o.calibrate, active: true };
   }
 
-  function seedProgram() {
+  /** Monday Heavy, Friday Volume. Monday starts with the push, Friday with the pull. */
+  function seedSlots() {
     return [
-      ex('A', 1, 'hip-thrust', 'Barbell hip thrust', 3, 8, 12, 2.5, 1, 'kg', 120, '',
-        'Chin tucked, ribs down. Drive through the heels and pause 1 s at the top.',
-        'Hip thrust machine; Smith machine hip thrust; Barbell glute bridge'),
-      ex('A', 2, 'incline-db-press', 'Incline dumbbell press', 3, 8, 12, 1, 2, 'kg / hand', 90, '',
-        'Bench at about 30 degrees. Lower to the upper chest, elbows slightly tucked.',
-        'Incline machine press; Incline Smith machine press'),
-      ex('A', 3, 'lat-pulldown', 'Lat pulldown', 3, 8, 12, 2.5, 1, 'kg', 90, '',
-        'Lean back a little and pull the bar to your upper chest, leading with the elbows.',
-        'Assisted pull-up; Single-arm cable pulldown'),
-      ex('A', 4, 'cable-kickback', 'Cable glute kickback', 2, 12, 15, 2.5, 2, 'kg / side', 60, '',
-        'Hinge slightly forward. Kick back and up without arching the lower back.',
-        'Glute kickback machine; Banded kickback'),
-      ex('A', 5, 'db-shoulder-press', 'Seated dumbbell shoulder press', 3, 8, 12, 1, 2, 'kg / hand', 90, '',
-        'Back against the bench. Press up and slightly in, ribs down.',
-        'Shoulder press machine; Arnold press'),
-      ex('A', 6, 'lateral-raise', 'Dumbbell lateral raise', 2, 12, 20, 1, 2, 'kg / hand', 60, '',
-        'Lead with the elbows, stop at shoulder height, lower slowly.',
-        'Cable lateral raise; Lateral raise machine'),
-      ex('A', 7, 'hip-abduction', 'Hip abduction machine', 2, 15, 20, 2.5, 1, 'kg', 60, '',
-        'Lean slightly forward and pause when the legs are fully open.',
-        'Banded side walk; Cable hip abduction'),
-      ex('B', 1, 'rdl', 'Romanian deadlift', 3, 8, 10, 2.5, 1, 'kg', 120, '',
-        'Soft knees, push the hips back, bar close to the legs. Stop when the hamstrings stretch.',
-        'Dumbbell Romanian deadlift; Smith machine Romanian deadlift'),
-      ex('B', 2, 'split-squat', 'Bulgarian split squat', 3, 8, 12, 1, 4, 'kg / hand', 90, '',
-        'Slight forward lean, front knee tracks over the toes. Drive through the front heel.',
-        'Reverse lunge; Smith machine split squat'),
-      ex('B', 3, 'cable-row', 'Seated cable row', 3, 8, 12, 2.5, 1, 'kg', 90, '',
-        'Chest up. Pull to the belly button and squeeze the shoulder blades together.',
-        'Chest-supported row machine; Single-arm dumbbell row'),
-      ex('B', 4, 'db-bench-press', 'Flat dumbbell bench press', 3, 8, 12, 1, 2, 'kg / hand', 90, '',
-        'Feet planted, shoulder blades back. Lower to mid-chest.',
-        'Chest press machine; Push-up'),
-      ex('B', 5, 'back-extension', '45-degree back extension (glute focus)', 2, 12, 15, 2.5, 1, 'kg added', 60, 0,
-        'Toes turned out, upper back slightly rounded. Squeeze the glutes to come up.',
-        'Reverse hyperextension; Cable pull-through'),
-      ex('B', 6, 'cable-curl', 'Cable biceps curl', 2, 10, 15, 2.5, 1, 'kg', 45, '',
-        'Elbows pinned to your sides. Superset with the rope pushdown.',
-        'Dumbbell curl'),
-      ex('B', 7, 'rope-pushdown', 'Rope triceps pushdown', 2, 10, 15, 2.5, 1, 'kg', 60, '',
-        'Elbows pinned. Spread the rope apart at the bottom.',
-        'Overhead cable extension')
+      slot({ slot: 'chest', muscle: 'Chest and front delts', oA: 1, oB: 3, a: [4, 4, 6], b: [4, 8, 12], restA: 210, restB: 150, rirB: '0–1', stableOnly: true }),
+      slot({ slot: 'upper-back', muscle: 'Upper back', oA: 2, oB: 1, a: [3, 5, 8], b: [3, 8, 12], restA: 210, restB: 150, rirB: '0–1', stableOnly: true }),
+      slot({ slot: 'lats', muscle: 'Lats', oA: 3, oB: 2, a: [2, 6, 8], b: [3, 10, 15], restA: 150, restB: 150, rirB: '0–1', stableOnly: true }),
+      slot({ slot: 'glutes', muscle: 'Glutes', oA: 4, oB: 4, a: [2, 6, 10], b: [2, 10, 15], restA: 150, restB: 150 }),
+      slot({ slot: 'side-delts', muscle: 'Side delts', oA: 5, oB: 5, pair: 'delts-abs', a: [2, 12, 20], b: [2, 12, 20], restA: 90, restB: 90,
+        rirA: '0–1', rirB: '0–1', failure: 'AB', calibrate: true }),
+      slot({ slot: 'abs', muscle: 'Abs', oA: 6, oB: 6, pair: 'delts-abs', a: [2, 8, 12], b: [2, 12, 18], restA: 90, restB: 90, calibrate: true }),
+      slot({ slot: 'biceps', muscle: 'Biceps', oA: 7, oB: 7, pair: 'arms', a: [2, 8, 12], b: [2, 10, 15], restA: 90, restB: 90,
+        rirA: '0–1', rirB: '0–1', calibrate: true }),
+      slot({ slot: 'triceps', muscle: 'Triceps', oA: 8, oB: 8, pair: 'arms', a: [2, 8, 12], b: [2, 10, 15], restA: 90, restB: 90,
+        rirA: '0–1', rirB: '0–1', calibrate: true })
+    ];
+  }
+
+  function ex(slotKey, rank, id, name, o) {
+    o = o || {};
+    return { id: id, slot: slotKey, name: name, rank: rank, stepKg: o.step || 2.5, loadMult: o.mult || 1, baseKg: o.base || 0,
+      kgLabel: o.label || 'kg', assisted: !!o.assisted, stable: !!o.stable, rir: o.rir || '',
+      startKg: o.start === undefined ? '' : o.start, cue: o.cue || '', video: yt(name), active: true };
+  }
+
+  function seedExercises() {
+    return [
+      ex('chest', 1, 'incline-db-press', 'Incline dumbbell press', { step: 1, mult: 2, label: 'kg / hand',
+        cue: 'Bench at about 30 degrees. Lower to the upper chest, elbows about 45 degrees out. Hits chest and front delts.' }),
+      ex('chest', 2, 'incline-smith-press', 'Incline Smith machine press', { stable: true,
+        cue: 'Bench at about 30 degrees, bar path to the upper chest. Shoulder blades back and down.' }),
+      ex('chest', 3, 'incline-bb-press', 'Incline barbell press', {
+        cue: 'Bench at about 30 degrees, grip a bit wider than the shoulders. Lower to the upper chest. Use a spotter or safeties.' }),
+      ex('chest', 4, 'incline-machine-press', 'Incline machine press', { stable: true,
+        cue: 'Seat so the handles start at upper-chest height. Press without shrugging. Only if your gym has one.' }),
+      ex('upper-back', 1, 'cable-row', 'Seated cable row', { stable: true,
+        cue: 'Chest up, slight lean forward at the start. Pull to the lower ribs and squeeze the shoulder blades together.' }),
+      ex('upper-back', 2, 'one-arm-db-row', 'One-arm dumbbell row', { step: 1, label: 'kg',
+        cue: 'One knee and hand on a flat bench, back flat. Row the dumbbell to the hip. Count reps per arm.' }),
+      ex('upper-back', 3, 'wide-cable-row', 'Wide-grip seated cable row', { stable: true,
+        cue: 'Wide grip, chest up. Pull to the lower chest with the elbows flared slightly.' }),
+      ex('upper-back', 4, 'machine-row', 'Chest-supported machine row', { stable: true,
+        cue: 'Only if your gym has one. Chest on the pad, pull the elbows back and squeeze for a moment.' }),
+      ex('lats', 1, 'neutral-pulldown', 'Neutral-grip lat pulldown', { stable: true,
+        cue: 'Lean back a little and pull the handle to the upper chest, leading with the elbows.' }),
+      ex('lats', 2, 'overhand-pulldown', 'Overhand pulldown', { stable: true,
+        cue: 'Grip just outside the shoulders. Pull to the upper chest, keep the ribs down.' }),
+      ex('lats', 3, 'assisted-chinup', 'Assisted chin-up', { assisted: true, base: 60, label: 'kg assistance', step: 2.5,
+        cue: 'Underhand grip. Chin over the bar, all the way down each rep. Less assistance = progress.' }),
+      ex('glutes', 1, 'hip-thrust-machine', 'Machine hip thrust', { stable: true,
+        cue: 'Pad low on the hips, chin tucked. Drive through the heels and pause 1 s at the top.' }),
+      ex('glutes', 2, 'hip-thrust', 'Barbell hip thrust', {
+        cue: 'Chin tucked, ribs down. Drive through the heels and pause 1 s at the top.' }),
+      ex('glutes', 3, 'back-extension', 'Glute-biased 45° back extension', { base: 35, label: 'kg added', start: 0,
+        cue: 'Toes turned out, upper back slightly rounded. Squeeze the glutes to come up.' }),
+      ex('glutes', 4, 'rdl', 'Romanian deadlift', { rir: '1–2',
+        cue: 'Soft knees, hips back, bar close to the legs. Stop when the hamstrings stretch. Never grind these.' }),
+      ex('side-delts', 1, 'lateral-raise', 'Dumbbell lateral raise', { step: 1, mult: 2, label: 'kg / hand',
+        cue: 'Lead with the elbows, stop at shoulder height, lower slowly.' }),
+      ex('side-delts', 2, 'machine-lateral-raise', 'Machine lateral raise', { stable: true,
+        cue: 'Pads just above the elbows. Raise to shoulder height without shrugging.' }),
+      ex('side-delts', 3, 'cable-lateral-raise', 'Cable lateral raise', { stable: true, mult: 2, label: 'kg / side',
+        cue: 'Cable at hand height, one arm at a time. Lead with the elbow, stop at shoulder height.' }),
+      ex('abs', 1, 'cable-crunch', 'Kneeling cable crunch', { stable: true,
+        cue: 'Hips stay still. Curl the ribs towards the hips and breathe out hard at the bottom.' }),
+      ex('abs', 2, 'machine-crunch', 'Machine crunch', { stable: true,
+        cue: 'Curl the ribs towards the hips, slow on the way back.' }),
+      ex('abs', 3, 'decline-crunch', 'Weighted decline crunch', { base: 30, label: 'kg added', start: 0,
+        cue: 'Hold a plate on the chest. Curl up, don\'t yank with the hip flexors.' }),
+      ex('biceps', 1, 'incline-curl', 'Incline dumbbell curl', { step: 1, mult: 2, label: 'kg / hand',
+        cue: 'Bench at about 60 degrees, arms hanging. Curl without swinging the elbows forward.' }),
+      ex('biceps', 2, 'preacher-curl', 'Preacher curl', { stable: true,
+        cue: 'Armpits snug on the pad. Lower all the way, curl without lifting the elbows.' }),
+      ex('biceps', 3, 'cable-curl', 'Cable curl', { stable: true,
+        cue: 'Elbows pinned to your sides. Squeeze at the top, slow on the way down.' }),
+      ex('triceps', 1, 'rope-pressdown', 'Rope pressdown', { stable: true,
+        cue: 'Elbows pinned. Spread the rope apart at the bottom.' }),
+      ex('triceps', 2, 'bar-pressdown', 'Straight-bar pressdown', { stable: true,
+        cue: 'Elbows pinned, wrists straight. Lock out fully each rep.' }),
+      ex('triceps', 3, 'overhead-extension', 'Overhead cable extension', { stable: true,
+        cue: 'Face away from the cable, elbows by the ears. Stretch fully, then extend.' })
     ];
   }
 
   function seedPostcards() {
     return [
-      ['p1', 90, 'Turku archipelago', 'Tampere', 'Näsinneula tower'],
+      ['p1', 90, 'Turku archipelago', 'Tampere', 'Helaraitti'],
       ['p2', 255, 'Åland', 'Salo', 'Halikonlahti bay'],
       ['p3', 380, 'Stockholm archipelago', 'Tampere', 'Pyynikki tower'],
       ['p4', 520, 'Gotland, off the left wing', 'Salo', 'Teijo National Park'],
@@ -122,32 +160,71 @@ var FlightCore = (function () {
       ['p7', 1530, 'Rhine, Cologne–Bonn', 'Tampere', 'Pispala ridge'],
       ['p8', 1660, 'Moselle valley', 'Salo', 'Market square'],
       ['p9', 1697, 'Luxembourg (LUX)', 'Tampere', 'Tampere–Pirkkala airport']
-    ].map(function (r) {
-      return { id: r[0], km: r[1], over: r[2], from: r[3], place: r[4], photo: '', message: '', openedAt: '' };
+    ].map(function (r) { return { id: r[0], km: r[1], over: r[2], from: r[3], place: r[4], photo: '', message: '', openedAt: '' }; });
+  }
+
+  var RETIRED = ['machine-chest-press', 'low-incline-db-press', 'flat-db-press', 'weighted-dip', 'db-row'];
+
+  /**
+   * Keeps an existing Exercises tab in step with the seed: adds new exercises, retires old ones
+   * (active = FALSE, history kept), and updates rank. Returns writes.
+   */
+  function exerciseSync(data) {
+    var writes = [], have = {};
+    data.exercises.forEach(function (r) { have[str(r.id)] = r; });
+    seedExercises().forEach(function (s) {
+      var cur = have[s.id];
+      if (!cur) writes.push({ tab: 'Exercises', kind: 'append', row: s });
+      else if (String(cur.rank) !== String(s.rank)) writes.push({ tab: 'Exercises', kind: 'patch', by: 'id', value: s.id, patch: { rank: s.rank } });
     });
+    RETIRED.forEach(function (id) {
+      if (have[id] && String(have[id].active).toUpperCase() !== 'FALSE') writes.push({ tab: 'Exercises', kind: 'patch', by: 'id', value: id, patch: { active: false } });
+    });
+    data.slots.forEach(function (r) {
+      if (str(r.slot) === 'chest' && str(r.muscle) === 'Chest') writes.push({ tab: 'Slots', kind: 'patch', by: 'slot', value: 'chest', patch: { muscle: 'Chest and front delts' } });
+    });
+    return writes;
+  }
+
+  /** What upgrade() changes in a Sheet made with an older version. Only untouched defaults change. */
+  function upgradePlan(data) {
+    var s = data.settings, out = { settings: [], postcards: [], unused: [] };
+    function want(key, value, olds) {
+      var cur = s[key], missing = cur === undefined;
+      if (missing || (olds && olds.some(function (o) { return String(cur).trim() === String(o); })))
+        if (String(cur) !== String(value)) out.settings.push({ key: key, value: value, note: SETTING_NOTES[key] || '', add: missing });
+    }
+    want('herName', s.passengerName || '');
+    want('travellerName', 'Elmo');
+    want('flightNo', FLIGHT_NO, ['', 'FL 1697']);
+    want('dayAName', 'Heavy', ['Push first']);
+    want('dayBName', 'Volume', ['Pull first']);
+    want('introWeeks', 1);
+    want('kmPerRep', FlightEngine.DEFAULTS.kmPerRep);
+    ['passengerName', 'layoverWeek', 'kmCruise', 'kmTailwind', 'jetPerUpgrade', 'jetCap', 'vBaseA', 'vBaseB'].forEach(function (k) {
+      if (s[k] !== undefined) out.unused.push(k);
+    });
+    data.postcards.forEach(function (p) {
+      if (String(p.id) === 'p1' && String(p.place).trim() === 'Näsinneula tower') out.postcards.push({ id: 'p1', patch: { place: 'Helaraitti' } });
+    });
+    return out;
   }
 
   // ---------- reading ----------
-
   function str(v) { return v === null || v === undefined ? '' : String(v); }
-  function truthy(v) { return v === true || String(v).toUpperCase() === 'TRUE'; }
-
-  function parseSets(json) {
-    try { var a = JSON.parse(json || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
-  }
+  function parseSets(json) { try { var a = JSON.parse(json || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 
   function toEngineInput(data) {
     return {
-      settings: data.settings,
-      program: data.program,
+      settings: data.settings, slots: data.slots, exercises: data.exercises,
+      choices: data.choices.map(function (r) { return { at: str(r.at), slot: str(r.slot), day: str(r.day), ex: str(r.exercise) }; }),
       sessions: data.sessions.map(function (r) {
-        return { id: str(r.id), date: str(r.date).slice(0, 10), day: str(r.day).toUpperCase(),
-          effort: r.effort === '' ? null : Number(r.effort), mood: str(r.mood), note: str(r.note),
-          savedAt: str(r.savedAt), sets: parseSets(r.setsJson) };
+        return { id: str(r.id), date: str(r.date).slice(0, 10), day: str(r.day).toUpperCase(), minutes: r.minutes,
+          effort: r.effort === '' ? null : Number(r.effort), note: str(r.note), savedAt: str(r.savedAt), sets: parseSets(r.setsJson),
+          photo: str(r.photo) !== '' };
       }),
-      overrides: data.overrides.map(function (r) {
-        return { date: str(r.date).slice(0, 10), ex: str(r.exercise), kg: r.kg };
-      })
+      overrides: data.overrides.map(function (r) { return { date: str(r.date).slice(0, 10), ex: str(r.exercise), kg: r.kg }; }),
+      stamps: data.stamps.map(function (r) { return { date: str(r.date).slice(0, 10), type: str(r.type) }; })
     };
   }
 
@@ -155,73 +232,55 @@ var FlightCore = (function () {
     p = str(p).trim();
     if (!p) return '';
     var m = p.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?.*id=)([\w-]{20,})/);
-    if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w1200';
-    return p;
+    return m ? 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w1200' : p;
   }
 
-  var PUBLIC_SETTINGS = ['passengerName', 'flightNo', 'startDate', 'trainingWeekdays', 'layoverWeek', 'routeKm',
-    'kmCruise', 'kmTailwind', 'jetPerUpgrade', 'jetCap', 'vBaseA', 'vBaseB'];
+  var PUBLIC_SETTINGS = ['herName', 'travellerName', 'flightNo', 'dayAName', 'dayBName', 'startDate', 'introWeeks',
+    'trainingWeekdays', 'routeKm', 'kmPerRep'];
 
-  /** Everything the app needs, for one role ('athlete' | 'coach'). */
   function buildState(data, role, today) {
     var input = toEngineInput(data);
     var result = FlightEngine.replay(input);
     var cum = result.cumKm;
-
     var settings = {};
     PUBLIC_SETTINGS.forEach(function (k) { settings[k] = data.settings[k] === undefined ? '' : data.settings[k]; });
-
     function crossedOn(km) {
       for (var i = 0; i < result.sessions.length; i++) if (result.sessions[i].cumKm >= km) return result.sessions[i].date;
       return '';
     }
     var cards = data.postcards.slice().sort(function (a, b) { return Number(a.km) - Number(b.km); }).map(function (p) {
-      var km = Number(p.km);
-      var written = str(p.message).trim() !== '';
-      var delivered = written && cum >= km;
+      var km = Number(p.km), written = str(p.message).trim() !== '', delivered = written && cum >= km;
       var c = { id: str(p.id), km: km, over: str(p.over), from: str(p.from), place: str(p.place),
         delivered: delivered, deliveredOn: delivered ? crossedOn(km) : '', openedAt: str(p.openedAt) };
       if (delivered || role === 'coach') { c.message = str(p.message); c.photo = photoUrl(p.photo); }
       if (role === 'coach') c.written = written;
       return c;
     });
-
     return {
-      role: role,
-      today: today,
-      settings: settings,
-      program: data.program,
-      sessions: input.sessions,
-      overrides: input.overrides,
-      stamps: data.stamps.map(function (r) { return { date: str(r.date).slice(0, 10), type: str(r.type) }; }),
+      role: role, today: today, settings: settings, slots: data.slots, exercises: data.exercises,
+      choices: input.choices, sessions: input.sessions, overrides: input.overrides, stamps: input.stamps,
       postcards: cards,
-      cheers: data.cheers.map(function (r) {
-        return { id: str(r.id), createdAt: str(r.createdAt), text: str(r.text), seenAt: str(r.seenAt) };
-      }),
-      summary: { cumKm: cum, completed: result.completedCount, totalVolume: result.totalVolume, landedOn: result.landedOn }
+      cheers: data.cheers.map(function (r) { return { id: str(r.id), createdAt: str(r.createdAt), text: str(r.text), seenAt: str(r.seenAt) }; }),
+      summary: { cumKm: cum, completed: result.completedCount, reps: result.totalReps, landedOn: result.landedOn }
     };
   }
 
   // ---------- writing ----------
-
   function bad(msg) { var e = new Error(msg); e.code = 'bad_request'; throw e; }
   function isDate(s) { return /^\d{4}-\d{2}-\d{2}$/.test(str(s)); }
   function clip(s, n) { return str(s).slice(0, n); }
 
   var ROLE_OPS = {
-    athlete: ['saveSession', 'stamp', 'postcardOpened', 'cheerSeen'],
-    coach: ['cheer', 'override']
+    athlete: ['saveSession', 'stamp', 'postcardOpened', 'cheerSeen', 'choice', 'deload', 'photo'],
+    coach: ['cheer', 'override', 'choice', 'deload']
   };
 
-  /**
-   * Apply one operation. Mutates `data`; returns { writes, notify }.
-   * writes: [{tab, kind:'upsert', by, row} | {tab, kind:'deleteWhere', col, value}
-   *          | {tab, kind:'append', row} | {tab, kind:'patch', by, value, patch} | {tab:'Settings', kind:'setting', key, value}]
-   */
   function applyOp(data, op, role, nowIso) {
     if (!op || !op.type) bad('missing op');
     if ((ROLE_OPS[role] || []).indexOf(op.type) < 0) bad('not allowed: ' + op.type);
-    var writes = [], notify = null;
+    var writes = [], notify = null, photo = null;
+    var exById = {};
+    data.exercises.forEach(function (e) { exById[str(e.id)] = e; });
 
     function upsert(tab, by, row) {
       var arr = data[KEY[tab]], found = false;
@@ -234,36 +293,31 @@ var FlightCore = (function () {
       data[KEY[tab]].forEach(function (r) { if (str(r[by]) === str(value)) for (var k in p) r[k] = p[k]; });
       writes.push({ tab: tab, kind: 'patch', by: by, value: value, patch: p });
     }
+    function append(tab, row) { data[KEY[tab]].push(row); writes.push({ tab: tab, kind: 'append', row: row }); }
 
     if (op.type === 'saveSession') {
       var s = op.session || {};
       if (!s.id || !isDate(s.date) || (s.day !== 'A' && s.day !== 'B')) bad('invalid session');
       var sets = (s.sets || []).slice(0, 200).map(function (x) {
-        return { ex: clip(x.ex, 60), set: Number(x.set) || 0, kg: Number(x.kg) || 0, reps: Number(x.reps) || 0,
-          done: !!x.done, swap: clip(x.swap, 80) };
+        return { slot: clip(x.slot, 40), ex: clip(x.ex, 60), set: Number(x.set) || 0, kg: Number(x.kg) || 0,
+          reps: Number(x.reps) || 0, done: !!x.done, fb: ['easy', 'ok', 'hard'].indexOf(x.fb) >= 0 ? x.fb : '', skip: !!x.skip,
+          rir: clip(x.rir, 6) };
       });
-      var row = { id: clip(s.id, 60), date: s.date, day: s.day, week: '', effort: s.effort ? Number(s.effort) : '',
-        mood: clip(s.mood, 16), note: clip(s.note, 2000), volumeKg: '', upgrades: '', km: '', cumKm: '',
-        completed: '', savedAt: nowIso, setsJson: JSON.stringify(sets) };
+      var row = { id: clip(s.id, 60), date: s.date, day: s.day, week: '', minutes: Number(s.minutes) || '',
+        effort: s.effort ? Number(s.effort) : '', note: clip(s.note, 2000), reps: '', km: '', cumKm: '', volumeKg: '',
+        upgrades: '', completed: '', savedAt: nowIso, setsJson: JSON.stringify(sets) };
       var isNew = upsert('Sessions', 'id', row);
-
-      // flat copy for charts in the Sheet
       data.sets = data.sets.filter(function (r) { return str(r.sessionId) !== row.id; });
       writes.push({ tab: 'Sets', kind: 'deleteWhere', col: 'sessionId', value: row.id });
-      var names = {};
-      data.program.forEach(function (e) { names[e.id] = e.name; });
-      sets.forEach(function (x) {
-        var r = { sessionId: row.id, date: row.date, day: row.day, exercise: x.ex,
-          exerciseName: x.swap || names[x.ex] || x.ex, set: x.set, kg: x.kg, reps: x.reps, done: x.done, swap: x.swap };
-        data.sets.push(r);
-        writes.push({ tab: 'Sets', kind: 'append', row: r });
+      sets.filter(function (x) { return x.done; }).forEach(function (x) {
+        append('Sets', { sessionId: row.id, date: row.date, day: row.day, slot: x.slot, exercise: x.ex,
+          exerciseName: exById[x.ex] ? exById[x.ex].name : x.ex, set: x.set, kg: x.kg, reps: x.reps, done: x.done,
+          feedback: x.fb === 'easy' ? 'Too easy' : x.fb === 'ok' ? 'Just right' : x.fb === 'hard' ? 'Too hard' : '' });
       });
-
-      // refresh computed columns for every session (a change can ripple forward)
       var result = FlightEngine.replay(toEngineInput(data));
       result.sessions.forEach(function (c) {
-        var p = { week: c.week, volumeKg: c.volume, upgrades: c.upgrades.join(', '), km: c.km.total,
-          cumKm: c.cumKm, completed: c.completed };
+        var p = { week: c.week, reps: c.reps, km: c.km, cumKm: c.cumKm, volumeKg: c.volume,
+          upgrades: c.upgrades.map(function (id) { return exById[id] ? exById[id].name : id; }).join(', '), completed: c.completed };
         var cur = null;
         data.sessions.forEach(function (r) { if (str(r.id) === c.id) cur = r; });
         if (!cur) return;
@@ -271,18 +325,30 @@ var FlightCore = (function () {
         for (var k in p) if (str(cur[k]) !== str(p[k])) changed = true;
         if (changed) patch('Sessions', 'id', c.id, p);
       });
-      if (isNew) notify = landingReport(data, result, row.id);
+      if (isNew) notify = report(data, result, row.id);
     } else if (op.type === 'stamp') {
       if (!isDate(op.date) || ['ballet', 'run'].indexOf(op.stampType) < 0) bad('invalid stamp');
-      var exists = data.stamps.some(function (r) { return str(r.date).slice(0, 10) === op.date && r.type === op.stampType; });
-      if (op.on && !exists) {
-        var st = { date: op.date, type: op.stampType };
-        data.stamps.push(st);
-        writes.push({ tab: 'Stamps', kind: 'append', row: st });
-      } else if (!op.on && exists) {
+      var has = data.stamps.some(function (r) { return str(r.date).slice(0, 10) === op.date && r.type === op.stampType; });
+      if (op.on && !has) append('Stamps', { date: op.date, type: op.stampType });
+      else if (!op.on && has) {
         data.stamps = data.stamps.filter(function (r) { return !(str(r.date).slice(0, 10) === op.date && r.type === op.stampType); });
         writes.push({ tab: 'Stamps', kind: 'deleteWhere2', cols: ['date', 'type'], values: [op.date, op.stampType] });
       }
+    } else if (op.type === 'deload') {
+      var d = isDate(op.date) ? op.date : str(nowIso).slice(0, 10);
+      var dup = data.stamps.some(function (r) { return str(r.date).slice(0, 10) === d && r.type === 'deload'; });
+      if (!dup) append('Stamps', { date: d, type: 'deload' });
+    } else if (op.type === 'choice') {
+      var e = exById[str(op.ex)];
+      if (!e || str(e.slot) !== str(op.slot)) bad('invalid choice');
+      var day = FlightEngine.dayOf(op.day);
+      append('Choices', { at: str(op.at) || nowIso, slot: str(op.slot), day: day, exercise: str(op.ex) });
+    } else if (op.type === 'photo') {
+      // the image itself is stored by the adapter (Drive in Apps Script, browser storage in the demo)
+      var known = data.sessions.some(function (r) { return str(r.id) === str(op.sessionId); });
+      var url = str(op.dataUrl);
+      if (!known || !/^data:image\/(jpeg|png|webp);base64,/.test(url) || url.length > 3000000) bad('invalid photo');
+      photo = { sessionId: str(op.sessionId), dataUrl: url };
     } else if (op.type === 'postcardOpened') {
       patch('Postcards', 'id', clip(op.id, 20), { openedAt: nowIso });
     } else if (op.type === 'cheerSeen') {
@@ -290,56 +356,43 @@ var FlightCore = (function () {
     } else if (op.type === 'cheer') {
       var text = clip(op.text, 280).trim();
       if (!text) bad('empty cheer');
-      var ch = { id: 'c' + Date.now().toString(36), createdAt: nowIso, text: text, seenAt: '' };
-      data.cheers.push(ch);
-      writes.push({ tab: 'Cheers', kind: 'append', row: ch });
+      append('Cheers', { id: 'c' + Date.now().toString(36), createdAt: nowIso, text: text, seenAt: '' });
     } else if (op.type === 'override') {
-      var known = data.program.some(function (e) { return str(e.id) === op.ex; });
-      if (!known || !isFinite(Number(op.kg))) bad('invalid override');
-      var ov = { date: str(nowIso).slice(0, 10), exercise: op.ex, kg: Number(op.kg), note: clip(op.note, 200) };
-      data.overrides.push(ov);
-      writes.push({ tab: 'Overrides', kind: 'append', row: ov });
+      if (!exById[str(op.ex)] || !isFinite(Number(op.kg))) bad('invalid override');
+      append('Overrides', { date: str(nowIso).slice(0, 10), exercise: str(op.ex), kg: Number(op.kg), note: clip(op.note, 200) });
     }
-    return { writes: writes, notify: notify };
+    return { writes: writes, notify: notify, photo: photo };
   }
 
-  function landingReport(data, result, sessionId) {
+  function report(data, result, sessionId) {
     var c = null, n = 0;
     result.sessions.forEach(function (s, i) { if (s.id === sessionId) { c = s; n = i + 1; } });
     if (!c) return null;
     var names = {};
-    data.program.forEach(function (e) { names[e.id] = e.name; });
-    var st = result.settings;
+    data.exercises.forEach(function (e) { names[str(e.id)] = str(e.name); });
+    var st = result.settings, who = str(data.settings.travellerName) || 'Elmo';
+    var dayName = str(data.settings[c.day === 'A' ? 'dayAName' : 'dayBName']) || 'Day ' + c.day;
+    var left = Math.max(0, Math.round(st.routeKm - c.cumKm));
     var lines = [];
-    lines.push(c.completed
-      ? 'Workout ' + n + ': the plane flew +' + c.km.total + ' km (cruise ' + c.km.cruise + ', tailwind ' + c.km.tailwind + ', jet stream ' + c.km.jet + ').'
-      : 'Workout ' + n + ' logged but not completed (' + c.done + '/' + c.prescribed + ' sets), so the plane is holding.');
-    lines.push('Position: ' + Math.round(c.cumKm) + ' / ' + st.routeKm + ' km.');
-    lines.push('Day ' + c.day + ', week ' + c.week + (c.layover ? ' (layover)' : '') + '. Volume ' + c.volume + ' kg.');
-    if (c.upgrades.length) lines.push('Upgrades: ' + c.upgrades.map(function (id) { return names[id] || id; }).join(', ') + '.');
-    if (c.rerouted.length) lines.push('Weight dropped 10% after two hard sessions: ' + c.rerouted.map(function (id) { return names[id] || id; }).join(', ') + '.');
-    if (c.effort) lines.push('Effort ' + c.effort + '/5' + (c.mood ? ', mood ' + c.mood : '') + '.');
+    lines.push('Workout ' + n + ' (' + dayName + (c.mode === 'deload' ? ', easier week' : c.mode === 'intro' ? ', intro week' : '') +
+      (c.minutes ? ', ' + c.minutes + ' min' : '') + '): ' + c.reps + ' reps, +' + c.km + ' km.');
+    lines.push(left > 0 ? left + ' km until ' + who + ' flies to Luxembourg.' : 'Flight unlocked: ' + who + ' to LUX!');
+    lines.push(c.done + '/' + c.prescribed + ' working sets.');
+    if (c.improvements.length) lines.push('Improvements: ' + c.improvements.map(function (x) { return (names[x.ex] || x.ex) + ': ' + x.text; }).join('; ') + '.');
+    if (c.upgrades.length) lines.push('Heavier next time: ' + c.upgrades.map(function (id) { return names[id] || id; }).join(', ') + '.');
+    if (result.fatigue.offer) lines.push('Several lifts dipped over the last two weeks. The app offers her an easier week.');
+    if (c.effort) lines.push('Effort ' + c.effort + '/5.');
     if (c.note) lines.push('Her note: "' + c.note + '"');
-    var next = data.postcards.filter(function (p) { return Number(p.km) > c.cumKm; })
-      .sort(function (a, b) { return Number(a.km) - Number(b.km); })[0];
-    if (next) {
-      var left = Math.round(Number(next.km) - c.cumKm);
-      lines.push('Next postcard: ' + next.place + ' (' + next.from + '), over ' + next.over + ' in ' + left + ' km.' +
-        (str(next.message).trim() ? '' : ' It is still empty: write it in the Postcards tab.'));
-    }
-    return { subject: (c.completed ? '✈ +' + c.km.total + ' km' : 'Holding pattern') + ' — ' + Math.round(c.cumKm) + '/' + st.routeKm + ' km', body: lines.join('\n') };
+    var next = data.postcards.filter(function (p) { return Number(p.km) > c.cumKm; }).sort(function (a, b) { return Number(a.km) - Number(b.km); })[0];
+    if (next) lines.push('Next postcard: ' + next.place + ' (' + next.from + ') in ' + Math.round(Number(next.km) - c.cumKm) + ' km.' +
+      (str(next.message).trim() ? '' : ' It is still empty: write it in the Postcards tab.'));
+    return { subject: '✈ +' + c.km + ' km, ' + left + ' km to LUX', body: lines.join('\n'), sessionId: sessionId };
   }
 
   return {
-    TABS: TABS,
-    KEY: KEY,
-    seedSettings: seedSettings,
-    seedProgram: seedProgram,
-    seedPostcards: seedPostcards,
-    toEngineInput: toEngineInput,
-    buildState: buildState,
-    applyOp: applyOp,
-    photoUrl: photoUrl
+    TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises,
+    seedPostcards: seedPostcards, upgradePlan: upgradePlan, exerciseSync: exerciseSync, toEngineInput: toEngineInput, buildState: buildState,
+    applyOp: applyOp, photoUrl: photoUrl
   };
 })();
 
