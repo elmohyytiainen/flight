@@ -765,6 +765,14 @@
     h += '<div class="kmbig">+' + kgFmt(c.km) + '<small>km</small></div>';
     h += '<p class="kmsplit">' + c.reps + ' reps toward ' + esc(who()) + '\'s flight. ' +
       (left > 0 ? km(left) + ' km until he flies to Luxembourg.' : '<b>Flight unlocked ✈ ' + esc(who()) + ' to LUX</b>') + '</p>';
+    if (c.goals && c.goals.length) {
+      h += '<section class="panel pbpanel goalpanel"><h3>🎯 Goal reached!</h3><ul class="uplist">';
+      c.goals.forEach(function (g) {
+        var e = pv.result.prog.exById[g.ex];
+        h += '<li><span>' + esc(g.label) + '</span><span class="hl">' + kgFmt(g.kg) + ' ' + esc(e ? e.kgLabel : 'kg') + ' × ' + g.reps + '</span></li>';
+      });
+      h += '</ul></section>';
+    }
     if (c.prs.length) {
       h += '<section class="panel pbpanel"><h3>🏅 New personal best!</h3><ul class="uplist">';
       c.prs.forEach(function (p) {
@@ -831,6 +839,7 @@
   function viewLog() {
     var res = calc(), st = res.settings, ws = weekStats(res);
     var h = '<div class="screen">' + topHTML('Log', flightSub());
+    h += strengthSummary(res);
     h += '<div class="pcards">' + progressCard(res, 'Push', 'chest') + progressCard(res, 'Pull', 'upper-back') + '</div>';
     var ms = res.milestones.slice().reverse();
     h += '<div class="section-h"><h2>Personal bests</h2><span class="small muted">' + plural(ms.length, 'milestone', 'milestones') + '</span></div>';
@@ -845,6 +854,7 @@
       h += '</div>';
       if (ms.length > 8) h += '<p class="small muted">And ' + (ms.length - 8) + ' earlier ones.</p>';
     }
+    h += goalsHTML(res);
     var mins = res.sessions.map(function (s) { return s.minutes; }).filter(function (m) { return m; });
     h += '<div class="stats"><div class="stat"><b>' + res.completedCount + '</b><span>Workouts</span></div>' +
       '<div class="stat"><b>' + ws.thisWeek + ' of ' + ws.perWeek + '</b><span>This week' + (ws.total ? ', ' + ws.good + ' of ' + ws.total + ' full weeks' : '') + '</span></div>' +
@@ -871,7 +881,7 @@
     h += '</div>';
 
     // exercises
-    h += '<div class="section-h"><h2>Exercises</h2><span class="small muted">tap for details</span></div><section class="panel" style="margin-top:0;padding-top:6px;padding-bottom:6px">';
+    h += '<div class="section-h"><h2>Exercises</h2><span class="small muted">strength trend, tap for details</span></div><section class="panel" style="margin-top:0;padding-top:6px;padding-bottom:6px">';
     var any = false;
     res.prog.slots.forEach(function (sl) {
       sl.variants.forEach(function (e) {
@@ -881,7 +891,11 @@
         var a = res.states[e.id + '|A'], b = res.states[e.id + '|B'];
         h += '<button class="exprog" data-act="exDetail" data-ex="' + esc(e.id) + '"><div class="nm">' + esc(e.name) + '<small>' +
           [a && a.kg !== null ? dayName('A') + ' ' + kgFmt(a.kg) : '', b && b.kg !== null ? dayName('B') + ' ' + kgFmt(b.kg) : ''].filter(Boolean).join(', ') + ' ' + esc(e.kgLabel) +
-          '</small></div>' + spark(hist.map(function (x) { return x.kg; })) + '<div class="kg">' + hist.length + '<small>results</small></div></button>';
+          '</small></div>' + (function () {
+            var sh = strengthHist(res, e.id), ch = E.strengthChange(res, e.id);
+            return (sh.length ? spark(sh.map(function (x) { return x.est; })) : '<span></span>') +
+              (ch ? '<div class="kg">' + pctText(ch.change) + '<small>strength</small></div>' : '<div class="kg">' + hist.length + '<small>' + (hist.length === 1 ? 'result' : 'results') + '</small></div>');
+          })() + '</button>';
       });
     });
     if (!any) h += '<p class="empty">Your exercises show up here after your first workout :)</p>';
@@ -894,7 +908,7 @@
     list.forEach(function (s, i) {
       h += '<div class="mini"><div class="seat">' + (n - i) + '<small>' + esc(dayName(s.day)) + '</small></div>' +
         '<div><b>' + esc(fmtDate(s.date)) + '</b><div class="small muted">' + s.reps + ' reps' + (s.minutes ? ', ' + s.minutes + ' min' : '') +
-        (s.mode === 'deload' ? ', easier week' : s.mode === 'intro' ? ', intro' : '') + (s.prs.length ? ', 🏅 ' + plural(s.prs.length, 'PB', 'PBs') : '') + '</div>' +
+        (s.mode === 'deload' ? ', easier week' : s.mode === 'intro' ? ', intro' : '') + (s.prs.length ? ', 🏅 ' + plural(s.prs.length, 'PB', 'PBs') : '') + (s.goals.length ? ', 🎯 goal' : '') + '</div>' +
         reactionsFor(s.id).map(function (r) { return '<div class="rx">' + esc(reactionText(r)) + '</div>'; }).join('') + '</div>' +
         '<div class="km">+' + Math.round(s.km) + '<small>km</small></div>' +
         (s.photo ? '<button class="phbtn" data-act="showPhoto" data-id="' + esc(s.id) + '" aria-label="See the photo">' + IC.camera + '</button>' : '') + '</div>';
@@ -920,16 +934,80 @@
       pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/><circle class="spark-end" cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="3.5"/></svg>';
   }
 
+  function pctText(f) { var p = Math.round(f * 100); return (p > 0 ? '+' : p < 0 ? '−' : '±') + Math.abs(p) + '%'; }
+  function shortDate(ds) { return dateObj(ds).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); }
+  function strengthHist(res, id) { return (res.hist[id] || []).filter(function (x) { return x.est > 0 && x.mode !== 'deload'; }); }
+
+  // Estimated strength over time: one line, Heavy days as filled dots and Volume days as open dots.
+  function strengthChart(pts, w, hgt) {
+    var vals = pts.map(function (x) { return x.est; });
+    var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals), span = max - min || 1, pad = 6;
+    var xy = pts.map(function (x, i) {
+      return [pad + (pts.length > 1 ? i / (pts.length - 1) : 0.5) * (w - 2 * pad), hgt - pad - (x.est - min) / span * (hgt - 2 * pad)];
+    });
+    var h = '<svg viewBox="0 0 ' + w + ' ' + hgt + '" class="schart" aria-hidden="true"><polyline class="spark" points="' +
+      xy.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/>';
+    xy.forEach(function (p, i) { h += '<circle class="' + (pts[i].day === 'A' ? 'dot-a' : 'dot-b') + '" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="4"/>'; });
+    return h + '</svg>';
+  }
+
+  function strengthSummary(res) {
+    var groups = [['Upper body', ['chest', 'upper-back', 'lats', 'side-delts', 'biceps', 'triceps']], ['Glutes', ['glutes']]], out = [], from = null;
+    groups.forEach(function (g) {
+      var ch = [];
+      res.prog.slots.forEach(function (sl) {
+        if (g[1].indexOf(sl.key) < 0) return;
+        sl.variants.forEach(function (e) {
+          var c = E.strengthChange(res, e.id);
+          if (c) { ch.push(c.change); if (!from || c.from < from) from = c.from; }
+        });
+      });
+      if (ch.length) out.push('<div class="stat"><b>' + pctText(ch.reduce(function (a, b) { return a + b; }, 0) / ch.length) + '</b><span>' + g[0] + '</span></div>');
+    });
+    if (!out.length) return '';
+    return '<div class="section-h"><h2>Strength</h2><span class="small muted">since ' + esc(shortDate(from)) + '</span></div><div class="stats" style="margin-top:0">' + out.join('') + '</div>';
+  }
+
+  function goalsHTML(res) {
+    if (!res.goals || !res.goals.length) return '';
+    var h = '<div class="section-h"><h2>Goals</h2><span class="small muted">' + res.goals.filter(function (g) { return g.reached; }).length + ' of ' + res.goals.length + ' reached</span></div><div class="goals">';
+    res.goals.forEach(function (g) {
+      var e = res.prog.exById[g.ex], frac = 0, status;
+      if (g.reached) { frac = 1; status = 'Reached ' + fmtDate(g.reached.date) + ' 🎯'; }
+      else if (g.best === null) {
+        var picked = ['A', 'B'].some(function (d) { var c = chosenFor(res, e.slot, d); return c && c.id === e.id; });
+        status = picked ? 'Starts with your first ' + e.name.toLowerCase() : 'Pick ' + e.name.toLowerCase() + 's to start this one ;)';
+      } else if (e.assisted) {
+        frac = g.start > g.kg ? (g.start - g.best) / (g.start - g.kg) : 0.9;
+        status = 'Down to ' + kgFmt(g.best) + ' kg assistance, from ' + kgFmt(g.start);
+      } else {
+        frac = g.kg > g.start ? (g.best - g.start) / (g.kg - g.start) : 0.9;
+        status = 'Best ' + kgFmt(g.best) + ' of ' + kgFmt(g.kg) + ' ' + e.kgLabel;
+      }
+      frac = Math.max(g.best === null ? 0 : 0.04, Math.min(1, frac));
+      h += '<div class="goal' + (g.reached ? ' done' : '') + '"><b>' + esc(g.label) + '</b><div class="progress"><span style="width:' + (frac * 100).toFixed(0) + '%"></span></div>' +
+        '<div class="small muted">' + esc(status) + '</div></div>';
+    });
+    return h + '</div>';
+  }
+
   function exDetail(id) {
     var res = calc(), e = res.prog.exById[id], hist = res.hist[id] || [];
     if (!e) return;
     var unit = e.kgLabel;
-    var h = '<h2>' + esc(e.name) + '</h2><p class="small muted">Working weight over time, both days. ' + (e.assisted ? 'Lower is better here: less assistance.' : '') + '</p>';
-    h += '<div class="bigspark">' + spark(hist.map(function (x) { return x.kg; }), 300, 70) + '</div>';
+    var sh = strengthHist(res, id), ch = E.strengthChange(res, id);
+    var h = '<h2>' + esc(e.name) + '</h2>';
+    if (sh.length) {
+      h += '<p class="small muted">' + (ch ? '<b class="sdelta">' + pctText(ch.change) + '</b> strength since ' + esc(shortDate(ch.from)) + '. ' : '') +
+        'Estimated from your best set each workout, both days count.</p>';
+      h += '<div class="bigspark">' + strengthChart(sh, 300, 80) + '<div class="legend small muted"><span><i class="dot-a"></i>' + esc(dayName('A')) +
+        '</span><span><i class="dot-b"></i>' + esc(dayName('B')) + '</span></div></div>';
+    }
     var best = null, bestReps = {};
     hist.forEach(function (x) {
       x.reps.forEach(function (r, i) {
         var kg = x.kgs[i];
+        if (r < 1) return; // a set she couldn't finish isn't a record
         if (!best || (e.assisted ? kg < best.kg : kg > best.kg) || (kg === best.kg && r > best.reps)) best = { kg: kg, reps: r, day: x.day, date: x.date };
         if (!bestReps[kg] || r > bestReps[kg].reps) bestReps[kg] = { reps: r, day: x.day };
       });
@@ -997,6 +1075,7 @@
         (x.improvements.length ? '<div class="l2">Better: ' + esc(x.improvements.map(function (m) { return exName(m.ex) + ' ' + m.text; }).join('; ')) + '</div>' : '') +
         (x.upgrades.length ? '<div class="l2">Heavier next time: ' + esc(x.upgrades.map(exName).join(', ')) + '</div>' : '') +
         (x.note ? '<q>' + esc(x.note) + '</q>' : '') +
+        (x.goals && x.goals.length ? '<div class="l2">🎯 Goal reached: ' + esc(x.goals.map(function (g) { return g.label; }).join(', ')) + '</div>' : '') +
         (x.prs.length ? '<div class="l2">🏅 Personal best: ' + esc(x.prs.map(function (p) { return exName(p.ex) + ' ' + kgFmt(p.kg) + ' kg × ' + p.reps; }).join(', ')) + '</div>' : '') +
         reactionsFor(x.id).map(function (r) { return '<div class="rx">You: ' + esc(reactionText(r)) + (r.seenAt ? ' <span class="small muted">seen</span>' : '') + '</div>'; }).join('') +
         '<div class="row2">' + (x.photo ? '<button class="btn ghost small" data-act="showPhoto" data-id="' + esc(x.id) + '">' + IC.camera + 'See her photo</button>' : '') +
@@ -1271,7 +1350,7 @@
     window.scrollTo(0, 0);
     var pv = preview();
     animatePlane(pv.session.cumBefore, pv.session.cumKm);
-    if (pv.session.prs.length || pv.session.upgrades.length || pv.session.improvements.length) setTimeout(confetti, 2600);
+    if (pv.session.goals.length || pv.session.prs.length || pv.session.upgrades.length || pv.session.improvements.length) setTimeout(confetti, 2600);
   }
 
   function saveFlight() {

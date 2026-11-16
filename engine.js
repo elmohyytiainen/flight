@@ -35,7 +35,8 @@ var FlightEngine = (function () {
     startDate: '2026-11-23',
     deloadSessions: 2,
     fatigueLifts: 3,
-    completeShare: 0.8
+    completeShare: 0.8,
+    goals: ''
   };
 
   // ---------- helpers ----------
@@ -208,6 +209,33 @@ var FlightEngine = (function () {
   }
 
   /**
+   * Goals from the Settings text, e.g. "assisted-chinup:0, incline-db-press:20, hip-thrust:60x5".
+   * Each is exercise id : weight (assistance for assisted lifts) and optional x reps (default 1).
+   */
+  function parseGoals(text, prog) {
+    var out = [];
+    String(text || '').split(/[,;\n]+/).forEach(function (part) {
+      var m = part.trim().match(/^([\w-]+)\s*:\s*(\d+(?:[.,]\d+)?)\s*(?:[x×]\s*(\d+))?$/i);
+      if (!m) return;
+      var e = prog.exById[m[1]];
+      if (!e) return;
+      var g = { id: m[1] + '@' + m[2] + (m[3] ? 'x' + m[3] : ''), ex: e.id, kg: Number(m[2].replace(',', '.')), reps: m[3] ? Number(m[3]) : 1 };
+      g.label = goalLabel(e, g);
+      out.push(g);
+    });
+    return out;
+  }
+  function goalLabel(e, g) {
+    var base = e.assisted ? e.name.replace(/^assisted\s+/i, '') : e.name;
+    base = base.charAt(0).toUpperCase() + base.slice(1);
+    var reps = g.reps > 1 ? ' × ' + g.reps : '';
+    if (e.assisted) return g.kg === 0 ? base + ' without assistance' + reps : base + ' with ' + fmtKg(g.kg) + ' kg assistance' + reps;
+    return base + ' at ' + fmtKg(g.kg) + ' ' + e.kgLabel + reps;
+  }
+  function fmtKg(k) { return String(Math.round(k * 100) / 100); }
+  function meets(e, g, kg, reps) { return reps >= g.reps && (e.assisted ? kg <= g.kg + 1e-9 : kg >= g.kg - 1e-9); }
+
+  /**
    * input = { settings, slots, exercises, choices, sessions, overrides, stamps }
    * session = { id, date, day:'A'|'B', minutes, sets:[{slot, ex, set, kg, reps, done, fb, skip}], effort, note }
    */
@@ -220,6 +248,8 @@ var FlightEngine = (function () {
       .map(function (s) { return String(s.date).slice(0, 10); }).sort();
     var states = {}, hist = {}, est = {}, pbs = {}, milestones = [], oi = 0, di = 0, deloadLeft = 0, lastDeload = null;
     var declines = [];
+    var goals = parseGoals(st.goals, prog).map(function (g) { return { id: g.id, ex: g.ex, kg: g.kg, reps: g.reps, label: g.label,
+      reached: null, best: null, start: null }; });
 
     function stOf(ex, day) { var k = ex + '|' + day; if (!states[k]) states[k] = newState(); return states[k]; }
     function applyOverridesBefore(ds) {
@@ -244,7 +274,7 @@ var FlightEngine = (function () {
       var mode = deloadLeft > 0 ? 'deload' : (week >= 1 && week <= st.introWeeks ? 'intro' : 'normal');
       if (deloadLeft > 0) deloadLeft--;
       var sets = sess.sets || [];
-      var prescribed = 0, doneN = 0, reps = 0, volume = 0, ups = [], steps = {}, improvements = [], prs = [];
+      var prescribed = 0, doneN = 0, reps = 0, volume = 0, ups = [], steps = {}, improvements = [], prs = [], goalsHit = [];
 
       slotsOn(prog, sess.day).forEach(function (slot) {
         var side = slot[sess.day];
@@ -268,6 +298,19 @@ var FlightEngine = (function () {
         if (r.improvement) improvements.push({ ex: e.id, day: sess.day, text: r.improvement });
         if (r.decline) declines.push({ date: sess.date, ex: e.id, day: sess.day });
         if (r.pr) { prs.push(r.pr); milestones.push({ date: sess.date, day: sess.day, sessionId: sess.id, ex: e.id, kg: r.pr.kg, reps: r.pr.reps }); }
+        goals.forEach(function (g) {
+          if (g.ex !== e.id) return;
+          done.forEach(function (x) {
+            var k = num(x.kg, 0), rp = num(x.reps, 0);
+            if (rp < 1) return;
+            if (g.start === null) g.start = k;
+            if (g.best === null || (e.assisted ? k < g.best : k > g.best)) g.best = k;
+            if (!g.reached && meets(e, g, k, rp)) {
+              g.reached = { date: sess.date, sessionId: sess.id, day: sess.day, kg: k, reps: rp };
+              goalsHit.push({ id: g.id, ex: g.ex, label: g.label, kg: k, reps: rp });
+            }
+          });
+        });
       });
 
       var completed = prescribed > 0 && doneN / prescribed >= st.completeShare - 1e-9;
@@ -281,7 +324,7 @@ var FlightEngine = (function () {
       out.push({
         id: sess.id, date: sess.date, day: sess.day, week: week, mode: mode, minutes: num(sess.minutes, null),
         prescribed: prescribed, done: doneN, completed: completed, reps: reps, km: km,
-        volume: Math.round(volume), upgrades: ups, steps: steps, improvements: improvements, prs: prs,
+        volume: Math.round(volume), upgrades: ups, steps: steps, improvements: improvements, prs: prs, goals: goalsHit,
         cumBefore: before, cumKm: cum, effort: sess.effort, note: sess.note, photo: !!sess.photo
       });
     });
@@ -330,7 +373,7 @@ var FlightEngine = (function () {
       }
       h.push(entry);
 
-      if (mode === 'deload') { if (s.kg === null) s.kg = workKg; return out; }
+      if (mode === 'deload') { entry.est = hasOwn(est, e.id) ? est[e.id] : null; if (s.kg === null) s.kg = workKg; return out; }
 
       // the shared strength estimate: best set of the day, both days feed it
       var best = 0;
@@ -342,6 +385,7 @@ var FlightEngine = (function () {
         var old = hasOwn(est, e.id) ? est[e.id] : 0;
         est[e.id] = !old || best >= old ? best : old * 0.6 + best * 0.4;
       }
+      entry.est = hasOwn(est, e.id) ? est[e.id] : null;
 
       var hard = atIdx.some(function (j3) { return fbs[j3] === 'hard'; });
       s.overridden = false;
@@ -365,7 +409,7 @@ var FlightEngine = (function () {
     }
 
     return {
-      settings: st, prog: prog, sessions: out, states: states, hist: hist, est: est, milestones: milestones, choices: input.choices || [],
+      settings: st, prog: prog, sessions: out, states: states, hist: hist, est: est, milestones: milestones, goals: goals, choices: input.choices || [],
       cumKm: cum, landedOn: landedOn, totalVolume: Math.round(totalVolume), totalReps: totalReps,
       completedCount: completedCount, deloadLeft: deloadLeft, fatigue: fatigue
     };
@@ -537,6 +581,13 @@ var FlightEngine = (function () {
     return { landed: false, date: d, sessionsLeft: left, avgKm: round1(avg) };
   }
 
+  /** Change in the strength estimate for one lift: first result vs latest, as a fraction (0.15 = +15%). */
+  function strengthChange(result, exId) {
+    var h = (result.hist[exId] || []).filter(function (x) { return x.est > 0; });
+    if (h.length < 2 || h[h.length - 1].date === h[0].date) return null;
+    return { from: h[0].date, change: h[h.length - 1].est / h[0].est - 1, n: h.length };
+  }
+
   function previewSession(input, draft) {
     var copy = {};
     for (var k in input) copy[k] = input[k];
@@ -548,7 +599,7 @@ var FlightEngine = (function () {
 
   return {
     DEFAULTS: DEFAULTS, replay: replay, plan: plan, nextDay: nextDay, eta: eta, previewSession: previewSession,
-    normSettings: normSettings, buildProgram: buildProgram, slotsOn: slotsOn, choiceFor: choiceFor,
+    normSettings: normSettings, parseGoals: parseGoals, strengthChange: strengthChange, buildProgram: buildProgram, slotsOn: slotsOn, choiceFor: choiceFor,
     compare: compare, estimateKg: estimateKg, plusOne: plusOne, decide: decide, predReps: predReps, dayOf: dayOf,
     weekOf: weekOf, addDays: addDays, weekday: weekday, roundToStep: roundToStep
   };

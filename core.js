@@ -46,9 +46,11 @@ var FlightCore = (function () {
     coachEmail: 'Where workout reports are emailed. Blank = no email',
     appUrl: 'Web address of the app (GitHub Pages), used to build the links',
     athleteKey: 'Secret key in her link. Change it and resend the link if it leaks',
-    coachKey: 'Secret key in your coach link'
+    coachKey: 'Secret key in your coach link',
+    goals: 'Goal milestones: exercise id : kg (assistance for assisted lifts), optional x reps. Example: assisted-chinup:0, incline-db-press:20, hip-thrust:60x5'
   };
   var FLIGHT_NO = 'AY 1697';
+  var GOALS = 'assisted-chinup:0, incline-db-press:20';
 
   function seedSettings(keys) {
     return [
@@ -56,7 +58,7 @@ var FlightCore = (function () {
       ['dayAName', 'Heavy'], ['dayBName', 'Volume'], ['startDate', '2026-11-23'], ['introWeeks', 1],
       ['trainingWeekdays', '1,5'], ['routeKm', 1697], ['kmPerRep', FlightEngine.DEFAULTS.kmPerRep],
       ['coachEmail', keys.coachEmail || ''], ['appUrl', keys.appUrl || ''],
-      ['athleteKey', keys.athleteKey], ['coachKey', keys.coachKey]
+      ['athleteKey', keys.athleteKey], ['coachKey', keys.coachKey], ['goals', GOALS]
     ].map(function (r) { return { key: r[0], value: r[1], note: SETTING_NOTES[r[0]] || '' }; });
   }
 
@@ -202,6 +204,7 @@ var FlightCore = (function () {
     want('dayBName', 'Volume', ['Pull first']);
     want('introWeeks', 1);
     want('kmPerRep', FlightEngine.DEFAULTS.kmPerRep);
+    want('goals', GOALS);
     ['passengerName', 'layoverWeek', 'kmCruise', 'kmTailwind', 'jetPerUpgrade', 'jetCap', 'vBaseA', 'vBaseB'].forEach(function (k) {
       if (s[k] !== undefined) out.unused.push(k);
     });
@@ -244,7 +247,7 @@ var FlightCore = (function () {
   }
 
   var PUBLIC_SETTINGS = ['herName', 'travellerName', 'flightNo', 'dayAName', 'dayBName', 'startDate', 'introWeeks',
-    'trainingWeekdays', 'routeKm', 'kmPerRep'];
+    'trainingWeekdays', 'routeKm', 'kmPerRep', 'goals'];
 
   function buildState(data, role, today) {
     var input = toEngineInput(data);
@@ -402,6 +405,7 @@ var FlightCore = (function () {
     lines.push(left > 0 ? left + ' km until ' + who + ' flies to Luxembourg.' : 'Flight unlocked: ' + who + ' to LUX!');
     lines.push(c.done + '/' + c.prescribed + ' working sets.');
     if (c.improvements.length) lines.push('Improvements: ' + c.improvements.map(function (x) { return (names[x.ex] || x.ex) + ': ' + x.text; }).join('; ') + '.');
+    if (c.goals && c.goals.length) lines.push('🎯 GOAL REACHED: ' + c.goals.map(function (g) { return g.label; }).join(', ') + '!');
     if (c.prs.length) lines.push('New personal best: ' + c.prs.map(function (p) { return (names[p.ex] || p.ex) + ' ' + p.kg + ' kg × ' + p.reps; }).join(', ') + ' >:)');
     if (c.upgrades.length) lines.push('Heavier next time: ' + c.upgrades.map(function (id) { return names[id] || id; }).join(', ') + '.');
     if (result.fatigue.offer) lines.push('Several lifts dipped over the last two weeks. The app offers her an easier week.');
@@ -410,7 +414,7 @@ var FlightCore = (function () {
     var next = data.postcards.filter(function (p) { return Number(p.km) > c.cumKm; }).sort(function (a, b) { return Number(a.km) - Number(b.km); })[0];
     if (next) lines.push('Next postcard: ' + next.place + ' (' + next.from + ') in ' + Math.round(Number(next.km) - c.cumKm) + ' km.' +
       (str(next.message).trim() ? '' : ' It is still empty: write it in the Postcards tab.'));
-    return { subject: '✈ +' + c.km + ' km, ' + left + ' km to LUX', body: lines.join('\n'), sessionId: sessionId };
+    return { subject: (c.goals && c.goals.length ? '🎯 Goal reached! ' : '') + '✈ +' + c.km + ' km, ' + left + ' km to LUX', body: lines.join('\n'), sessionId: sessionId };
   }
 
   return {
