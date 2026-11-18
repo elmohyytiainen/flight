@@ -242,6 +242,8 @@
       st.choices.push({ at: op.at, slot: op.slot, day: op.day, ex: op.ex });
     } else if (op.type === 'postcardOpened') {
       st.postcards.forEach(function (p) { if (p.id === op.id) p.openedAt = p.openedAt || nowIso(); });
+    } else if (op.type === 'profilePhoto') {
+      st.settings[role() === 'coach' ? 'coachPhoto' : 'herPhoto'] = op.dataUrl;
     } else if (op.type === 'postcardReply') {
       st.postcards.forEach(function (p) { if (p.id === op.id) { p.replyEmoji = op.emoji; p.replyText = op.text; p.repliedAt = nowIso(); } });
     } else if (op.type === 'cheerSeen') {
@@ -460,7 +462,53 @@
 
   // ---------- small pieces ----------
   function topHTML(title, sub) {
-    return '<header class="top"><div class="who"><h1>' + esc(title) + '</h1><div class="small muted">' + esc(sub) + '</div></div>' + syncHTML() + '</header>';
+    var me = role() === 'coach' ? 'coach' : 'her';
+    return '<header class="top"><div class="who"><h1>' + esc(title) + '</h1><div class="small muted">' + esc(sub) + '</div></div>' +
+      '<div class="topr">' + syncHTML() + '<button class="avbtn" data-act="profile" aria-label="Your profile photo">' + avatarHTML(me, 'av-44') + '</button></div></header>';
+  }
+
+  // ---------- profile photos ----------
+  /** A round profile bubble: the photo from Settings, or the first letter of the name. who = 'coach' | 'her'. */
+  function avatarHTML(who, cls) {
+    var s = (S.state && S.state.settings) || {}, url = who === 'coach' ? s.coachPhoto : s.herPhoto;
+    var name = who === 'coach' ? (s.travellerName || 'Elmo') : (s.herName || '');
+    var ini = String(name || '').trim().charAt(0).toUpperCase() || '♥';
+    return '<span class="av ' + (cls || '') + (who === 'coach' ? ' av-coach' : ' av-her') + '">' +
+      (url ? '<img src="' + esc(url) + '" alt="' + esc(name || 'Profile photo') + '">' : '<span class="ini" aria-hidden="true">' + esc(ini) + '</span>') + '</span>';
+  }
+  function profileSheet() {
+    var me = role() === 'coach' ? 'coach' : 'her', s = S.state.settings, has = !!(me === 'coach' ? s.coachPhoto : s.herPhoto);
+    showModal('<h2>' + (me === 'coach' ? 'Your coach photo' : 'Your profile photo') + '</h2>' +
+      '<div class="profbig">' + avatarHTML(me, 'av-120') + '</div>' +
+      '<p class="small muted" style="text-align:center">' + (me === 'coach' ? 'She sees it next to your cheers, reactions and postcards.' : esc(who()) + ' sees it next to your workouts, notes and replies.') +
+      ' Kept in the Sheet, not on the public site.</p>' + (S.avatarBusy ? '<p class="small" style="text-align:center">Preparing the photo…</p>' : '') +
+      '<label class="btn wide">' + IC.camera + (has ? 'Change photo' : 'Add a photo') + '<input type="file" accept="image/*" id="avatarIn" hidden></label>' +
+      (has ? '<button class="linkbtn discard" data-act="avatarRemove">Remove the photo</button>' : '') +
+      '<div class="row"><button class="btn ghost" data-act="closeModal">Done</button></div>');
+  }
+  /** Square, centred (a bit above centre on tall photos, where faces are), 200 px JPEG on the app's soft blue. */
+  function prepareAvatar(file) {
+    return new Promise(function (resolve, reject) {
+      var rd = new FileReader();
+      rd.onerror = reject;
+      rd.onload = function () {
+        var img = new Image();
+        img.onerror = reject;
+        img.onload = function () {
+          var w = img.naturalWidth, h = img.naturalHeight, side = Math.min(w, h);
+          var sx = (w - side) / 2, sy = h > w ? Math.max(0, (h - side) * 0.3) : 0;
+          var c = document.createElement('canvas'); c.width = c.height = 200;
+          var ctx = c.getContext('2d');
+          ctx.fillStyle = '#E3EAFD'; ctx.fillRect(0, 0, 200, 200);   // under transparent PNGs
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, 200, 200);
+          var q = 0.86, url = c.toDataURL('image/jpeg', q);
+          while (url.length > 45000 && q > 0.4) { q -= 0.1; url = c.toDataURL('image/jpeg', q); }
+          resolve(url);
+        };
+        img.src = rd.result;
+      };
+      rd.readAsDataURL(file);
+    });
   }
   function demoEmpty() { try { return localStorage.getItem('fl.demoEmpty') === '1'; } catch (e) { return false; } }
   function flightSub() { return 'Flight ' + (S.state.settings.flightNo || 'AY 1697') + ', Tampere to Luxembourg'; }
@@ -636,7 +684,8 @@
 
   function viewHome() {
     var res = calc(), t = todayStr(), coach = role() === 'coach';
-    var h = '<div class="screen">' + topHTML('Train', fmtLong(t));
+    var hn = String(S.state.settings.herName || '').trim();
+    var h = '<div class="screen">' + topHTML(coach ? 'Her view' : hn ? 'Hi, ' + hn + '!' : 'Train', fmtLong(t));
     if (!coach) h += heroHTML(res);
     var mail = coach ? [] : unopenedMail();
     if (mail.length) {
@@ -645,11 +694,11 @@
         '</b>Tap to open.</p></button>';
     }
     (coach ? [] : unseenCheers().slice(-1)).forEach(function (c) {
-      h += '<button class="banner" data-act="cheerSeen" data-id="' + esc(c.id) + '">' + IC.cheer + '<p><b>' + esc(c.text) + '</b>From your coach :) Tap to dismiss.</p></button>';
+      h += '<button class="banner" data-act="cheerSeen" data-id="' + esc(c.id) + '">' + avatarHTML('coach', 'av-44') + '<p><b>' + esc(c.text) + '</b>From ' + esc(who()) + ', your coach :) Tap to dismiss.</p></button>';
     });
     (coach ? [] : unseenReactions().slice(-1)).forEach(function (r) {
       var s = res.sessions.filter(function (x) { return x.id === r.sessionId; })[0];
-      h += '<button class="banner react" data-act="reactionSeen" data-id="' + esc(r.id) + '"><span class="emo">' + esc(r.emoji || '💬') + '</span><p><b>' +
+      h += '<button class="banner react" data-act="reactionSeen" data-id="' + esc(r.id) + '"><span class="avwrap">' + avatarHTML('coach', 'av-44') + '<i class="avbadge">' + esc(r.emoji || '💬') + '</i></span><p><b>' +
         esc(who()) + ' reacted to your ' + esc(s ? dayName(s.day) + ' workout, ' + fmtDate(s.date) : 'workout') + '</b>' +
         (r.text ? '“' + esc(r.text) + '”<br>' : '') + '<span class="small muted">Tap to dismiss.</span></p></button>';
     });
@@ -1212,7 +1261,7 @@
       else if (!c.written) { var left = c.km - res.cumKm; status = left <= 0 ? 'Passed, write it now!' : left < avg * 2 ? 'Empty, due in ' + km(left) + ' km' : 'Empty'; cls = left < avg * 2 ? 'warn' : ''; }
       else status = 'Written, sealed';
       h += '<div class="cardrow"><div><b>' + esc(c.place) + '</b>, ' + esc(c.from) + '<div class="small muted">Delivered over ' + esc(c.over) + ' at ' + km(c.km) + ' km</div>' +
-        (c.replyText ? '<div class="small">She wrote: “' + esc(c.replyText) + '”</div>' : '') +
+        (c.replyEmoji || c.replyText ? '<div class="small withav">' + avatarHTML('her', 'av-24') + (c.replyEmoji ? esc(c.replyEmoji) + ' ' : '') + (c.replyText ? '“' + esc(c.replyText) + '”' : '') + '</div>' : '') +
         (c.delivered ? '<button class="linkbtn" data-act="postcard" data-id="' + esc(c.id) + '">Open the card</button>' : '') + '</div><span class="status ' + cls + '">' + esc(status) + '</span></div>';
     });
     h += '<p class="small muted" style="margin:10px 0 0">Write notes and add photo links in the Postcards tab of the Sheet.</p></section>';
@@ -1220,7 +1269,7 @@
     var list = res.sessions.slice().reverse(), n = res.sessions.length;
     if (!list.length) h += '<p class="empty">Her workouts appear here as soon as she saves them.</p>';
     list.forEach(function (x, i) {
-      h += '<div class="item"><div class="l1"><b>Workout ' + (n - i) + ', ' + esc(dayName(x.day)) + '</b><span class="num">+' + kgFmt(x.km) + ' km</span></div>' +
+      h += '<div class="item"><div class="l1"><span class="withav">' + avatarHTML('her', 'av-32') + '<b>Workout ' + (n - i) + ', ' + esc(dayName(x.day)) + '</b></span><span class="num">+' + kgFmt(x.km) + ' km</span></div>' +
         '<div class="l2">' + esc(fmtDate(x.date)) + (x.minutes ? ', ' + x.minutes + ' min' : '') + ', ' + x.done + '/' + x.prescribed + ' sets, ' + x.reps + ' reps' +
         (x.effort ? ', effort ' + x.effort + '/5' : '') + (x.mode !== 'normal' ? ', ' + (x.mode === 'intro' ? 'intro' : x.mode === 'back' ? 'welcome back' : 'easier week') : '') + '</div>' +
         (x.improvements.length ? '<div class="l2">Better: ' + esc(x.improvements.map(function (m) { return exName(m.ex) + ' ' + m.text; }).join('; ')) + '</div>' : '') +
@@ -1250,10 +1299,10 @@
   function frontArt(c, small) {
     var big = (c.from || 'Tampere');
     return '<svg class="ill" viewBox="0 0 300 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' +
-      '<rect width="300" height="200" fill="#1B264F"/>' +
-      '<path d="M0 150Q75 128 150 146T300 138V200H0Z" fill="#24315F"/><path d="M0 170Q90 152 170 168T300 160V200H0Z" fill="#2C3B6E"/>' +
+      '<rect width="300" height="200" fill="#3F51E3"/>' +
+      '<path d="M0 150Q75 128 150 146T300 138V200H0Z" fill="#4C64EE"/><path d="M0 170Q90 152 170 168T300 160V200H0Z" fill="#5A78F4"/>' +
       '<text x="150" y="' + (small ? 118 : 112) + '" text-anchor="middle" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="700" font-size="' +
-      Math.min(96, Math.floor(560 / Math.max(4, big.length))) + '" fill="#7796CB" stroke="#1B264F" stroke-width="2" paint-order="stroke">' + esc(big) + '</text></svg>';
+      Math.min(96, Math.floor(560 / Math.max(4, big.length))) + '" fill="#FFFFFF" stroke="#3F51E3" stroke-width="2" paint-order="stroke">' + esc(big) + '</text></svg>';
   }
   function stampSVG() {
     var h = '<svg class="stamp" viewBox="0 0 58 70" aria-hidden="true"><rect x="2" y="2" width="54" height="66" fill="#fff" stroke="#c9c1ad" stroke-width="1"/>';
@@ -1275,14 +1324,14 @@
   function pcReplyHTML(c, editing) {
     var replied = !!(c.replyEmoji || c.replyText);
     if (role() === 'coach') {
-      return replied ? '<div class="pcr-sent"><span class="emo">' + esc(c.replyEmoji || '💬') + '</span><div><b>Her reply</b>' + (c.replyText ? '“' + esc(c.replyText) + '”' : '') + '</div></div>'
+      return replied ? '<div class="pcr-sent"><span class="avwrap">' + avatarHTML('her', 'av-44') + '<i class="avbadge">' + esc(c.replyEmoji || '💬') + '</i></span><div><b>Her reply</b>' + (c.replyText ? '“' + esc(c.replyText) + '”' : '') + '</div></div>'
         : '<p class="pcr-none">No reply yet.</p>';
     }
     if (replied && !editing) {
-      return '<div class="pcr-sent"><span class="emo">' + esc(c.replyEmoji || '💬') + '</span><div><b>Your reply to ' + esc(who()) + '</b>' + (c.replyText ? '“' + esc(c.replyText) + '”' : '') +
+      return '<div class="pcr-sent"><span class="avwrap">' + avatarHTML('her', 'av-44') + '<i class="avbadge">' + esc(c.replyEmoji || '💬') + '</i></span><div><b>Your reply to ' + esc(who()) + '</b>' + (c.replyText ? '“' + esc(c.replyText) + '”' : '') +
         '</div><button class="linkbtn" data-act="pcEdit">Change</button></div>';
     }
-    return '<h3>Reply to ' + esc(who()) + '</h3><div class="pcr-emojis">' + PC_EMOJIS.map(function (e) {
+    return '<h3 class="withav">' + avatarHTML('coach', 'av-32') + 'Reply to ' + esc(who()) + '</h3><div class="pcr-emojis">' + PC_EMOJIS.map(function (e) {
       return '<button class="chip emo' + (S.pcEmoji === e ? ' on' : '') + '" data-act="pcEmoji" data-v="' + e + '" aria-label="React with ' + e + '">' + e + '</button>';
     }).join('') + '</div><textarea id="pcText" maxlength="500" placeholder="Write something back (optional)">' + esc(c.replyText || '') + '</textarea>' +
       '<button class="btn taxi wide" data-act="pcSend">Send to ' + esc(who()) + '</button>';
@@ -1331,7 +1380,7 @@
     var h = '<section class="dayw"><div class="dwh"><b>' + esc(dayName(f.day)) + '</b><span class="small muted">' +
       [f.minutes ? f.minutes + ' min' : '', f.reps + ' reps', '+' + Math.round(f.km) + ' km'].filter(Boolean).join(' · ') + '</span></div>';
     var rx = reactionsFor(f.id);
-    if (rx.length) h += rx.map(function (r) { return '<div class="dayrx"><span class="emo">' + esc(r.emoji || '💬') + '</span><div><b>' + esc(who()) + '</b>' + (r.text ? '“' + esc(r.text) + '”' : ' reacted') + '</div></div>'; }).join('');
+    if (rx.length) h += rx.map(function (r) { return '<div class="dayrx"><span class="avwrap">' + avatarHTML('coach', 'av-36') + '<i class="avbadge">' + esc(r.emoji || '💬') + '</i></span><div><b>' + esc(who()) + '</b>' + (r.text ? '“' + esc(r.text) + '”' : ' reacted') + '</div></div>'; }).join('');
     if (f.prs && f.prs.length) h += '<div class="small daypb">🏅 ' + esc(f.prs.map(function (pr) { return exName(pr.ex) + ' ' + kgFmt(pr.kg) + ' kg × ' + pr.reps; }).join(', ')) + '</div>';
     if (byEx.length) {
       h += '<table class="dayex">';
@@ -1344,7 +1393,7 @@
       });
       h += '</table>';
     }
-    if (raw.note) h += '<p class="small dnote">Note: ' + esc(raw.note) + '</p>';
+    if (raw.note) h += '<div class="dayrx her">' + avatarHTML('her', 'av-36') + '<div><b>Note</b>' + esc(raw.note) + '</div></div>';
     return h + '</section>';
   }
 
@@ -1558,7 +1607,7 @@
     var c = document.getElementById('confetti'), ctx = c.getContext && c.getContext('2d');
     if (!ctx) return;
     var W = c.width = innerWidth * devicePixelRatio, H = c.height = innerHeight * devicePixelRatio;
-    var colors = ['#7796CB', '#1B264F', '#F5B700', '#9AA5B1', '#FFFFFF'];
+    var colors = ['#4054E5', '#F25C87', '#F5B700', '#8FB0FF', '#FFFFFF'];
     var ps = [];
     for (var i = 0; i < 140; i++) ps.push({ x: W / 2 + (Math.random() - .5) * W * .3, y: H * .35, vx: (Math.random() - .5) * 18 * devicePixelRatio,
       vy: (-Math.random() * 16 - 6) * devicePixelRatio, r: Math.random() * Math.PI, vr: (Math.random() - .5) * .4, w: (6 + Math.random() * 6) * devicePixelRatio,
@@ -1721,6 +1770,8 @@
       case 'fatigueLater': S.seen['fat:' + t.dataset.id] = 1; store.set('seen', S.seen); render(); break;
       case 'day': daySheet(t.dataset.date); break;
       case 'mapToggle': S.mapOpen = !S.mapOpen; render(); break;
+      case 'profile': profileSheet(); break;
+      case 'avatarRemove': enqueue({ type: 'profilePhoto', dataUrl: '' }); profileSheet(); render(); break;
       case 'discard': {
         var done = S.draft ? S.draft.sets.filter(function (x) { return x.done; }).length : 0;
         showModal('<h2>Discard this workout?</h2><p>' + (done ? plural(done, 'logged set', 'logged sets') + ', the time and the km from it are thrown away.' : 'Nothing has been logged yet.') +
@@ -1806,6 +1857,15 @@
       store.set('draft', S.draft);
       render();
     }, function () { S.photoBusy = false; render(); });
+  });
+  document.addEventListener('change', function (ev) {
+    if (ev.target.id !== 'avatarIn' || !ev.target.files || !ev.target.files[0]) return;
+    S.avatarBusy = true; profileSheet();
+    prepareAvatar(ev.target.files[0]).then(function (url) {
+      S.avatarBusy = false;
+      enqueue({ type: 'profilePhoto', dataUrl: url });
+      profileSheet(); render();
+    }, function () { S.avatarBusy = false; profileSheet(); });
   });
   app.addEventListener('input', function (ev) {
     if (ev.target.id === 'note' && S.draft) { S.draft.note = ev.target.value; store.set('draft', S.draft); }

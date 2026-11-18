@@ -47,6 +47,8 @@ var FlightCore = (function () {
     appUrl: 'Web address of the app (GitHub Pages), used to build the links',
     athleteKey: 'Secret key in her link. Change it and resend the link if it leaks',
     coachKey: 'Secret key in your coach link',
+    coachPhoto: 'Your profile photo (set from the coach console in the app). Small JPEG data, leave it alone',
+    herPhoto: 'Her profile photo (she sets it in the app). Small JPEG data, leave it alone',
     goals: 'Goal milestones: exercise id : kg (assistance for assisted lifts), optional x reps. Example: assisted-chinup:0, incline-db-press:20, hip-thrust:60x5'
   };
   var FLIGHT_NO = 'AY 1697';
@@ -298,7 +300,7 @@ var FlightCore = (function () {
   }
 
   var PUBLIC_SETTINGS = ['herName', 'travellerName', 'flightNo', 'dayAName', 'dayBName', 'startDate', 'introWeeks',
-    'trainingWeekdays', 'routeKm', 'kmPerRep', 'goals'];
+    'trainingWeekdays', 'routeKm', 'kmPerRep', 'goals', 'coachPhoto', 'herPhoto'];
 
   function buildState(data, role, today) {
     var input = toEngineInput(data);
@@ -342,8 +344,8 @@ var FlightCore = (function () {
   function clip(s, n) { return str(s).slice(0, n); }
 
   var ROLE_OPS = {
-    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen'],
-    coach: ['cheer', 'override', 'choice', 'deload', 'react']
+    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto'],
+    coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto']
   };
 
   function applyOp(data, op, role, nowIso) {
@@ -429,6 +431,12 @@ var FlightCore = (function () {
       patch('Reactions', 'id', clip(op.id, 40), { seenAt: nowIso });
     } else if (op.type === 'postcardOpened') {
       patch('Postcards', 'id', clip(op.id, 20), { openedAt: nowIso });
+    } else if (op.type === 'profilePhoto') {
+      // a small square JPEG kept in the Settings tab (a Sheet cell holds at most 50,000 characters); '' removes it
+      var pu = str(op.dataUrl), pkey = role === 'coach' ? 'coachPhoto' : 'herPhoto';
+      if (pu && (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(pu) || pu.length > 48000)) bad('invalid profile photo');
+      data.settings[pkey] = pu;
+      writes.push({ tab: 'Settings', kind: 'setting', key: pkey, value: pu });
     } else if (op.type === 'postcardReply') {
       var pid = clip(op.id, 20), card = null;
       data.postcards.forEach(function (r) { if (str(r.id) === pid) card = r; });

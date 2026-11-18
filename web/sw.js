@@ -5,7 +5,8 @@ var SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'engine.js', 'core.js',
   'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'fonts/barlow-latin-400-normal.woff2', 'fonts/barlow-latin-500-normal.woff2', 'fonts/barlow-latin-600-normal.woff2',
   'fonts/barlow-latin-700-normal.woff2', 'fonts/barlow-condensed-latin-500-normal.woff2', 'fonts/barlow-condensed-latin-600-normal.woff2',
-  'fonts/barlow-condensed-latin-700-normal.woff2', 'fonts/caveat-latin-500-normal.woff2', 'fonts/caveat-latin-600-normal.woff2'];
+  'fonts/barlow-condensed-latin-700-normal.woff2', 'fonts/caveat-latin-500-normal.woff2', 'fonts/caveat-latin-600-normal.woff2',
+  'fonts/poppins-latin-400-normal.woff2', 'fonts/poppins-latin-500-normal.woff2', 'fonts/poppins-latin-600-normal.woff2', 'fonts/poppins-latin-700-normal.woff2'];
 
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));

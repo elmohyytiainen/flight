@@ -1,2 +1,5 @@
 Barlow, Barlow Condensed (Jeremy Tribby) and Caveat (Impallari Type) are licensed under the SIL Open Font License 1.1.
 Files from the @fontsource npm packages.
+
+Poppins (poppins-latin-*.woff2): Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins).
+Licensed under the SIL Open Font License, Version 1.1. Files from @fontsource/poppins 5.3.0.
