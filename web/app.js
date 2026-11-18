@@ -700,8 +700,12 @@
     else h += exHead(its[0], true, d);
     h += '</div>';
 
-    if (d.view !== null && d.view !== undefined && next !== undefined && d.view !== blockIndexOfSlot(d, d.sets[next].slot)) {
-      h += '<div class="finishrow"><button class="btn small ghost" data-act="toCurrent">Back to the current exercise</button></div>';
+    var curBi = next !== undefined ? blockIndexOfSlot(d, d.sets[next].slot) : -1;
+    if (d.view !== null && d.view !== undefined && next !== undefined && d.view !== curBi) {
+      h += '<div class="finishrow">' + (blockOpen(d, bi) ? '<button class="btn small" data-act="doNow" data-i="' + bi + '">Do this one now</button> ' : '') +
+        '<button class="btn small ghost" data-act="toCurrent">Back to the current exercise</button></div>';
+    } else if (bi === curBi && lastOpenBlock(d) > bi) {
+      h += '<div class="finishrow"><button class="linkbtn" data-act="doLater" data-i="' + bi + '">Machine busy? Do this later</button></div>';
     }
 
     h += '<div class="sets">';
@@ -1215,7 +1219,7 @@
 
   function overview() {
     var d = S.draft, next = nextStep(d), cur = next !== undefined ? blockIndexOfSlot(d, d.sets[next].slot) : -1;
-    var h = '<h2>Workout overview</h2><p class="small muted">Move unfinished exercises, skip one, or split a superset when a machine is busy.</p><div class="blocks">';
+    var h = '<h2>Workout overview</h2><p class="small muted">Do the exercises in any order: tap <b>Do now</b> to go to one straight away. You can also move, skip, or split a superset when a machine is busy.</p><div class="blocks">';
     d.blocks.forEach(function (b, i) {
       var sets = d.sets.filter(function (s) { return b.slots.indexOf(s.slot) >= 0; });
       var done = sets.filter(function (s) { return s.done; }).length, opened = sets.filter(open).length, skipped = sets.filter(function (s) { return s.skip; }).length;
@@ -1227,6 +1231,7 @@
         (movable && i < d.blocks.length - 1 ? '<button class="ib" data-act="moveBlock" data-i="' + i + '" data-d="1" aria-label="Move down">↓</button>' : '') +
         (b.paired && opened ? '<button class="linkbtn" data-act="splitBlock" data-i="' + i + '">' + (b.separated ? 'Rejoin' : 'Split') + '</button>' : '') +
         (opened ? '<button class="linkbtn" data-act="skipBlock" data-i="' + i + '">Skip</button>' : skipped ? '<button class="linkbtn" data-act="unskipBlock" data-i="' + i + '">Unskip</button>' : '') +
+        (opened && cur >= 0 && i !== cur ? '<button class="linkbtn" data-act="doNow" data-i="' + i + '"><b>Do now</b></button>' : '') +
         '<button class="linkbtn" data-act="viewBlock" data-i="' + i + '">View</button></div></div>';
     });
     h += '</div><div class="row"><button class="btn ghost" data-act="closeModal">Close</button><button class="btn" data-act="finish">Finish workout</button></div>';
@@ -1239,6 +1244,36 @@
     if (!otherOpen) return; // finished exercises stay where they were done
     var t = d.blocks[i]; d.blocks[i] = other; d.blocks[j] = t;
     store.set('draft', d);
+  }
+  function blockOpen(d, i) { var b = d.blocks[i]; return !!b && d.sets.some(function (s) { return b.slots.indexOf(s.slot) >= 0 && open(s); }); }
+  function currentBlock(d) { var n = nextStep(d); return n === undefined ? -1 : blockIndexOfSlot(d, d.sets[n].slot); }
+  function lastOpenBlock(d) { for (var i = d.blocks.length - 1; i >= 0; i--) if (blockOpen(d, i)) return i; return -1; }
+  /** Moves block i to just before the current one, so it is next. The current one picks up where it left off afterwards. */
+  function doNow(i) {
+    var d = S.draft, cur = currentBlock(d);
+    if (cur < 0 || i === cur || !blockOpen(d, i)) return;
+    var b = d.blocks.splice(i, 1)[0];
+    if (i < cur) cur--;
+    d.blocks.splice(cur, 0, b);
+    afterReorder(d);
+  }
+  /** Moves the current block behind the last unfinished one (machine busy). */
+  function doLater(i) {
+    var d = S.draft, last = lastOpenBlock(d);
+    if (!blockOpen(d, i) || last <= i) return;
+    var b = d.blocks.splice(i, 1)[0];
+    d.blocks.splice(last, 0, b);
+    afterReorder(d);
+  }
+  function afterReorder(d) {
+    d.view = null; d.lower = null; d.fbFor = null;
+    store.set('draft', d);
+    // a running rest timer still says what's next: point it at the new next exercise
+    var n = nextStep(d), lbl = document.querySelector('#rest:not(.switch) .lbl');
+    if (n !== undefined && lbl) {
+      var ns = d.sets[n];
+      lbl.innerHTML = '<b>Rest</b>' + esc('Next: ' + d.items[ns.slot].name + ', ' + ns.reps + ' reps at ' + kgFmt(ns.kg) + ' kg');
+    }
   }
 
   function confirmFinish() {
@@ -1445,6 +1480,8 @@
       case 'unskipBlock': d.sets.forEach(function (o) { if (d.blocks[+t.dataset.i].slots.indexOf(o.slot) >= 0) o.skip = false; }); store.set('draft', d); overview(); render(); break;
       case 'viewBlock': d.view = +t.dataset.i; store.set('draft', d); closeModal(); window.scrollTo(0, 0); break;
       case 'toCurrent': d.view = null; store.set('draft', d); render(); break;
+      case 'doNow': doNow(+t.dataset.i); closeModal(); window.scrollTo(0, 0); break;
+      case 'doLater': doLater(+t.dataset.i); render(); window.scrollTo(0, 0); break;
       case 'lastRound': {
         var nx = nextStep(d), firstAcc = -1;
         d.blocks.forEach(function (b, bi) { if (firstAcc < 0 && b.paired && d.sets.some(function (o) { return b.slots.indexOf(o.slot) >= 0 && open(o); })) firstAcc = bi; });
