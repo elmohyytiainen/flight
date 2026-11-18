@@ -1361,18 +1361,18 @@
   }
   function stampSVG() {
     var h = '<svg class="stamp" viewBox="0 0 58 70" aria-hidden="true"><rect x="2" y="2" width="54" height="66" fill="#fff" stroke="#c9c1ad" stroke-width="1"/>';
-    for (var x = 4; x < 56; x += 5) h += '<circle cx="' + x + '" cy="2" r="1.6" fill="#FFFDF8"/><circle cx="' + x + '" cy="68" r="1.6" fill="#FFFDF8"/>';
-    for (var y = 4; y < 68; y += 5) h += '<circle cx="2" cy="' + y + '" r="1.6" fill="#FFFDF8"/><circle cx="56" cy="' + y + '" r="1.6" fill="#FFFDF8"/>';
-    h += '<rect x="7" y="7" width="44" height="56" fill="#1F4FBF"/><g transform="translate(29 30) rotate(-30) scale(1.25)"><path d="' + PLANE + '" fill="#F5B700"/></g>' +
+    for (var x = 4; x < 56; x += 5) h += '<circle cx="' + x + '" cy="2" r="1.6" fill="#FFFFFF"/><circle cx="' + x + '" cy="68" r="1.6" fill="#FFFFFF"/>';
+    for (var y = 4; y < 68; y += 5) h += '<circle cx="2" cy="' + y + '" r="1.6" fill="#FFFFFF"/><circle cx="56" cy="' + y + '" r="1.6" fill="#FFFFFF"/>';
+    h += '<rect x="7" y="7" width="44" height="56" fill="#4054E5"/><g transform="translate(29 30) rotate(-30) scale(1.25)"><path d="' + PLANE + '" fill="#F25C87"/></g>' +
       '<text x="29" y="54" text-anchor="middle" font-family="Barlow, sans-serif" font-size="6.5" font-weight="700" fill="#fff" textLength="38" lengthAdjust="spacingAndGlyphs">SUOMI FINLAND</text></svg>';
     return h;
   }
   function postmarkSVG(city, ds) {
     return '<svg class="postmark" viewBox="0 0 84 84" aria-hidden="true"><defs><path id="pmArc" d="M14 42a28 28 0 1 1 56 0"/></defs>' +
-      '<circle cx="42" cy="42" r="38" fill="none" stroke="#2b3550" stroke-width="2"/><circle cx="42" cy="42" r="25" fill="none" stroke="#2b3550" stroke-width="1.2"/>' +
-      '<text font-family="Barlow, sans-serif" font-size="10" font-weight="700" fill="#2b3550" letter-spacing="2"><textPath href="#pmArc" startOffset="50%" text-anchor="middle">' + esc(String(city).toUpperCase()) + '</textPath></text>' +
-      '<text x="42" y="46" text-anchor="middle" font-family="Barlow, sans-serif" font-size="9" font-weight="600" fill="#2b3550">' + esc(ds ? fiDate(ds) : '') + '</text>' +
-      '<path d="M-60 20q8-5 16 0t16 0 16 0M-60 32q8-5 16 0t16 0 16 0M-60 44q8-5 16 0t16 0 16 0" fill="none" stroke="#2b3550" stroke-width="1.2" transform="translate(4 8)"/></svg>';
+      '<circle cx="42" cy="42" r="38" fill="none" stroke="#3F51E3" stroke-width="2"/><circle cx="42" cy="42" r="25" fill="none" stroke="#3F51E3" stroke-width="1.2"/>' +
+      '<text font-family="Barlow, sans-serif" font-size="10" font-weight="700" fill="#3F51E3" letter-spacing="2"><textPath href="#pmArc" startOffset="50%" text-anchor="middle">' + esc(String(city).toUpperCase()) + '</textPath></text>' +
+      '<text x="42" y="46" text-anchor="middle" font-family="Barlow, sans-serif" font-size="9" font-weight="600" fill="#3F51E3">' + esc(ds ? fiDate(ds) : '') + '</text>' +
+      '<path d="M-60 20q8-5 16 0t16 0 16 0M-60 32q8-5 16 0t16 0 16 0M-60 44q8-5 16 0t16 0 16 0" fill="none" stroke="#3F51E3" stroke-width="1.2" transform="translate(4 8)"/></svg>';
   }
   var PC_EMOJIS = ['❤️', '🥰', '😂', '🥹', '😘', '🔥', '🌶️'];
   /** Her reply to a postcard: the form, or what she sent with a Change link. The coach only reads it. */

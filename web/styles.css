@@ -688,3 +688,23 @@ h3.withav { display: flex; }
 .qstreak.zero { color: var(--ink-2); background: #fff; }
 .qearlier { display: block; margin: 12px 0 0 auto; }
 .qsline { color: var(--pink); margin-top: -4px; }
+
+/* ---------- postcard view in the v3 look (light, soft blue to soft pink) ---------- */
+#modal.dark { background: linear-gradient(180deg, rgba(238, 243, 254, .97) 0%, rgba(253, 231, 239, .97) 100%); }
+#modal.dark .pc-hint { color: var(--ink-2); }
+#modal .btn.pc-close { color: var(--ink); background: #fff; box-shadow: inset 0 0 0 2px var(--border-c); }
+.pc-face { box-shadow: 0 22px 44px -22px rgba(64, 84, 229, .55); }
+.pc-front { background: var(--taxi); }
+.pc-back { background: #FFFFFF; color: var(--ink); }
+.pc-back .msg, .pc-back .addr { border-color: var(--line); }
+.pcreply { color: var(--ink); }
+.pcreply h3 { color: var(--ink); }
+.pcreply .chip.emo { background: #fff; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--border-c); }
+.pcreply .chip.emo.on { background: var(--pink-soft); box-shadow: inset 0 0 0 2px var(--pink); }
+.pcreply textarea { box-shadow: inset 0 0 0 1.5px var(--border-c); }
+.pcreply textarea:focus { outline: none; box-shadow: inset 0 0 0 2px var(--taxi); }
+.pcr-sent { background: #fff; }
+.pcr-sent b { color: var(--ink-2); }
+.pcr-sent .linkbtn { color: var(--ink-2); }
+.pcr-none, .pcr-ok { color: var(--ink-2); }
+.pc-back::before { border-image: repeating-linear-gradient(-45deg, var(--pink) 0 12px, #FFFFFF 12px 18px, var(--taxi) 18px 30px, #FFFFFF 30px 36px) 7; }
