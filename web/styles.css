@@ -537,3 +537,32 @@ button.exprog { width: 100%; border: 0; background: transparent; text-align: lef
 .hero .muscles { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
 .hero .muscles span { padding: 5px 0; }
 .hero .muscle { width: 26px; height: 35px; }
+
+/* ---------- calendar states (v2) ---------- */
+.cd { min-height: 58px; gap: 1px; }
+.cd .dn { line-height: 1.1; }
+.cd .st { height: 20px; display: grid; place-items: center; }
+.cd .st svg { width: 19px; height: 19px; }
+.cd.gym { background: transparent; color: var(--ink); }
+.cd.planned .st { color: var(--ink-2); }
+.cd.future { opacity: 1; color: var(--ink-2); }
+.cd.future.planned .dn { color: var(--ink); }
+.legend .gc, .legend .dbo { width: 15px; height: 15px; }
+.legend .dbo { color: var(--ink-2); }
+.calhint { margin: 8px 0 0; }
+.eta .est, .fline .est { display: block; font-size: 12px; color: var(--ink-2); font-weight: 400; }
+.fline > span:last-child { text-align: right; }
+.miniflight .mapbtn { margin-top: 10px; }
+
+/* ---------- day sheet: workout and reactions together ---------- */
+.dayw { background: var(--surface); border-radius: 14px; padding: 12px 14px; margin-top: 10px; }
+.dwh { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.dwh b { font-family: var(--display); font-size: 22px; }
+.dayrx { display: flex; gap: 10px; align-items: center; background: #fff; border-radius: 12px; padding: 8px 10px; margin-top: 8px; font-size: 15px; }
+.dayrx .emo { font-size: 24px; }
+.dayrx b { margin-right: 6px; }
+.daypb { margin-top: 8px; }
+.dayex { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+.dayex td { padding: 5px 0; border-top: 1px solid var(--line); vertical-align: top; }
+.dayex td.r { text-align: right; padding-left: 10px; color: var(--ink-2); white-space: nowrap; }
+.dnote { margin: 8px 0 0; color: var(--ink-2); }

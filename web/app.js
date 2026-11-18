@@ -62,6 +62,9 @@
     camera: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="13.2" r="3.4" fill="none" stroke="currentColor" stroke-width="1.9"/></svg>',
     tabHome: '<svg viewBox="-12 -12 24 24" aria-hidden="true"><path class="accent" d="' + PLANE + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" transform="rotate(-35)"/></svg>',
     tabLog: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="accent" x="4" y="3" width="16" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    goldCheck: '<svg viewBox="0 0 24 24" class="gc" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="var(--taxi)"/><path d="M6.8 12.4l3.4 3.4 7-7.4" fill="none" stroke="var(--ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    dbOutline: '<svg viewBox="0 0 24 24" class="dbo" aria-hidden="true"><rect x="4.2" y="6.5" width="3.6" height="11" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+      '<rect x="16.2" y="6.5" width="3.6" height="11" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.8 10v4M22.2 10v4M7.8 12h8.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
     tabTrain: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="accent" x="4.6" y="6" width="3.4" height="12" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/>' +
       '<rect class="accent" x="16" y="6" width="3.4" height="12" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/>' +
       '<path d="M2 9.5v5M22 9.5v5M8 12h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
@@ -472,10 +475,10 @@
     var left = Math.max(0, st.routeKm - res.cumKm);
     var h = '<div class="flightline"><div><div class="big">' + km(res.cumKm) + '<small>of ' + km(st.routeKm) + ' km</small></div></div>';
     if (eta.landed) h += '<div class="eta muted small">Unlocked<b>' + fmtDate(eta.date) + '</b></div>';
-    else h += '<div class="eta muted small">Landing<b>' + fmtDate(eta.date) + '</b>about ' + plural(eta.sessionsLeft, 'workout', 'workouts') + ' to go</div>';
+    else h += '<div class="eta muted small">Landing<b>' + fmtDate(eta.date) + '</b><span class="est">(Estimated completion)</span>about ' + plural(eta.sessionsLeft, 'workout', 'workouts') + ' to go</div>';
     h += '</div><div class="progress"><span style="width:' + Math.min(100, res.cumKm / st.routeKm * 100).toFixed(1) + '%"></span></div>';
     h += eta.landed ? '<p class="unlocked">Flight unlocked ✈ ' + esc(who()) + ' to LUX</p>'
-      : '<p class="nextcard"><b>' + km(left) + ' km</b> until ' + esc(who()) + ' flies to Luxembourg.</p>';
+      : '<p class="nextcard"><b>' + km(left) + ' km</b> for ' + esc(who()) + ' to Luxembourg.</p>';
     var next = sealedAhead(res)[0];
     if (next && !eta.landed) {
       var line = 'Next postcard from <b>' + esc(next.from) + '</b> in <b>' + km(next.km - res.cumKm) + ' km</b> ;)';
@@ -553,11 +556,11 @@
     return sk.thisWeek > 0 ? '🔥 ' + sk.thisWeek + ' of ' + sk.per + ' this week' : '🔥 Start a streak this week';
   }
   function calendarHTML(res) {
-    var t = todayStr(), base = S.calMonth || t.slice(0, 7);
+    var t = todayStr(), st0 = res.settings, base = S.calMonth || t.slice(0, 7);
     var y = +base.slice(0, 4), mo = +base.slice(5, 7);
     var first = base + '-01', days = new Date(y, mo, 0).getDate(), lead = (dateObj(first).getDay() + 6) % 7;
-    var gym = {}, n = { gym: 0, ballet: 0, run: 0 };
-    res.sessions.forEach(function (s) { if (s.completed && s.date.slice(0, 7) === base) { gym[s.date] = s.day; n.gym++; } });
+    var gym = {}, n = { gym: 0, planned: 0, ballet: 0, run: 0 };
+    res.sessions.forEach(function (s) { if (s.completed && s.date.slice(0, 7) === base) { if (!gym[s.date]) n.gym++; gym[s.date] = s.day; } });
     var stamps = {};
     S.state.stamps.forEach(function (s) {
       if ((s.type === 'ballet' || s.type === 'run') && s.date.slice(0, 7) === base) { (stamps[s.date] = stamps[s.date] || {})[s.type] = 1; n[s.type]++; }
@@ -565,17 +568,24 @@
     var prev = mo === 1 ? (y - 1) + '-12' : y + '-' + pad(mo - 1), next = mo === 12 ? (y + 1) + '-01' : y + '-' + pad(mo + 1);
     var title = dateObj(first).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
     var h = '<section class="panel cal"><div class="calhead"><button class="ib" data-act="calMonth" data-m="' + prev + '" aria-label="Previous month">‹</button><h3>' + esc(title) + '</h3>' +
-      '<button class="ib" data-act="calMonth" data-m="' + next + '" aria-label="Next month"' + (next > t.slice(0, 7) ? ' disabled' : '') + '>›</button></div><div class="calgrid">';
+      '<button class="ib" data-act="calMonth" data-m="' + next + '" aria-label="Next month">›</button></div><div class="calgrid">';
     ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].forEach(function (d) { h += '<span class="dow">' + d + '</span>'; });
     for (var i = 0; i < lead; i++) h += '<span></span>';
     for (var d = 1; d <= days; d++) {
-      var ds = base + '-' + pad(d), g = gym[ds], st = stamps[ds] || {};
-      h += '<button class="cd' + (g ? ' gym' : '') + (ds === t ? ' today' : '') + (ds > t ? ' future' : '') + '" data-act="day" data-date="' + ds + '" aria-label="' +
-        esc(fmtLong(ds) + (g ? ', ' + dayName(g) + ' workout' : '') + (st.ballet ? ', ballet' : '') + (st.run ? ', run' : '')) + '"><span>' + d + '</span><span class="marks">' +
-        (st.ballet ? '<i class="mk ballet">' + IC.ballet + '</i>' : '') + (st.run ? '<i class="mk run">' + IC.run + '</i>' : '') + '</span></button>';
+      var ds = base + '-' + pad(d), g = gym[ds], stp = stamps[ds] || {};
+      var ti = st0.trainingWeekdays.indexOf(E.weekday(ds));
+      var planned = !g && ti >= 0 && ds >= t && ds >= st0.startDate;
+      if (planned) n.planned++;
+      var state = g ? IC.goldCheck : planned ? IC.dbOutline : '';
+      h += '<button class="cd' + (g ? ' gym' : planned ? ' planned' : '') + (ds === t ? ' today' : '') + (ds > t ? ' future' : '') + '" data-act="day" data-date="' + ds + '" aria-label="' +
+        esc(fmtLong(ds) + (g ? ', ' + dayName(g) + ' workout done' : planned ? ', ' + dayName(ti === 0 ? 'A' : 'B') + ' workout planned' : '') + (stp.ballet ? ', ballet' : '') + (stp.run ? ', run' : '')) +
+        '"><span class="dn">' + d + '</span><span class="st">' + state + '</span><span class="marks">' +
+        (stp.ballet ? '<i class="mk ballet">' + IC.ballet + '</i>' : '') + (stp.run ? '<i class="mk run">' + IC.run + '</i>' : '') + '</span></button>';
     }
-    h += '</div><div class="legend"><span><i class="gymdot"></i>' + plural(n.gym, 'workout', 'workouts') + '</span><span><i class="mk ballet">' + IC.ballet + '</i>' +
-      n.ballet + ' ballet</span><span><i class="mk run">' + IC.run + '</i>' + plural(n.run, 'run', 'runs') + '</span></div></section>';
+    h += '</div><div class="legend"><span>' + IC.goldCheck + plural(n.gym, 'workout', 'workouts') + '</span>' +
+      (n.planned ? '<span>' + IC.dbOutline + n.planned + ' planned</span>' : '') +
+      '<span><i class="mk ballet">' + IC.ballet + '</i>' + n.ballet + ' ballet</span><span><i class="mk run">' + IC.run + '</i>' + plural(n.run, 'run', 'runs') + '</span></div>' +
+      '<p class="small muted calhint">Tap a day to see its workout and reactions.</p></section>';
     return h;
   }
   function streakHTML(res) {
@@ -612,13 +622,13 @@
   }
   function miniFlight(res) {
     var st = res.settings, eta = E.eta(res, todayStr(), completedOn(res, todayStr()).length > 0);
-    var h = '<section class="miniflight"><button class="mapbtn" data-act="mapToggle" aria-expanded="' + (S.mapOpen ? 'true' : 'false') + '" aria-label="' + (S.mapOpen ? 'Shrink the map' : 'Show the whole map') + '">' +
-      mapSVG(res.cumKm, { mini: !S.mapOpen }) + '<span class="maphint">' + (S.mapOpen ? 'Shrink' : 'Whole map') + '</span></button>' +
-      '<button class="fline" data-act="tab" data-v="trip"><span><b>' + km(res.cumKm) + '</b> of ' + km(st.routeKm) + ' km</span><span class="muted">' +
-      (eta.landed ? 'Landed ✈' : 'Landing ' + esc(fmtDate(eta.date))) + ' ›</span></button>' +
+    var h = '<section class="miniflight"><button class="fline" data-act="tab" data-v="trip"><span><b>' + km(res.cumKm) + '</b> of ' + km(st.routeKm) + ' km</span><span class="muted">' +
+      (eta.landed ? 'Landed ✈' : 'Landing ' + esc(fmtDate(eta.date)) + '<small class="est">(Estimated completion)</small>') + '</span></button>' +
       '<div class="progress"><span style="width:' + Math.min(100, res.cumKm / st.routeKm * 100).toFixed(1) + '%"></span></div>';
     var next = sealedAhead(res)[0];
     if (next && !eta.landed) h += '<p class="nextcard small">Next postcard from <b>' + esc(next.from) + '</b> in <b>' + km(next.km - res.cumKm) + ' km</b> ;)</p>';
+    h += '<button class="mapbtn" data-act="mapToggle" aria-expanded="' + (S.mapOpen ? 'true' : 'false') + '" aria-label="' + (S.mapOpen ? 'Shrink the map' : 'Show the whole map') + '">' +
+      mapSVG(res.cumKm, { mini: !S.mapOpen }) + '<span class="maphint">' + (S.mapOpen ? 'Shrink' : 'Whole map') + '</span></button>';
     return h + '</section>';
   }
 
@@ -648,7 +658,7 @@
         '<div class="row2"><button class="btn small taxi" data-act="deload">Take an easier week</button><button class="btn small ghost" data-act="fatigueLater" data-id="' + esc(lastId) + '">Not now</button></div></section>';
     }
     if (coach) h += heroHTML(res);
-    h += miniFlight(res) + weekStrip(res) + '</div>';
+    h += weekStrip(res) + miniFlight(res) + '</div>';
     return h;
   }
 
@@ -942,7 +952,7 @@
       h += '<button class="' + (d.effort === i + 1 ? 'on' : '') + '" data-act="effort" data-v="' + (i + 1) + '"><b>' + (i + 1) + '</b>' + esc(l) + '</button>';
     });
     h += '</div></div><div class="rate"><h3>Note for your coach</h3><textarea id="note" placeholder="Sore knee, felt strong, machine was taken…">' + esc(d.note || '') + '</textarea></div>';
-    h += '<div class="rate"><h3>Photo for your coach 😇</h3>' + (d.photo
+    h += '<div class="rate"><h3>Photo for your coach 😇🌶️</h3>' + (d.photo
       ? '<div class="photoprev"><img src="' + d.photo + '" alt="Your workout photo"><button class="linkbtn" data-act="removePhoto">Remove photo</button></div>'
       : '<label class="btn ghost wide photobtn">' + IC.camera + 'Add a photo (optional)<input type="file" accept="image/*" id="photoIn" hidden></label>' +
         (S.photoBusy ? '<p class="small muted">Preparing the photo…</p>' : '')) + '</div>';
@@ -1282,13 +1292,46 @@
   }
   function closeModal() { var m = document.getElementById('modal'); m.hidden = true; m.innerHTML = ''; render(); }
 
+  /** One logged workout: summary, every exercise with its sets, PBs, her note and the coach's reactions. */
+  function dayWorkoutHTML(res, f) {
+    var raw = S.state.sessions.filter(function (x) { return x.id === f.id; })[0] || { sets: [] };
+    var byEx = [], idx = {};
+    (raw.sets || []).forEach(function (x) {
+      if (!x.done || x.skip) return;
+      if (!(x.ex in idx)) { idx[x.ex] = byEx.length; byEx.push({ ex: x.ex, sets: [] }); }
+      byEx[idx[x.ex]].sets.push(x);
+    });
+    var h = '<section class="dayw"><div class="dwh"><b>' + esc(dayName(f.day)) + '</b><span class="small muted">' +
+      [f.minutes ? f.minutes + ' min' : '', f.reps + ' reps', '+' + Math.round(f.km) + ' km'].filter(Boolean).join(' · ') + '</span></div>';
+    var rx = reactionsFor(f.id);
+    if (rx.length) h += rx.map(function (r) { return '<div class="dayrx"><span class="emo">' + esc(r.emoji || '💬') + '</span><div><b>' + esc(who()) + '</b>' + (r.text ? '“' + esc(r.text) + '”' : ' reacted') + '</div></div>'; }).join('');
+    if (f.prs && f.prs.length) h += '<div class="small daypb">🏅 ' + esc(f.prs.map(function (pr) { return exName(pr.ex) + ' ' + kgFmt(pr.kg) + ' kg × ' + pr.reps; }).join(', ')) + '</div>';
+    if (byEx.length) {
+      h += '<table class="dayex">';
+      byEx.forEach(function (g) {
+        var e = res.prog.exById[g.ex], unit = e ? e.kgLabel : 'kg';
+        var kgs = g.sets.map(function (x) { return Number(x.kg) || 0; }), same = kgs.every(function (k) { return k === kgs[0]; });
+        var line = same ? g.sets.map(function (x) { return x.reps; }).join(', ') + ' at ' + kgFmt(kgs[0]) + ' ' + unit
+          : g.sets.map(function (x) { return x.reps + ' × ' + kgFmt(Number(x.kg) || 0); }).join(', ') + ' ' + unit;
+        h += '<tr><td>' + esc(exName(g.ex)) + '</td><td class="r">' + esc(line) + '</td></tr>';
+      });
+      h += '</table>';
+    }
+    if (raw.note) h += '<p class="small dnote">Note: ' + esc(raw.note) + '</p>';
+    return h + '</section>';
+  }
+
   function daySheet(ds) {
     var res = calc();
     var w = res.sessions.filter(function (s) { return s.date === ds; });
     var has = function (t) { return S.state.stamps.some(function (s) { return s.date === ds && s.type === t; }); };
     var h = '<h2>' + esc(fmtLong(ds)) + '</h2>';
-    if (w.length) h += '<p class="muted">' + w.map(function (f) { return dayName(f.day) + ': ' + f.reps + ' reps, +' + kgFmt(f.km) + ' km'; }).join('. ') + '</p>';
-    else h += '<p class="muted">Ballet and runs don\'t move the plane, but your coach sees them ;)</p>';
+    w.forEach(function (f) { h += dayWorkoutHTML(res, f); });
+    if (!w.length) {
+      var ti = res.settings.trainingWeekdays.indexOf(E.weekday(ds));
+      if (ti >= 0 && ds >= todayStr() && ds >= res.settings.startDate) h += '<p class="muted">' + esc(dayName(ti === 0 ? 'A' : 'B')) + ' workout planned :)</p>';
+      h += '<p class="muted small">Ballet and runs don\'t move the plane, but your coach sees them ;)</p>';
+    }
     h += '<div class="toggles">';
     [['ballet', 'Ballet', IC.ballet], ['run', 'Run', IC.run]].forEach(function (t) {
       var on = has(t[0]);
