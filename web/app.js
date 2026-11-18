@@ -603,7 +603,7 @@
   }
   function streakText(sk) {
     if (sk.current > 0) return '🔥 ' + plural(sk.current, 'week', 'weeks') + ' in a row';
-    return sk.thisWeek > 0 ? '🔥 ' + sk.thisWeek + ' of ' + sk.per + ' this week' : '🔥 Start a streak this week';
+    return sk.thisWeek > 0 ? '🔥 ' + sk.thisWeek + ' of ' + sk.per + ' this week' : '🔥 Start streak this week';
   }
   function calendarHTML(res) {
     var t = todayStr(), st0 = res.settings, base = S.calMonth || t.slice(0, 7);
@@ -667,7 +667,7 @@
     var h = '<section class="hero"><div class="kicker">' + (nd === t ? 'Today' : 'Next workout, ' + esc(fmtLong(nd))) + (mode ? '<span class="pill">' + mode + '</span>' : '') + '</div>' +
       '<h2>' + esc(dayName(day)) + '</h2><div class="meta">' + plural(p.items.length, 'exercise', 'exercises') + ' · ' + p.setsTotal + ' sets · about ' + estMinutes(res, day, p) + ' min</div>' +
       '<div class="muscles">' + p.items.map(function (it) { return '<span title="' + esc(it.muscle) + '">' + muscleSVG(it.slot, it.muscle) + '</span>'; }).join('') + '</div>' +
-      '<button class="btn taxi wide" data-act="board">' + (nd === t ? 'Let\'s go' : 'See the workout') + '</button></section>';
+      '<button class="btn taxi wide" data-act="board">' + (nd === t ? 'Let\'s go' : 'See workout') + '</button></section>';
     return h;
   }
   function miniFlight(res) {
@@ -684,17 +684,16 @@
 
   function viewHome() {
     var res = calc(), t = todayStr(), coach = role() === 'coach';
-    var hn = String(S.state.settings.herName || '').trim();
-    var h = '<div class="screen">' + topHTML(coach ? 'Her view' : hn ? 'Hi, ' + hn + '!' : 'Train', fmtLong(t));
+    var h = '<div class="screen">' + topHTML(coach ? 'Her view' : 'Hello, love!<3', fmtLong(t));
     if (!coach) h += heroHTML(res);
     var mail = coach ? [] : unopenedMail();
     if (mail.length) {
       h += '<button class="banner mail" data-act="postcard" data-id="' + esc(mail[0].id) + '">' + IC.envelope + '<p><b>' +
-        (mail.length > 1 ? plural(mail.length, 'postcard', 'postcards') + ' waiting for you ;)' : 'You have mail from ' + esc(mail[0].from) + ' ;)') +
+        (mail.length > 1 ? plural(mail.length, 'postcard', 'postcards') + ' waiting ;)' : 'You have mail from ' + esc(mail[0].from) + ' ;)') +
         '</b>Tap to open.</p></button>';
     }
     (coach ? [] : unseenCheers().slice(-1)).forEach(function (c) {
-      h += '<button class="banner" data-act="cheerSeen" data-id="' + esc(c.id) + '">' + avatarHTML('coach', 'av-44') + '<p><b>' + esc(c.text) + '</b>From ' + esc(who()) + ', your coach :) Tap to dismiss.</p></button>';
+      h += '<button class="banner" data-act="cheerSeen" data-id="' + esc(c.id) + '">' + avatarHTML('coach', 'av-44') + '<p><b>' + esc(c.text) + '</b>From hubby :) Tap to dismiss.</p></button>';
     });
     (coach ? [] : unseenReactions().slice(-1)).forEach(function (r) {
       var s = res.sessions.filter(function (x) { return x.id === r.sessionId; })[0];
@@ -704,7 +703,7 @@
     });
     var lastId = res.sessions.length ? res.sessions[res.sessions.length - 1].id : '';
     if (!coach && res.fatigue.offer && !S.seen['fat:' + lastId] && !S.draft) {
-      h += '<section class="panel offer"><h3>Take an easier week?</h3><p class="small">A few lifts have dipped over the last two weeks. ' +
+      h += '<section class="panel offer"><h3>Take easier week?</h3><p class="small">Few lifts have dipped over the last two weeks. ' +
         'An easier week has half the sets with 3–4 reps in reserve, then you\'re back to your best weights.</p>' +
         '<div class="row2"><button class="btn small taxi" data-act="deload">Take an easier week</button><button class="btn small ghost" data-act="fatigueLater" data-id="' + esc(lastId) + '">Not now</button></div></section>';
     }
@@ -730,7 +729,7 @@
     var mail = coach ? [] : unopenedMail();
     if (mail.length) {
       h += '<button class="banner mail" data-act="postcard" data-id="' + esc(mail[0].id) + '">' + IC.envelope + '<p><b>' +
-        (mail.length > 1 ? plural(mail.length, 'postcard', 'postcards') + ' waiting for you ;)' : 'You have mail from ' + esc(mail[0].from) + ' ;)') + '</b>Tap to open.</p></button>';
+        (mail.length > 1 ? plural(mail.length, 'postcard', 'postcards') + ' waiting ;)' : 'You have mail from ' + esc(mail[0].from) + ' ;)') + '</b>Tap to open.</p></button>';
     }
     return h + postcardBox() + '</div>';
   }
@@ -965,11 +964,11 @@
   function viewLanding() {
     var pv = preview(), c = pv.session, d = S.draft, st = pv.result.settings;
     var n = pv.result.sessions.length, left = Math.max(0, st.routeKm - c.cumKm);
-    var h = '<div class="screen"><header class="top"><div class="who"><h1>Nice work :)</h1><div class="small muted">Workout ' + n + ', ' + esc(dayName(d.day)) +
+    var h = '<div class="screen"><header class="top"><div class="who"><h1>Nice work love :)</h1><div class="small muted">Workout ' + n + ', ' + esc(dayName(d.day)) +
       ', ' + Math.max(1, Math.round(((d.finishedAt || Date.now()) - d.startedAt) / 60000)) + ' min</div></div>' + syncHTML() + '</header>' + mapSVG(c.cumKm);
     h += '<div class="kmbig">+' + kgFmt(c.km) + '<small>km</small></div>';
     h += '<p class="kmsplit">' + c.reps + ' reps toward ' + esc(who()) + '\'s flight. ' +
-      (left > 0 ? km(left) + ' km until he flies to Luxembourg.' : '<b>Flight unlocked ✈ ' + esc(who()) + ' to LUX</b>') + '</p>';
+      (left > 0 ? km(left) + ' km until flying to Luxembourg.' : '<b>Flight unlocked ✈ ' + esc(who()) + ' to LUX</b>') + '</p>';
     if (c.goals && c.goals.length) {
       h += '<section class="panel pbpanel goalpanel"><h3>🎯 Goal reached!</h3><ul class="uplist">';
       c.goals.forEach(function (g) {
@@ -1331,7 +1330,7 @@
       return '<div class="pcr-sent"><span class="avwrap">' + avatarHTML('her', 'av-44') + '<i class="avbadge">' + esc(c.replyEmoji || '💬') + '</i></span><div><b>Your reply to ' + esc(who()) + '</b>' + (c.replyText ? '“' + esc(c.replyText) + '”' : '') +
         '</div><button class="linkbtn" data-act="pcEdit">Change</button></div>';
     }
-    return '<h3 class="withav">' + avatarHTML('coach', 'av-32') + 'Reply to ' + esc(who()) + '</h3><div class="pcr-emojis">' + PC_EMOJIS.map(function (e) {
+    return '<h3 class="withav">' + avatarHTML('coach', 'av-32') + 'Reply to coach</h3><div class="pcr-emojis">' + PC_EMOJIS.map(function (e) {
       return '<button class="chip emo' + (S.pcEmoji === e ? ' on' : '') + '" data-act="pcEmoji" data-v="' + e + '" aria-label="React with ' + e + '">' + e + '</button>';
     }).join('') + '</div><textarea id="pcText" maxlength="500" placeholder="Write something back (optional)">' + esc(c.replyText || '') + '</textarea>' +
       '<button class="btn taxi wide" data-act="pcSend">Send to ' + esc(who()) + '</button>';
@@ -1345,7 +1344,7 @@
       '<div class="pc-face pc-front">' + (c.photo ? '<img src="' + esc(c.photo) + '" alt="' + esc(c.place) + '">' : frontArt(c)) +
       '<div class="cap"><small>Greetings from ' + esc(c.from) + '</small>' + esc(c.place) + '</div></div>' +
       '<div class="pc-face pc-back"><div class="inner"><div class="msg">' + esc(c.message || '') + '</div><div class="side">' + stampSVG() + postmarkSVG(c.from, c.deliveredOn) +
-      '<div class="addr">To ' + esc(name) + ',<br>from somewhere over ' + esc(c.over) + '</div></div></div></div></div></div>' +
+      '<div class="addr">To ' + esc(name) + ',<br>from ' + esc(c.over) + '</div></div></div></div></div></div>' +
       '<p class="pc-hint" id="pcHint">Tap the card to turn it over</p>' + (c.delivered ? '<div class="pcreply" id="pcReply">' + pcReplyHTML(c, false) + '</div>' : '') +
       '<button class="btn ghost wide pc-close" data-act="closeModal">Close</button></div>';
     S.pcId = c.id; S.pcEmoji = c.replyEmoji || '';
