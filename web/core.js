@@ -22,7 +22,7 @@ var FlightCore = (function () {
     Sets: ['sessionId', 'date', 'day', 'slot', 'exercise', 'exerciseName', 'set', 'kg', 'reps', 'done', 'feedback'],
     Overrides: ['date', 'exercise', 'kg', 'note'],
     Stamps: ['date', 'type'],
-    Postcards: ['id', 'km', 'over', 'from', 'place', 'photo', 'message', 'openedAt'],
+    Postcards: ['id', 'km', 'over', 'from', 'place', 'photo', 'message', 'openedAt', 'replyEmoji', 'replyText', 'repliedAt'],
     Cheers: ['id', 'createdAt', 'text', 'seenAt'],
     Reactions: ['id', 'at', 'sessionId', 'emoji', 'text', 'seenAt']
   };
@@ -315,6 +315,7 @@ var FlightCore = (function () {
       var c = { id: str(p.id), km: km, over: str(p.over), from: str(p.from), place: str(p.place),
         delivered: delivered, deliveredOn: delivered ? crossedOn(km) : '', openedAt: str(p.openedAt) };
       if (delivered || role === 'coach') { c.message = str(p.message); c.photo = photoUrl(p.photo); }
+      if (delivered) { c.replyEmoji = str(p.replyEmoji); c.replyText = str(p.replyText); c.repliedAt = str(p.repliedAt); }
       if (role === 'coach') c.written = written;
       c._photo = p.photo;
       return c;
@@ -341,7 +342,7 @@ var FlightCore = (function () {
   function clip(s, n) { return str(s).slice(0, n); }
 
   var ROLE_OPS = {
-    athlete: ['saveSession', 'stamp', 'postcardOpened', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen'],
+    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen'],
     coach: ['cheer', 'override', 'choice', 'deload', 'react']
   };
 
@@ -428,6 +429,16 @@ var FlightCore = (function () {
       patch('Reactions', 'id', clip(op.id, 40), { seenAt: nowIso });
     } else if (op.type === 'postcardOpened') {
       patch('Postcards', 'id', clip(op.id, 20), { openedAt: nowIso });
+    } else if (op.type === 'postcardReply') {
+      var pid = clip(op.id, 20), card = null;
+      data.postcards.forEach(function (r) { if (str(r.id) === pid) card = r; });
+      var remo = clip(op.emoji, 8).trim(), rtxt = clip(op.text, 500).trim();
+      if (!card || !str(card.message).trim() || (!remo && !rtxt)) bad('invalid reply');
+      if (FlightEngine.replay(toEngineInput(data)).cumKm < Number(card.km)) bad('postcard not delivered yet');
+      patch('Postcards', 'id', pid, { replyEmoji: remo, replyText: rtxt, repliedAt: nowIso });
+      var her = str(data.settings.herName) || 'She';
+      notify = { subject: '💌 ' + her + ' replied to your ' + str(card.place) + ' postcard',
+        body: (remo ? remo + ' ' : '') + (rtxt ? '“' + rtxt + '”' : '') + '\n\nPostcard from ' + str(card.from) + ', ' + str(card.place) + '.' };
     } else if (op.type === 'cheerSeen') {
       patch('Cheers', 'id', clip(op.id, 40), { seenAt: nowIso });
     } else if (op.type === 'cheer') {

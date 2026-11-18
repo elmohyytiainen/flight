@@ -242,6 +242,8 @@
       st.choices.push({ at: op.at, slot: op.slot, day: op.day, ex: op.ex });
     } else if (op.type === 'postcardOpened') {
       st.postcards.forEach(function (p) { if (p.id === op.id) p.openedAt = p.openedAt || nowIso(); });
+    } else if (op.type === 'postcardReply') {
+      st.postcards.forEach(function (p) { if (p.id === op.id) { p.replyEmoji = op.emoji; p.replyText = op.text; p.repliedAt = nowIso(); } });
     } else if (op.type === 'cheerSeen') {
       st.cheers.forEach(function (c) { if (c.id === op.id) c.seenAt = c.seenAt || nowIso(); });
     } else if (op.type === 'override') {
@@ -610,7 +612,7 @@
     if (S.draft) {
       return '<section class="hero"><div class="kicker">Workout in progress</div><h2>' + esc(dayName(S.draft.day)) + '</h2><div class="meta">Started ' +
         new Date(S.draft.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + '</div>' +
-        '<button class="btn taxi wide" data-act="resume">Resume workout</button></section>';
+        '<button class="btn taxi wide" data-act="resume">Resume workout</button><button class="linkbtn discard" data-act="discard">Discard it</button></section>';
     }
     var nd = nextSessionDate(res), day = E.nextDay(res), p = E.plan(res, nd, day);
     var mode = p.mode === 'intro' ? 'Intro week' : p.mode === 'back' ? 'Welcome back' : p.mode === 'deload' ? 'Easier week' : '';
@@ -667,7 +669,8 @@
     var cards = S.state.postcards, got = cards.filter(function (c) { return c.delivered; });
     var h = '<div class="section-h"><h2>Postcard box</h2><span class="small muted">' + got.length + ' of ' + cards.length + '</span></div><div class="box">';
     cards.forEach(function (c) {
-      if (c.delivered) h += '<button class="thumb" data-act="postcard" data-id="' + esc(c.id) + '">' + (c.photo ? '<img src="' + esc(c.photo) + '" alt="" loading="lazy">' : frontArt(c, true)) + '<span>' + esc(c.place) + '</span></button>';
+      if (c.delivered) h += '<button class="thumb" data-act="postcard" data-id="' + esc(c.id) + '">' + (c.photo ? '<img src="' + esc(c.photo) + '" alt="" loading="lazy">' : frontArt(c, true)) + '<span>' + esc(c.place) + '</span>' +
+        (c.replyEmoji || c.replyText ? '<i class="rbadge" aria-label="Replied">' + esc(c.replyEmoji || '💬') + '</i>' : '') + '</button>';
       else h += '<div class="thumb sealed">Sealed ;)<br>' + km(c.km) + ' km</div>';
     });
     return h + '</div>';
@@ -883,7 +886,8 @@
 
     h += '<div class="navrow"><button class="btn ghost" data-act="undo"' + (d.undo.length ? '' : ' disabled') + '>' + IC.undo + 'Undo last set</button>' +
       '<button class="btn ghost" data-act="overview">' + IC.list + 'Overview</button></div>';
-    h += '<div class="finishrow"><button class="btn ' + (next === undefined ? 'taxi wide' : 'ghost wide') + '" data-act="finish">Finish workout</button></div></div>';
+    h += '<div class="finishrow"><button class="btn ' + (next === undefined ? 'taxi wide' : 'ghost wide') + '" data-act="finish">Finish workout</button>' +
+      '<button class="linkbtn discard" data-act="discard">Discard this workout</button></div></div>';
     return h;
   }
 
@@ -1202,11 +1206,14 @@
     var avg = E.eta(res, todayStr(), false).avgKm || 70;
     S.state.postcards.forEach(function (c) {
       var status, cls = '';
-      if (c.openedAt) { status = 'Opened'; cls = 'ok'; }
+      if (c.replyEmoji || c.replyText) { status = 'Replied ' + (c.replyEmoji || '💬'); cls = 'ok'; }
+      else if (c.openedAt) { status = 'Opened'; cls = 'ok'; }
       else if (c.delivered) { status = 'Delivered'; cls = 'ok'; }
       else if (!c.written) { var left = c.km - res.cumKm; status = left <= 0 ? 'Passed, write it now!' : left < avg * 2 ? 'Empty, due in ' + km(left) + ' km' : 'Empty'; cls = left < avg * 2 ? 'warn' : ''; }
       else status = 'Written, sealed';
-      h += '<div class="cardrow"><div><b>' + esc(c.place) + '</b>, ' + esc(c.from) + '<div class="small muted">Delivered over ' + esc(c.over) + ' at ' + km(c.km) + ' km</div></div><span class="status ' + cls + '">' + esc(status) + '</span></div>';
+      h += '<div class="cardrow"><div><b>' + esc(c.place) + '</b>, ' + esc(c.from) + '<div class="small muted">Delivered over ' + esc(c.over) + ' at ' + km(c.km) + ' km</div>' +
+        (c.replyText ? '<div class="small">She wrote: “' + esc(c.replyText) + '”</div>' : '') +
+        (c.delivered ? '<button class="linkbtn" data-act="postcard" data-id="' + esc(c.id) + '">Open the card</button>' : '') + '</div><span class="status ' + cls + '">' + esc(status) + '</span></div>';
     });
     h += '<p class="small muted" style="margin:10px 0 0">Write notes and add photo links in the Postcards tab of the Sheet.</p></section>';
     h += '<div class="section-h"><h2>Her workouts</h2></div><div class="feed">';
@@ -1263,6 +1270,24 @@
       '<text x="42" y="46" text-anchor="middle" font-family="Barlow, sans-serif" font-size="9" font-weight="600" fill="#2b3550">' + esc(ds ? fiDate(ds) : '') + '</text>' +
       '<path d="M-60 20q8-5 16 0t16 0 16 0M-60 32q8-5 16 0t16 0 16 0M-60 44q8-5 16 0t16 0 16 0" fill="none" stroke="#2b3550" stroke-width="1.2" transform="translate(4 8)"/></svg>';
   }
+  var PC_EMOJIS = ['❤️', '🥰', '😂', '🥹', '😘', '🔥', '🌶️'];
+  /** Her reply to a postcard: the form, or what she sent with a Change link. The coach only reads it. */
+  function pcReplyHTML(c, editing) {
+    var replied = !!(c.replyEmoji || c.replyText);
+    if (role() === 'coach') {
+      return replied ? '<div class="pcr-sent"><span class="emo">' + esc(c.replyEmoji || '💬') + '</span><div><b>Her reply</b>' + (c.replyText ? '“' + esc(c.replyText) + '”' : '') + '</div></div>'
+        : '<p class="pcr-none">No reply yet.</p>';
+    }
+    if (replied && !editing) {
+      return '<div class="pcr-sent"><span class="emo">' + esc(c.replyEmoji || '💬') + '</span><div><b>Your reply to ' + esc(who()) + '</b>' + (c.replyText ? '“' + esc(c.replyText) + '”' : '') +
+        '</div><button class="linkbtn" data-act="pcEdit">Change</button></div>';
+    }
+    return '<h3>Reply to ' + esc(who()) + '</h3><div class="pcr-emojis">' + PC_EMOJIS.map(function (e) {
+      return '<button class="chip emo' + (S.pcEmoji === e ? ' on' : '') + '" data-act="pcEmoji" data-v="' + e + '" aria-label="React with ' + e + '">' + e + '</button>';
+    }).join('') + '</div><textarea id="pcText" maxlength="500" placeholder="Write something back (optional)">' + esc(c.replyText || '') + '</textarea>' +
+      '<button class="btn taxi wide" data-act="pcSend">Send to ' + esc(who()) + '</button>';
+  }
+
   function openPostcard(id) {
     var c = S.state.postcards.filter(function (x) { return x.id === id; })[0];
     if (!c) return;
@@ -1272,7 +1297,9 @@
       '<div class="cap"><small>Greetings from ' + esc(c.from) + '</small>' + esc(c.place) + '</div></div>' +
       '<div class="pc-face pc-back"><div class="inner"><div class="msg">' + esc(c.message || '') + '</div><div class="side">' + stampSVG() + postmarkSVG(c.from, c.deliveredOn) +
       '<div class="addr">To ' + esc(name) + ',<br>from somewhere over ' + esc(c.over) + '</div></div></div></div></div></div>' +
-      '<p class="pc-hint" id="pcHint">Tap the card to turn it over</p><button class="btn ghost wide pc-close" data-act="closeModal">Close</button></div>';
+      '<p class="pc-hint" id="pcHint">Tap the card to turn it over</p>' + (c.delivered ? '<div class="pcreply" id="pcReply">' + pcReplyHTML(c, false) + '</div>' : '') +
+      '<button class="btn ghost wide pc-close" data-act="closeModal">Close</button></div>';
+    S.pcId = c.id; S.pcEmoji = c.replyEmoji || '';
     showModal(h, true);
     if (role() === 'athlete' && !c.openedAt && !S.seen['pc:' + c.id]) {
       S.seen['pc:' + c.id] = 1;
@@ -1694,6 +1721,37 @@
       case 'fatigueLater': S.seen['fat:' + t.dataset.id] = 1; store.set('seen', S.seen); render(); break;
       case 'day': daySheet(t.dataset.date); break;
       case 'mapToggle': S.mapOpen = !S.mapOpen; render(); break;
+      case 'discard': {
+        var done = S.draft ? S.draft.sets.filter(function (x) { return x.done; }).length : 0;
+        showModal('<h2>Discard this workout?</h2><p>' + (done ? plural(done, 'logged set', 'logged sets') + ', the time and the km from it are thrown away.' : 'Nothing has been logged yet.') +
+          ' Nothing is saved or sent to ' + esc(who()) + '.</p><div class="row"><button class="btn ghost" data-act="closeModal">Keep it</button><button class="btn warnbtn" data-act="discardYes">Discard</button></div>');
+        break;
+      }
+      case 'discardYes':
+        stopRest(); releaseAwake();
+        S.draft = null; store.del('draft');
+        S.view = 'home'; closeModalSilently(); render(); window.scrollTo(0, 0);
+        break;
+      case 'pcEmoji': {
+        S.pcEmoji = S.pcEmoji === t.dataset.v ? '' : t.dataset.v;
+        document.querySelectorAll('#pcReply [data-act="pcEmoji"]').forEach(function (b) { b.classList.toggle('on', b.dataset.v === S.pcEmoji); });
+        break;
+      }
+      case 'pcEdit': {
+        var pe = S.state.postcards.filter(function (x) { return x.id === S.pcId; })[0];
+        if (pe) document.getElementById('pcReply').innerHTML = pcReplyHTML(pe, true);
+        break;
+      }
+      case 'pcSend': {
+        var pc = S.state.postcards.filter(function (x) { return x.id === S.pcId; })[0];
+        var txt = (document.getElementById('pcText') || {}).value || '';
+        txt = txt.trim();
+        if (!pc || (!S.pcEmoji && !txt)) { var ta = document.getElementById('pcText'); if (ta) { ta.placeholder = 'Pick an emoji or write something first :)'; ta.focus(); } break; }
+        enqueue({ type: 'postcardReply', id: pc.id, emoji: S.pcEmoji, text: txt });
+        pc.replyEmoji = S.pcEmoji; pc.replyText = txt; pc.repliedAt = nowIso();
+        document.getElementById('pcReply').innerHTML = pcReplyHTML(pc, false) + '<p class="pcr-ok">Sent to ' + esc(who()) + ' ✈</p>';
+        break;
+      }
       case 'calMonth': S.calMonth = t.dataset.m; render(); break;
       case 'stamp': enqueue({ type: 'stamp', date: t.dataset.date, stampType: t.dataset.type, on: t.dataset.on === '1' }); daySheet(t.dataset.date); render(); break;
       case 'exDetail': exDetail(t.dataset.ex); break;

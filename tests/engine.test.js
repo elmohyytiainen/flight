@@ -160,3 +160,22 @@ test('upgrade retires the other chest options in an existing Sheet', () => {
   assert.ok(w.some(x => x.value === 'incline-smith-press' && x.patch && x.patch.active === false));
   assert.ok(!w.some(x => x.kind === 'append' && x.row.id === 'incline-smith-press'));
 });
+
+// ---------- postcard replies ----------
+test('postcard replies: only on delivered cards, by her, and the coach gets an email', () => {
+  const { data } = simulate({ seed: 1, weeks: 3 });
+  const st = C.buildState(data, 'athlete', '2026-12-14');
+  data.postcards.forEach(p => { p.message = 'Hei!'; });
+  const res = result(data);
+  const delivered = data.postcards.find(p => Number(p.km) <= res.cumKm);
+  const sealed = data.postcards.find(p => Number(p.km) > res.cumKm);
+  assert.ok(delivered && sealed && st);
+  const out = C.applyOp(data, { type: 'postcardReply', id: delivered.id, emoji: '🥰', text: 'Miss you' }, 'athlete', '2026-12-14T10:00:00Z');
+  assert.strictEqual(delivered.replyText, 'Miss you');
+  assert.ok(out.notify && /replied/.test(out.notify.subject) && /Miss you/.test(out.notify.body));
+  const card = C.buildState(data, 'coach', '2026-12-14').postcards.find(c => c.id === delivered.id);
+  assert.strictEqual(card.replyEmoji, '🥰');
+  assert.throws(() => C.applyOp(data, { type: 'postcardReply', id: sealed.id, emoji: '❤️' }, 'athlete', 'x'), /not delivered/);
+  assert.throws(() => C.applyOp(data, { type: 'postcardReply', id: delivered.id, emoji: '', text: ' ' }, 'athlete', 'x'), /invalid/);
+  assert.throws(() => C.applyOp(data, { type: 'postcardReply', id: delivered.id, emoji: '❤️' }, 'coach', 'x'), /not allowed/);
+});

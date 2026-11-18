@@ -313,6 +313,12 @@ function applyWrites_(ss, writes) {
       if (found >= 0) sh.getRange(found + 2, 1, 1, head.length).setValues([line]);
       else sh.getRange(sh.getLastRow() + 1, 1, 1, head.length).setValues([line]);
     } else if (w.kind === 'patch') {
+      var tabCols = FlightCore.TABS[w.tab] || [];
+      if (Object.keys(w.patch).some(function (k) { return col(k) < 0 && tabCols.indexOf(k) >= 0; })) {
+        prepareTabs_(ss); // a column from a newer version, before Flight -> Upgrade was run
+        head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String);
+        values = values.map(function (row) { while (row.length < head.length) row.push(''); return row; });
+      }
       var pi = col(w.by);
       for (var b = 0; b < values.length; b++) {
         if (String(values[b][pi]) !== String(w.value)) continue;
