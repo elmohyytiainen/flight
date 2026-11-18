@@ -97,3 +97,66 @@ test('state sent to either phone never contains the secret keys', () => {
     assert.ok(!s.includes(d.settings.athleteKey) && !s.includes(d.settings.coachKey), role);
   }
 });
+
+// ---------- engine v5: no yo-yo, small lifts move, hold once after an increase ----------
+const LIFTS = ['incline-db-press', 'cable-row', 'neutral-pulldown', 'hip-thrust-machine', 'lateral-raise', 'incline-curl'];
+
+test('steady athlete: a weight never goes up and straight back down', () => {
+  for (const seed of SEEDS) {
+    const { log } = simulate({ seed, weeks: 16 });
+    for (const ex of LIFTS) for (const day of ['A', 'B']) {
+      const w = weights(log, ex, day);
+      for (let i = 1; i < w.length - 1; i++) {
+        assert.ok(!(w[i] > w[i - 1] && w[i + 1] < w[i]), `seed ${seed} ${ex} day ${day}: ${w.join(' ')}`);
+      }
+    }
+  }
+});
+
+test('small lifts (raises, curls) get heavier', () => {
+  for (const seed of SEEDS) {
+    const strong = simulate({ seed, hitRate: 0.95, gainPerWk: 0.02 }).log;
+    const steady = simulate({ seed, weeks: 16 }).log;
+    for (const ex of ['lateral-raise', 'incline-curl']) {
+      assert.ok(last(weights(strong, ex, 'A')) > first(weights(strong, ex, 'A')), `strong seed ${seed} ${ex}`);
+      assert.ok(last(weights(steady, ex, 'A')) > first(weights(steady, ex, 'A')), `steady seed ${seed} ${ex}`);
+    }
+  }
+});
+
+test('"Too hard" on every set for weeks: an easier week is offered', () => {
+  assert.strictEqual(simulate({ seed: 1, fb: 'hard' }).res.fatigue.offer, true);
+});
+
+test('after an increase: one miss holds the new weight, a second miss drops it', () => {
+  const data = newData();
+  const chestSets = (date, kg, reps) => ({ id: date + 'A', date, day: 'A', effort: 3,
+    sets: reps.map((r, i) => ({ slot: 'chest', ex: 'incline-db-press', set: i + 1, kg, reps: r, done: true, rir: '1', target: 4 })) });
+  const save = s => C.applyOp(data, { type: 'saveSession', session: s }, 'athlete', s.date + 'T18:00:00Z');
+  const chest = date => E.plan(result(data), date, 'A').items.find(it => it.slot === 'chest');
+
+  save(chestSets('2026-11-30', 10, [6, 6, 6, 6]));             // top of the range on every set
+  assert.strictEqual(chest('2026-12-07').kg, 11);
+  save(chestSets('2026-12-07', 11, [2, 2, 2, 1]));              // a rough first day at the new weight
+  const held = chest('2026-12-14');
+  assert.strictEqual(held.kg, 11);
+  assert.strictEqual(held.held, true);
+  save(chestSets('2026-12-14', 11, [2, 2, 2, 1]));              // still not there
+  assert.ok(chest('2026-12-21').kg < 11);
+});
+
+test('chest is locked to the incline dumbbell press; glutes can be a Bulgarian split squat', () => {
+  const p = E.plan(result(newData()), '2026-11-30', 'A');
+  const chest = p.items.find(it => it.slot === 'chest'), glutes = p.items.find(it => it.slot === 'glutes');
+  assert.deepStrictEqual(chest.options.map(o => o.exercise.id), ['incline-db-press']);
+  assert.ok(glutes.options.some(o => o.exercise.id === 'bulgarian-split-squat'));
+  assert.ok(glutes.options.find(o => o.exercise.id === 'bulgarian-split-squat').rir.every(r => r !== '0'));
+});
+
+test('upgrade retires the other chest options in an existing Sheet', () => {
+  const data = newData();
+  data.exercises.push({ id: 'incline-smith-press', slot: 'chest', name: 'Incline Smith machine press', rank: 2, active: true });
+  const w = C.exerciseSync(data);
+  assert.ok(w.some(x => x.value === 'incline-smith-press' && x.patch && x.patch.active === false));
+  assert.ok(!w.some(x => x.kind === 'append' && x.row.id === 'incline-smith-press'));
+});

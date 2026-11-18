@@ -96,7 +96,7 @@
   var Demo = (function () {
     var START = { 'incline-db-press': 8, 'incline-smith-press': 20, 'incline-bb-press': 20, 'incline-machine-press': 25,
       'cable-row': 30, 'one-arm-db-row': 10, 'wide-cable-row': 27.5, 'machine-row': 30, 'neutral-pulldown': 32.5,
-      'overhand-pulldown': 30, 'assisted-chinup': 30, 'hip-thrust-machine': 50, 'hip-thrust': 50, 'back-extension': 0, 'rdl': 35,
+      'overhand-pulldown': 30, 'assisted-chinup': 30, 'hip-thrust-machine': 50, 'hip-thrust': 50, 'bulgarian-split-squat': 8, 'back-extension': 0, 'rdl': 35,
       'lateral-raise': 4, 'machine-lateral-raise': 10, 'cable-lateral-raise': 2.5, 'cable-crunch': 20, 'machine-crunch': 20,
       'decline-crunch': 0, 'incline-curl': 5, 'preacher-curl': 10, 'cable-curl': 10, 'rope-pressdown': 12.5, 'bar-pressdown': 15,
       'overhead-extension': 10 };
@@ -584,7 +584,7 @@
     var e = it.exercise;
     return { slot: it.slot, muscle: it.muscle, ex: e.id, name: e.name, kgLabel: e.kgLabel, step: e.stepKg || 1, assisted: e.assisted,
       cue: e.cue, video: e.video, min: it.min, max: it.max, rest: it.rest, pair: it.pair, calibrate: it.calibrate, taxi: it.taxi,
-      estimated: it.estimated, upSteps: it.upSteps, down: it.down, overridden: it.overridden, lastKg: it.lastKg, lastReps: it.lastReps,
+      estimated: it.estimated, upSteps: it.upSteps, down: it.down, held: it.held, overridden: it.overridden, lastKg: it.lastKg, lastReps: it.lastReps,
       options: it.options.length, oneOff: false };
   }
   function setsFromPlan(it) {
@@ -658,6 +658,7 @@
     if (it.oneOff) h += '<span class="tag">Just for today</span>';
     if (it.upSteps && !it.oneOff) h += '<span class="tag up">Heavier today >:)</span>';
     if (it.down && !it.oneOff) h += '<span class="tag">Lighter today, so you hit the reps</span>';
+    if (it.held && !it.oneOff) h += '<span class="tag">Same weight again, it gets easier</span>';
     if (it.estimated) h += '<span class="tag">Estimated from your ' + esc(dayName(d.day === 'A' ? 'B' : 'A')) + ' day</span>';
     if (it.overridden) h += '<span class="tag">Weight set by your coach</span>';
     if (it.lastReps && it.lastKg !== null && it.lastKg !== undefined && !it.upSteps) h += '<span class="tag">Last time ' + it.lastReps.join(', ') + ' at ' + kgFmt(it.lastKg) + ' kg</span>';
@@ -1048,7 +1049,7 @@
     h += '<div class="section-h"><h2>Next: ' + esc(dayName(day)) + '</h2><span class="small muted">' + esc(fmtDate(nd)) + (p.mode !== 'normal' ? ', ' + (p.mode === 'intro' ? 'intro week' : p.mode === 'back' ? 'welcome back' : 'easier week') : '') + '</span></div>';
     h += '<section class="panel" style="margin-top:0"><table class="plantable">';
     p.items.forEach(function (it) {
-      var tag = it.upSteps ? ' <span class="status ok">increase</span>' : it.overridden ? ' <span class="status">you set</span>' : it.estimated ? ' <span class="status">estimated</span>' : '';
+      var tag = it.upSteps ? ' <span class="status ok">increase</span>' : it.overridden ? ' <span class="status">you set</span>' : it.held ? ' <span class="status">holding</span>' : it.estimated ? ' <span class="status">estimated</span>' : '';
       h += '<tr><td><span class="small muted">' + esc(it.muscle) + (it.pair ? ', superset' : '') + '</span><br>' + esc(it.exercise.name) + tag + '<div class="small muted">' + esc(itemLine(it)) +
         ', last set ' + esc(rirText(it.rir[it.rir.length - 1])) + '</div></td><td class="r"><button class="btn ghost small" data-act="override" data-ex="' + esc(it.exercise.id) +
         '" data-kg="' + (it.kg === null ? '' : it.kg) + '" data-name="' + esc(it.exercise.name) + '">Set kg</button></td></tr>';

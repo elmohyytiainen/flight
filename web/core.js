@@ -95,14 +95,9 @@ var FlightCore = (function () {
 
   function seedExercises() {
     return [
+      // Chest is locked to the incline dumbbell press: chest and front delts in one movement.
       ex('chest', 1, 'incline-db-press', 'Incline dumbbell press', { step: 1, mult: 2, label: 'kg / hand',
         cue: 'Bench at about 30 degrees. Lower to the upper chest, elbows about 45 degrees out. Hits chest and front delts.' }),
-      ex('chest', 2, 'incline-smith-press', 'Incline Smith machine press', { stable: true,
-        cue: 'Bench at about 30 degrees, bar path to the upper chest. Shoulder blades back and down.' }),
-      ex('chest', 3, 'incline-bb-press', 'Incline barbell press', {
-        cue: 'Bench at about 30 degrees, grip a bit wider than the shoulders. Lower to the upper chest. Use a spotter or safeties.' }),
-      ex('chest', 4, 'incline-machine-press', 'Incline machine press', { stable: true,
-        cue: 'Seat so the handles start at upper-chest height. Press without shrugging. Only if your gym has one.' }),
       ex('upper-back', 1, 'cable-row', 'Seated cable row', { stable: true,
         cue: 'Chest up, slight lean forward at the start. Pull to the lower ribs and squeeze the shoulder blades together.' }),
       ex('upper-back', 2, 'one-arm-db-row', 'One-arm dumbbell row', { step: 1, label: 'kg',
@@ -121,9 +116,13 @@ var FlightCore = (function () {
         cue: 'Pad low on the hips, chin tucked. Drive through the heels and pause 1 s at the top.' }),
       ex('glutes', 2, 'hip-thrust', 'Barbell hip thrust', {
         cue: 'Chin tucked, ribs down. Drive through the heels and pause 1 s at the top.' }),
-      ex('glutes', 3, 'back-extension', 'Glute-biased 45° back extension', { base: 35, label: 'kg added', start: 0,
+      ex('glutes', 3, 'bulgarian-split-squat', 'Bulgarian split squat', { step: 2, mult: 2, label: 'kg / hand', rir: '1–2',
+        cue: 'Back foot on a bench, front foot far enough forward that you sink straight down. Lean the chest forward a little ' +
+          'and go down until the back knee is just above the floor. Push up through the front heel. All reps on one leg, ' +
+          'then the other; count reps per leg.' }),
+      ex('glutes', 4, 'back-extension', 'Glute-biased 45° back extension', { base: 35, label: 'kg added', start: 0,
         cue: 'Toes turned out, upper back slightly rounded. Squeeze the glutes to come up.' }),
-      ex('glutes', 4, 'rdl', 'Romanian deadlift', { rir: '1–2',
+      ex('glutes', 5, 'rdl', 'Romanian deadlift', { rir: '1–2',
         cue: 'Soft knees, hips back, bar close to the legs. Stop when the hamstrings stretch. Never grind these.' }),
       ex('side-delts', 1, 'lateral-raise', 'Dumbbell lateral raise', { step: 1, mult: 2, label: 'kg / hand',
         cue: 'Lead with the elbows, stop at shoulder height, lower slowly.' }),
@@ -217,7 +216,8 @@ var FlightCore = (function () {
     return writes;
   }
 
-  var RETIRED = ['machine-chest-press', 'low-incline-db-press', 'flat-db-press', 'weighted-dip', 'db-row'];
+  var RETIRED = ['machine-chest-press', 'low-incline-db-press', 'flat-db-press', 'weighted-dip', 'db-row',
+    'incline-smith-press', 'incline-bb-press', 'incline-machine-press']; // chest locked to the incline DB press (Nov 2026)
 
   /**
    * Keeps an existing Exercises tab in step with the seed: adds new exercises, retires old ones
