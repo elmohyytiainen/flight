@@ -51,8 +51,9 @@ jobs:
         run: clasp deploy -i "$DEPLOYMENT_ID" -d "${GITHUB_REF_NAME} ${GITHUB_SHA::7}"
 
   pages:
+    # Only waits for the tests, so a backend deploy problem never takes the app offline.
     if: github.ref_name == 'main'
-    needs: apps-script
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: github-pages
