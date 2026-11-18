@@ -110,6 +110,20 @@ var FlightCore = (function () {
     var k = Math.max(0, dayNo(date) - dayNo(Q_START));
     return list[k < list.length ? k : k % list.length];
   }
+  /** Days in a row that both answered. Today only adds once both have answered, and never breaks it. A late catch-up mends a gap. */
+  function qaStreak(data, today) {
+    var by = {};
+    (data.answers || []).forEach(function (a) { var d = str(a.date); if (d) (by[d] = by[d] || {})[str(a.role)] = 1; });
+    function both(d) { return !!(by[d] && by[d].athlete && by[d].coach); }
+    var run = 0, best = 0, current = 0;
+    for (var d = Q_START; d <= today; d = addDaysStr(d, 1)) {
+      if (both(d)) run++;
+      else if (d !== today) run = 0;
+      if (run > best) best = run;
+    }
+    current = run;
+    return { current: current, best: best, today: both(today) };
+  }
   /** What one side may see: their own answers, and the other's only for days they have answered too. */
   function twoAnswers(data, role, today) {
     var mine = {}, theirs = {}, asked = {};
@@ -437,6 +451,7 @@ var FlightCore = (function () {
         return { id: str(r.id), at: str(r.at), sessionId: str(r.sessionId), emoji: str(r.emoji), text: str(r.text), seenAt: str(r.seenAt) };
       }),
       twoAnswers: twoAnswers(data, role, today),
+      qaStreak: qaStreak(data, today),
       summary: { cumKm: cum, completed: result.completedCount, reps: result.totalReps, landedOn: result.landedOn }
     };
   }

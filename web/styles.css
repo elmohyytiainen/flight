@@ -684,3 +684,7 @@ h3.withav { display: flex; }
 .qwait { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); margin: 8px 0 10px; }
 .qpast { background: var(--steel); border-radius: var(--r-lg); padding: 12px 14px; margin-top: 10px; }
 .qpast .qq { font-size: 16px; }
+.qstreak { font-size: 13px; font-weight: 600; color: var(--pink); background: var(--pink-soft); border-radius: 999px; padding: 4px 11px; white-space: nowrap; }
+.qstreak.zero { color: var(--ink-2); background: #fff; }
+.qearlier { display: block; margin: 12px 0 0 auto; }
+.qsline { color: var(--pink); margin-top: -4px; }

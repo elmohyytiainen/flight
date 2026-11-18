@@ -503,13 +503,21 @@
     var days = (S.state && S.state.twoAnswers) || [], q = days[0];
     if (!q) return '';
     var waiting = days.slice(1).filter(function (d) { return d.canAnswer && d.theirsAnswered; }).length;
-    return '<section class="panel qa"><div class="qahead"><span class="qkick">💬 Two answers · today</span>' +
-      (days.length > 1 ? '<button class="linkbtn" data-act="qaPast">Earlier' + (waiting ? ' (' + waiting + ' to answer)' : '') + '</button>' : '') + '</div>' +
-      qaDayHTML(q, false) + '</section>';
+    return '<section class="panel qa"><div class="qahead"><span class="qkick">💬 Two answers · today</span>' + qaStreakChip() + '</div>' +
+      qaDayHTML(q, false) +
+      (days.length > 1 ? '<button class="linkbtn qearlier" data-act="qaPast">Earlier days' + (waiting ? ' (' + waiting + ' to answer)' : '') + ' ›</button>' : '') + '</section>';
+  }
+  /** 💞 days in a row that you both answered; pink, so it can't be mixed up with the workout 🔥. */
+  function qaStreakChip() {
+    var k = (S.state && S.state.qaStreak) || { current: 0 };
+    return '<span class="qstreak' + (k.current ? '' : ' zero') + '" title="Days in a row you both answered">💞 ' +
+      (k.current ? plural(k.current, 'day', 'days') : 'Start a streak') + '</span>';
   }
   function qaPastSheet() {
     var days = ((S.state && S.state.twoAnswers) || []).slice(1);
-    var h = '<h2>Two answers</h2>';
+    var k = (S.state && S.state.qaStreak) || { current: 0, best: 0 };
+    var h = '<h2>Two answers</h2><p class="small qsline">💞 ' + plural(k.current, 'day', 'days') + ' in a row you both answered' +
+      (k.best > k.current ? ' · best ' + plural(k.best, 'day', 'days') : '') + '. Catching up on a missed day mends the streak.</p>';
     if (!days.length) h += '<p class="muted">Earlier questions show up here.</p>';
     days.forEach(function (q) { h += '<section class="qa qpast"><div class="qkick">' + esc(fmtLong(q.date)) + '</div>' + qaDayHTML(q, true) + '</section>'; });
     showModal(h + '<div class="row"><button class="btn ghost" data-act="closeModal">Done</button></div>');

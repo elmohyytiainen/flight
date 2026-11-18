@@ -205,3 +205,17 @@ test('two answers: each sees the other\'s answer only after answering the same d
   data.questions = [{ question: 'Pinned one?', date: '2026-11-21', active: true }];
   assert.strictEqual(C.questionFor(data, '2026-11-21'), 'Pinned one?');
 });
+
+test('two answers streak: days in a row both answered; today never breaks it', () => {
+  const data = newData();
+  const both = d => { data.answers.push({ date: d, role: 'athlete', text: 'a' }, { date: d, role: 'coach', text: 'b' }); };
+  both('2026-11-16'); both('2026-11-17'); both('2026-11-18');
+  data.answers.push({ date: '2026-11-19', role: 'coach', text: 'only him' });   // today, she hasn't answered yet
+  let k = C.buildState(data, 'athlete', '2026-11-19').qaStreak;
+  assert.deepStrictEqual([k.current, k.best, k.today], [3, 3, false]);
+  data.answers.push({ date: '2026-11-19', role: 'athlete', text: 'now me' });
+  k = C.buildState(data, 'athlete', '2026-11-19').qaStreak;
+  assert.deepStrictEqual([k.current, k.today], [4, true]);
+  k = C.buildState(data, 'athlete', '2026-11-21').qaStreak;                    // missed the 20th
+  assert.deepStrictEqual([k.current, k.best], [0, 4]);
+});
