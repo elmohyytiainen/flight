@@ -1253,7 +1253,7 @@
       '<rect width="300" height="200" fill="#1B264F"/>' +
       '<path d="M0 150Q75 128 150 146T300 138V200H0Z" fill="#24315F"/><path d="M0 170Q90 152 170 168T300 160V200H0Z" fill="#2C3B6E"/>' +
       '<text x="150" y="' + (small ? 118 : 112) + '" text-anchor="middle" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="700" font-size="' +
-      Math.min(96, Math.floor(560 / Math.max(4, big.length))) + '" fill="#F2603E" stroke="#1B264F" stroke-width="2" paint-order="stroke">' + esc(big) + '</text></svg>';
+      Math.min(96, Math.floor(560 / Math.max(4, big.length))) + '" fill="#7796CB" stroke="#1B264F" stroke-width="2" paint-order="stroke">' + esc(big) + '</text></svg>';
   }
   function stampSVG() {
     var h = '<svg class="stamp" viewBox="0 0 58 70" aria-hidden="true"><rect x="2" y="2" width="54" height="66" fill="#fff" stroke="#c9c1ad" stroke-width="1"/>';
@@ -1558,7 +1558,7 @@
     var c = document.getElementById('confetti'), ctx = c.getContext && c.getContext('2d');
     if (!ctx) return;
     var W = c.width = innerWidth * devicePixelRatio, H = c.height = innerHeight * devicePixelRatio;
-    var colors = ['#F2603E', '#1B264F', '#F5B700', '#9AA5B1', '#FFFFFF'];
+    var colors = ['#7796CB', '#1B264F', '#F5B700', '#9AA5B1', '#FFFFFF'];
     var ps = [];
     for (var i = 0; i < 140; i++) ps.push({ x: W / 2 + (Math.random() - .5) * W * .3, y: H * .35, vx: (Math.random() - .5) * 18 * devicePixelRatio,
       vy: (-Math.random() * 16 - 6) * devicePixelRatio, r: Math.random() * Math.PI, vr: (Math.random() - .5) * .4, w: (6 + Math.random() * 6) * devicePixelRatio,

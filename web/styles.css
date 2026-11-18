@@ -11,7 +11,7 @@
 @font-face { font-family: "Caveat"; src: url(fonts/caveat-latin-600-normal.woff2) format("woff2"); font-weight: 600; font-display: swap; }
 
 :root {
-  /* palette: white, brushed steel, soft navy, coral highlight */
+  /* palette: white, brushed steel, soft navy, periwinkle-blue highlight */
   --ink: #1B264F;
   --ink-2: #5E6B7D;
   --paper: #FFFFFF;
@@ -23,8 +23,8 @@
   --land: #FFFFFF;
   --land-edge: #BFC8D2;
   --border-c: #CDD4DB;
-  --taxi: #F2603E;        /* the highlight (name kept from the yellow days) */
-  --taxi-ink: #FFFFFF;
+  --taxi: #7796CB;        /* the highlight (name kept from the yellow days) */
+  --taxi-ink: #1B264F;     /* navy on the light blue: 5:1, white would be 3:1 */
   --gold: #F5B700;        /* completed workouts in the calendar */
   --go: #23865A;
   --warn: #C62828;
@@ -485,7 +485,7 @@ button.exprog { width: 100%; border: 0; background: transparent; text-align: lef
 .hero .meta { font-size: 15px; color: rgba(255,255,255,.8); }
 .hero .muscles { margin: 14px 0 16px; }
 .hero .muscles span { background: rgba(255,255,255,.08); border-radius: 10px; display: grid; place-items: center; }
-.hero .muscle .body { fill: rgba(255,255,255,.28); }
+.hero .muscle .body { fill: rgba(255,255,255,.16); }
 .hero .muscle .spine { stroke: rgba(27,38,79,.7); }
 .hero .btn { min-height: 56px; font-size: 23px; }
 
