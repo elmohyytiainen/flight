@@ -24,10 +24,111 @@ var FlightCore = (function () {
     Stamps: ['date', 'type'],
     Postcards: ['id', 'km', 'over', 'from', 'place', 'photo', 'message', 'openedAt', 'replyEmoji', 'replyText', 'repliedAt'],
     Cheers: ['id', 'createdAt', 'text', 'seenAt'],
-    Reactions: ['id', 'at', 'sessionId', 'emoji', 'text', 'seenAt']
+    Reactions: ['id', 'at', 'sessionId', 'emoji', 'text', 'seenAt'],
+    Questions: ['question', 'date', 'active'],
+    Answers: ['date', 'role', 'text', 'question', 'at']
   };
   var KEY = { Settings: 'settings', Slots: 'slots', Exercises: 'exercises', Choices: 'choices', Sessions: 'sessions',
-    Sets: 'sets', Overrides: 'overrides', Stamps: 'stamps', Postcards: 'postcards', Cheers: 'cheers', Reactions: 'reactions' };
+    Sets: 'sets', Overrides: 'overrides', Stamps: 'stamps', Postcards: 'postcards', Cheers: 'cheers', Reactions: 'reactions',
+    Questions: 'questions', Answers: 'answers' };
+
+  // ---------- two answers: one question a day, both answer, answers show once both have ----------
+  var Q_START = '2026-11-16';
+  var QUESTIONS = [
+    'What\'s a small thing I do that makes you feel loved?',
+    'Best meal we\'ve ever had together?',
+    'If we had a free weekend anywhere in Europe tomorrow, where are we going?',
+    'What\'s the first thing you noticed about me?',
+    'Which song makes you think of us?',
+    'What\'s one thing you\'d love to learn together?',
+    'Describe your perfect lazy Sunday with me.',
+    'What\'s a memory of us you replay when you miss me?',
+    'Would you rather: a cabin in Lapland or a beach house in Portugal?',
+    'What\'s something you\'re proud of this week?',
+    'What did you want to be when you were little?',
+    'Where do you see us living in five years?',
+    'What\'s the funniest thing that has happened to us?',
+    'Which of my habits secretly annoys you a little? ;)',
+    'What should we cook together on the next visit?',
+    'What\'s a place from your childhood you\'d like to show me?',
+    'Sauna or spa day?',
+    'What\'s one thing you\'d change about long distance if you could?',
+    'What\'s your favourite photo of us and why?',
+    'Three words to describe our relationship?',
+    'What\'s something new you\'d like to try in bed or out of it? ;)',
+    'Which film should we watch together next?',
+    'What\'s a dream trip we should save up for?',
+    'What made you smile today?',
+    'When did you last feel really proud of me?',
+    'What\'s your love language, honestly?',
+    'Morning person or night owl, and which am I really?',
+    'What\'s one goal you have for next year?',
+    'If we got a pet, what would it be called?',
+    'What\'s the best gift you\'ve ever received?',
+    'What do you miss most when we\'re apart?',
+    'What\'s something you\'ve never told me?',
+    'Which fictional couple are we most like?',
+    'What would our perfect wedding day look like? (hypothetically… ;))',
+    'What\'s a skill of mine you\'d steal if you could?',
+    'What would you like us to do more of?',
+    'What\'s your favourite thing about Luxembourg?',
+    'What\'s your favourite thing about Finland so far?',
+    'What\'s the most romantic thing someone could do for you?',
+    'What\'s a song you\'d put on our road-trip playlist?',
+    'What\'s something small that would make your next week easier?',
+    'Would you rather: always cold or always hot?',
+    'What\'s a tradition you want us to have?',
+    'What\'s the best advice you\'ve ever got?',
+    'What do you think I\'m worried about these days?',
+    'What\'s your guilty pleasure?',
+    'Which day of our relationship would you live again?',
+    'Where\'s the first place we should go when I land?',
+    'What\'s a compliment you\'d like to hear more often?',
+    'If our life together was a film, what would it be called?',
+    'Dogs or cats? Wrong answers only.',
+    'What\'s something you\'re looking forward to this month?',
+    'What\'s a food you hated as a kid and love now?',
+    'What do you think we\'re best at as a team?',
+    'What\'s a challenge we\'ve handled well together?',
+    'If you could have dinner with anyone, who would it be?',
+    'What\'s the bravest thing you\'ve done?',
+    'What does a perfect day in Luxembourg look like for you?',
+    'What\'s something we should never stop doing?',
+    'What do you love about yourself?'
+  ];
+  function seedQuestions() { return QUESTIONS.map(function (q) { return { question: q, date: '', active: true }; }); }
+  function dayNo(d) { var p = String(d).split('-'); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 864e5); }
+  function addDaysStr(d, n) { return new Date((dayNo(d) + n) * 864e5).toISOString().slice(0, 10); }
+  /** The question of a day: a row pinned to that date, else the next one in the list (rows of the Questions tab, or the built-in list). */
+  function questionFor(data, date) {
+    var rows = (data.questions || []).filter(function (r) { return str(r.question).trim() && str(r.active).toUpperCase() !== 'FALSE'; });
+    var pinned = rows.filter(function (r) { return str(r.date) === date; })[0];
+    if (pinned) return str(pinned.question).trim();
+    var list = rows.filter(function (r) { return !str(r.date); }).map(function (r) { return str(r.question).trim(); });
+    if (!list.length) list = QUESTIONS;
+    var k = Math.max(0, dayNo(date) - dayNo(Q_START));
+    return list[k < list.length ? k : k % list.length];
+  }
+  /** What one side may see: their own answers, and the other's only for days they have answered too. */
+  function twoAnswers(data, role, today) {
+    var mine = {}, theirs = {}, asked = {};
+    (data.answers || []).forEach(function (a) {
+      var d = str(a.date); if (!d) return;
+      (str(a.role) === role ? mine : theirs)[d] = { text: str(a.text), at: str(a.at) };
+      if (str(a.question)) asked[d] = str(a.question);
+    });
+    var days = [];
+    for (var i = 0; i < 60; i++) {
+      var d = addDaysStr(today, -i);
+      if (d < Q_START) break;
+      var m = mine[d], t = theirs[d];
+      if (i > 0 && !m && !t) continue;
+      if (i > 7 && !(m && t)) continue;           // older days only once both answered
+      days.push({ date: d, question: asked[d] || questionFor(data, d), mine: m ? m.text : '',
+        theirs: m && t ? t.text : '', theirsAnswered: !!t, canAnswer: !m && i <= 7 });
+    }
+    return days;
+  }
 
   // ---------- seeds ----------
   function yt(q) { return 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q + ' form'); }
@@ -334,6 +435,7 @@ var FlightCore = (function () {
       reactions: (data.reactions || []).map(function (r) {
         return { id: str(r.id), at: str(r.at), sessionId: str(r.sessionId), emoji: str(r.emoji), text: str(r.text), seenAt: str(r.seenAt) };
       }),
+      twoAnswers: twoAnswers(data, role, today),
       summary: { cumKm: cum, completed: result.completedCount, reps: result.totalReps, landedOn: result.landedOn }
     };
   }
@@ -344,8 +446,8 @@ var FlightCore = (function () {
   function clip(s, n) { return str(s).slice(0, n); }
 
   var ROLE_OPS = {
-    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto'],
-    coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto']
+    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer'],
+    coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto', 'answer']
   };
 
   function applyOp(data, op, role, nowIso) {
@@ -431,6 +533,21 @@ var FlightCore = (function () {
       patch('Reactions', 'id', clip(op.id, 40), { seenAt: nowIso });
     } else if (op.type === 'postcardOpened') {
       patch('Postcards', 'id', clip(op.id, 20), { openedAt: nowIso });
+    } else if (op.type === 'answer') {
+      if (!data.answers) data.answers = [];
+      var ad = str(op.date), atext = clip(op.text, 1000).trim(), aToday = str(nowIso).slice(0, 10);
+      if (!isDate(ad) || !atext) bad('invalid answer');
+      if (ad < Q_START || dayNo(ad) > dayNo(aToday) + 1 || dayNo(ad) < dayNo(aToday) - 8) bad('that day is closed');
+      if (data.answers.some(function (a) { return str(a.date) === ad && str(a.role) === role; })) bad('already answered');
+      var aq = questionFor(data, ad);
+      var other = data.answers.filter(function (a) { return str(a.date) === ad && str(a.role) !== role; })[0];
+      append('Answers', { date: ad, role: role, text: atext, question: aq, at: nowIso });
+      if (role === 'athlete') {
+        var hn = str(data.settings.herName) || 'She';
+        notify = other
+          ? { subject: '💬 ' + hn + ' answered: ' + aq, body: 'You: ' + str(other.text) + '\n' + hn + ': ' + atext }
+          : { subject: '💬 ' + hn + ' answered today\'s question', body: '"' + aq + '"\n\nAnswer it in the app to see what she wrote ;)' };
+      }
     } else if (op.type === 'profilePhoto') {
       // a small square JPEG kept in the Settings tab (a Sheet cell holds at most 50,000 characters); '' removes it
       var pu = str(op.dataUrl), pkey = role === 'coach' ? 'coachPhoto' : 'herPhoto';
@@ -501,7 +618,7 @@ var FlightCore = (function () {
   return {
     TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises,
     seedPostcards: seedPostcards, postcardSync: postcardSync, upgradePlan: upgradePlan, exerciseSync: exerciseSync, toEngineInput: toEngineInput, buildState: buildState,
-    applyOp: applyOp, photoUrl: photoUrl, teaserUrl: teaserUrl
+    applyOp: applyOp, photoUrl: photoUrl, teaserUrl: teaserUrl, seedQuestions: seedQuestions, questionFor: questionFor, QUESTIONS: QUESTIONS
   };
 })();
 

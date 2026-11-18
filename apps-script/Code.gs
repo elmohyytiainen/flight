@@ -12,7 +12,7 @@
 
 var DATE_COLS = { Sessions: ['id', 'date', 'savedAt'], Sets: ['sessionId', 'date'], Overrides: ['date'], Stamps: ['date'],
   Postcards: ['id', 'openedAt'], Cheers: ['id', 'createdAt', 'seenAt'], Settings: ['value'], Choices: ['at'],
-  Reactions: ['id', 'at', 'sessionId', 'seenAt'] };
+  Reactions: ['id', 'at', 'sessionId', 'seenAt'], Questions: ['date'], Answers: ['date', 'at'] };
 
 // ---------- one-time setup ----------
 
@@ -30,6 +30,7 @@ function setup() {
   }
   seedIfEmpty_(ss, 'Slots', FlightCore.seedSlots());
   seedIfEmpty_(ss, 'Exercises', FlightCore.seedExercises());
+  seedIfEmpty_(ss, 'Questions', FlightCore.seedQuestions());
   seedIfEmpty_(ss, 'Postcards', FlightCore.seedPostcards());
   var pc = ss.getSheetByName('Postcards');
   pc.setColumnWidth(FlightCore.TABS.Postcards.indexOf('message') + 1, 480);
@@ -71,6 +72,7 @@ function upgrade() {
   prepareTabs_(ss);
   seedIfEmpty_(ss, 'Slots', FlightCore.seedSlots());
   seedIfEmpty_(ss, 'Exercises', FlightCore.seedExercises());
+  seedIfEmpty_(ss, 'Questions', FlightCore.seedQuestions());
   var data = readAll_(ss);
   var plan = FlightCore.upgradePlan(data);
   var writes = FlightCore.exerciseSync(data).concat(FlightCore.postcardSync(data));

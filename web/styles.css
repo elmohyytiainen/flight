@@ -670,3 +670,17 @@ h3.withav { display: flex; }
 .top .who h1 { white-space: normal; overflow: visible; }
 #rest:not(.switch):not(.over) { background: var(--steel-dark); }
 .setrow.cur .check:not(:disabled) { background: var(--taxi); }
+
+/* ---------- two answers ---------- */
+.qa { margin-top: 14px; }
+.qahead { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.qkick { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--pink); }
+.qq { font-size: 18px; font-weight: 600; line-height: 1.35; margin: 6px 0 12px; color: var(--ink); }
+.qta { width: 100%; min-height: 76px; border: 0; border-radius: 14px; padding: 12px 14px; font: inherit; font-size: 16px; background: #fff; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--border-c); resize: vertical; margin-bottom: 10px; }
+.qta:focus { outline: none; box-shadow: inset 0 0 0 2px var(--taxi); }
+.qrow { display: flex; gap: 10px; align-items: flex-start; background: #fff; border-radius: 14px; padding: 10px 12px; margin-top: 8px; font-size: 15px; }
+.qrow.her { background: var(--pink-soft); }
+.qrow b { display: block; font-size: 12px; color: var(--ink-2); font-weight: 600; }
+.qwait { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); margin: 8px 0 10px; }
+.qpast { background: var(--steel); border-radius: var(--r-lg); padding: 12px 14px; margin-top: 10px; }
+.qpast .qq { font-size: 16px; }

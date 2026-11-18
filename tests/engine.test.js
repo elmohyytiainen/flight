@@ -179,3 +179,29 @@ test('postcard replies: only on delivered cards, by her, and the coach gets an e
   assert.throws(() => C.applyOp(data, { type: 'postcardReply', id: delivered.id, emoji: '', text: ' ' }, 'athlete', 'x'), /invalid/);
   assert.throws(() => C.applyOp(data, { type: 'postcardReply', id: delivered.id, emoji: '❤️' }, 'coach', 'x'), /not allowed/);
 });
+
+// ---------- two answers ----------
+test('two answers: each sees the other\'s answer only after answering the same day', () => {
+  const data = newData();
+  const today = '2026-11-20';
+  const q = C.questionFor(data, today);
+  assert.ok(q && typeof q === 'string');
+  C.applyOp(data, { type: 'answer', date: today, text: 'Pasta' }, 'coach', today + 'T09:00:00Z');
+  let her = C.buildState(data, 'athlete', today).twoAnswers[0];
+  assert.strictEqual(her.date, today);
+  assert.strictEqual(her.question, q);
+  assert.strictEqual(her.theirs, '');            // not revealed before she answers
+  assert.strictEqual(her.theirsAnswered, true);
+  assert.strictEqual(her.canAnswer, true);
+  const out = C.applyOp(data, { type: 'answer', date: today, text: 'Pizza' }, 'athlete', today + 'T10:00:00Z');
+  assert.ok(out.notify && /Pasta/.test(out.notify.body) && /Pizza/.test(out.notify.body));
+  her = C.buildState(data, 'athlete', today).twoAnswers[0];
+  assert.strictEqual(her.mine, 'Pizza');
+  assert.strictEqual(her.theirs, 'Pasta');
+  assert.strictEqual(C.buildState(data, 'coach', today).twoAnswers[0].theirs, 'Pizza');
+  assert.throws(() => C.applyOp(data, { type: 'answer', date: today, text: 'again' }, 'athlete', today + 'T11:00:00Z'), /already/);
+  assert.throws(() => C.applyOp(data, { type: 'answer', date: '2026-12-30', text: 'x' }, 'athlete', today + 'T11:00:00Z'), /closed/);
+  // a question pinned to a date wins
+  data.questions = [{ question: 'Pinned one?', date: '2026-11-21', active: true }];
+  assert.strictEqual(C.questionFor(data, '2026-11-21'), 'Pinned one?');
+});

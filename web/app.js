@@ -152,6 +152,13 @@
       }
       if (!empty) data.cheers.push({ id: 'c1', createdAt: nowIso(), text: 'Great week! Friday is Volume day. Go get it.', seenAt: '' });
       if (n) data.reactions.push({ id: 'r1', at: nowIso(), sessionId: 'demo' + n, emoji: '🔥', text: 'Look at that hip thrust >:)', seenAt: '' });
+      if (!empty) {
+        var td = todayStr(), yd = E.addDays(td, -1);
+        data.answers = [
+          { date: yd, role: 'coach', text: 'The pasta place in Kirchberg, no contest.', question: C.questionFor(data, yd), at: nowIso() },
+          { date: yd, role: 'athlete', text: 'That tiny pizza place where it rained all evening :)', question: C.questionFor(data, yd), at: nowIso() },
+          { date: td, role: 'coach', text: 'Porto. Pastéis de nata for breakfast every day.', question: C.questionFor(data, td), at: nowIso() }];
+      }
       return data;
     }
     var data = null, SK = 'fl.demo.v5.server';
@@ -242,6 +249,8 @@
       st.choices.push({ at: op.at, slot: op.slot, day: op.day, ex: op.ex });
     } else if (op.type === 'postcardOpened') {
       st.postcards.forEach(function (p) { if (p.id === op.id) p.openedAt = p.openedAt || nowIso(); });
+    } else if (op.type === 'answer') {
+      (st.twoAnswers || []).forEach(function (q) { if (q.date === op.date) { q.mine = op.text; q.canAnswer = false; } });
     } else if (op.type === 'profilePhoto') {
       st.settings[role() === 'coach' ? 'coachPhoto' : 'herPhoto'] = op.dataUrl;
     } else if (op.type === 'postcardReply') {
@@ -467,6 +476,45 @@
       '<div class="topr">' + syncHTML() + '<button class="avbtn" data-act="profile" aria-label="Your profile photo">' + avatarHTML(me, 'av-44') + '</button></div></header>';
   }
 
+  // ---------- two answers ----------
+  function qaOther() {
+    var coach = role() === 'coach';
+    return { who: coach ? 'her' : 'coach', name: coach ? (String(S.state.settings.herName || '').trim() || 'She') : who() };
+  }
+  function qaRow(whoKey, label, text) {
+    return '<div class="qrow' + (whoKey === 'her' ? ' her' : '') + '">' + avatarHTML(whoKey, 'av-32') + '<div><b>' + esc(label) + '</b>' + esc(text) + '</div></div>';
+  }
+  /** One day: the question, then a box to answer, or both answers, or a wait for the other. */
+  function qaDayHTML(q, inSheet) {
+    var me = role() === 'coach' ? 'coach' : 'her', o = qaOther(), h = '<p class="qq">' + esc(q.question) + '</p>';
+    if (q.canAnswer) {
+      if (q.theirsAnswered) h += '<div class="qwait">' + avatarHTML(o.who, 'av-24') + esc(o.name) + ' has answered. Answer to see it ;)</div>';
+      var id = 'qa-' + q.date;
+      h += '<textarea class="qta" id="' + id + '" maxlength="1000" placeholder="Your answer…"></textarea>' +
+        '<button class="btn taxi wide" data-act="qaSend" data-date="' + q.date + '" data-ta="' + id + '"' + (inSheet ? ' data-sheet="1"' : '') + '>Answer</button>';
+    } else {
+      h += qaRow(me, 'You', q.mine || '…');
+      h += q.theirs ? qaRow(o.who, o.name, q.theirs)
+        : '<div class="qwait">' + avatarHTML(o.who, 'av-24') + (q.theirsAnswered ? 'Revealing…' : 'Waiting for ' + esc(o.name) + '. You\'ll see both answers once you both have.') + '</div>';
+    }
+    return h;
+  }
+  function qaHTML() {
+    var days = (S.state && S.state.twoAnswers) || [], q = days[0];
+    if (!q) return '';
+    var waiting = days.slice(1).filter(function (d) { return d.canAnswer && d.theirsAnswered; }).length;
+    return '<section class="panel qa"><div class="qahead"><span class="qkick">💬 Two answers · today</span>' +
+      (days.length > 1 ? '<button class="linkbtn" data-act="qaPast">Earlier' + (waiting ? ' (' + waiting + ' to answer)' : '') + '</button>' : '') + '</div>' +
+      qaDayHTML(q, false) + '</section>';
+  }
+  function qaPastSheet() {
+    var days = ((S.state && S.state.twoAnswers) || []).slice(1);
+    var h = '<h2>Two answers</h2>';
+    if (!days.length) h += '<p class="muted">Earlier questions show up here.</p>';
+    days.forEach(function (q) { h += '<section class="qa qpast"><div class="qkick">' + esc(fmtLong(q.date)) + '</div>' + qaDayHTML(q, true) + '</section>'; });
+    showModal(h + '<div class="row"><button class="btn ghost" data-act="closeModal">Done</button></div>');
+  }
+
   // ---------- profile photos ----------
   /** A round profile bubble: the photo from Settings, or the first letter of the name. who = 'coach' | 'her'. */
   function avatarHTML(who, cls) {
@@ -685,7 +733,7 @@
   function viewHome() {
     var res = calc(), t = todayStr(), coach = role() === 'coach';
     var h = '<div class="screen">' + topHTML(coach ? 'Her view' : 'Hello, love!<3', fmtLong(t));
-    if (!coach) h += heroHTML(res);
+    if (!coach) h += heroHTML(res) + qaHTML();
     var mail = coach ? [] : unopenedMail();
     if (mail.length) {
       h += '<button class="banner mail" data-act="postcard" data-id="' + esc(mail[0].id) + '">' + IC.envelope + '<p><b>' +
@@ -707,7 +755,7 @@
         'An easier week has half the sets with 3–4 reps in reserve, then you\'re back to your best weights.</p>' +
         '<div class="row2"><button class="btn small taxi" data-act="deload">Take an easier week</button><button class="btn small ghost" data-act="fatigueLater" data-id="' + esc(lastId) + '">Not now</button></div></section>';
     }
-    if (coach) h += heroHTML(res);
+    if (coach) h += heroHTML(res) + qaHTML();
     h += weekStrip(res) + miniFlight(res) + '</div>';
     return h;
   }
@@ -1227,7 +1275,7 @@
   // ---------- coach ----------
   function viewCoach() {
     var res = calc(), s = S.state.settings;
-    var h = '<div class="screen">' + topHTML('Coach console', (s.herName ? s.herName + ', ' : '') + 'flight ' + (s.flightNo || 'AY 1697')) + mapSVG(res.cumKm) + flightlineHTML(res);
+    var h = '<div class="screen">' + topHTML('Coach console', (s.herName ? s.herName + ', ' : '') + 'flight ' + (s.flightNo || 'AY 1697')) + qaHTML() + mapSVG(res.cumKm) + flightlineHTML(res);
     if (s.sheetUrl) h += '<p><a class="btn ghost wide" href="' + esc(s.sheetUrl) + '" target="_blank" rel="noopener">Open the Sheet</a></p>';
     h += '<section class="panel"><h3>Easier week</h3>';
     if (res.deloadLeft > 0) h += '<p class="small">Scheduled: her next ' + plural(res.deloadLeft, 'workout is', 'workouts are') + ' easier (half the sets, 3–4 in reserve).</p>';
@@ -1770,6 +1818,15 @@
       case 'day': daySheet(t.dataset.date); break;
       case 'mapToggle': S.mapOpen = !S.mapOpen; render(); break;
       case 'profile': profileSheet(); break;
+      case 'qaPast': qaPastSheet(); break;
+      case 'qaSend': {
+        var qta = document.getElementById(t.dataset.ta), qtext = qta ? qta.value.trim() : '';
+        if (!qtext) { if (qta) { qta.placeholder = 'Write something first :)'; qta.focus(); } break; }
+        enqueue({ type: 'answer', date: t.dataset.date, text: qtext });
+        if (t.dataset.sheet) qaPastSheet();
+        render();
+        break;
+      }
       case 'avatarRemove': enqueue({ type: 'profilePhoto', dataUrl: '' }); profileSheet(); render(); break;
       case 'discard': {
         var done = S.draft ? S.draft.sets.filter(function (x) { return x.done; }).length : 0;
