@@ -62,7 +62,7 @@
     camera: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="13.2" r="3.4" fill="none" stroke="currentColor" stroke-width="1.9"/></svg>',
     tabHome: '<svg viewBox="-12 -12 24 24" aria-hidden="true"><path class="accent" d="' + PLANE + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" transform="rotate(-35)"/></svg>',
     tabLog: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="accent" x="4" y="3" width="16" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
-    goldCheck: '<svg viewBox="0 0 24 24" class="gc" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="var(--taxi)"/><path d="M6.8 12.4l3.4 3.4 7-7.4" fill="none" stroke="var(--ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    goldCheck: '<svg viewBox="0 0 24 24" class="gc" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="var(--gold)"/><path d="M6.8 12.4l3.4 3.4 7-7.4" fill="none" stroke="var(--ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     dbOutline: '<svg viewBox="0 0 24 24" class="dbo" aria-hidden="true"><rect x="4.2" y="6.5" width="3.6" height="11" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
       '<rect x="16.2" y="6.5" width="3.6" height="11" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.8 10v4M22.2 10v4M7.8 12h8.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
     tabTrain: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="accent" x="4.6" y="6" width="3.4" height="12" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/>' +
@@ -1250,16 +1250,16 @@
   function frontArt(c, small) {
     var big = (c.from || 'Tampere');
     return '<svg class="ill" viewBox="0 0 300 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' +
-      '<rect width="300" height="200" fill="#13224A"/>' +
-      '<path d="M0 150Q75 128 150 146T300 138V200H0Z" fill="#1d3264"/><path d="M0 170Q90 152 170 168T300 160V200H0Z" fill="#253d77"/>' +
+      '<rect width="300" height="200" fill="#1B264F"/>' +
+      '<path d="M0 150Q75 128 150 146T300 138V200H0Z" fill="#24315F"/><path d="M0 170Q90 152 170 168T300 160V200H0Z" fill="#2C3B6E"/>' +
       '<text x="150" y="' + (small ? 118 : 112) + '" text-anchor="middle" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="700" font-size="' +
-      Math.min(96, Math.floor(560 / Math.max(4, big.length))) + '" fill="#FFC233" stroke="#13224A" stroke-width="2" paint-order="stroke">' + esc(big) + '</text></svg>';
+      Math.min(96, Math.floor(560 / Math.max(4, big.length))) + '" fill="#F2603E" stroke="#1B264F" stroke-width="2" paint-order="stroke">' + esc(big) + '</text></svg>';
   }
   function stampSVG() {
     var h = '<svg class="stamp" viewBox="0 0 58 70" aria-hidden="true"><rect x="2" y="2" width="54" height="66" fill="#fff" stroke="#c9c1ad" stroke-width="1"/>';
     for (var x = 4; x < 56; x += 5) h += '<circle cx="' + x + '" cy="2" r="1.6" fill="#FFFDF8"/><circle cx="' + x + '" cy="68" r="1.6" fill="#FFFDF8"/>';
     for (var y = 4; y < 68; y += 5) h += '<circle cx="2" cy="' + y + '" r="1.6" fill="#FFFDF8"/><circle cx="56" cy="' + y + '" r="1.6" fill="#FFFDF8"/>';
-    h += '<rect x="7" y="7" width="44" height="56" fill="#1F4FBF"/><g transform="translate(29 30) rotate(-30) scale(1.25)"><path d="' + PLANE + '" fill="#FFC233"/></g>' +
+    h += '<rect x="7" y="7" width="44" height="56" fill="#1F4FBF"/><g transform="translate(29 30) rotate(-30) scale(1.25)"><path d="' + PLANE + '" fill="#F5B700"/></g>' +
       '<text x="29" y="54" text-anchor="middle" font-family="Barlow, sans-serif" font-size="6.5" font-weight="700" fill="#fff" textLength="38" lengthAdjust="spacingAndGlyphs">SUOMI FINLAND</text></svg>';
     return h;
   }
@@ -1558,7 +1558,7 @@
     var c = document.getElementById('confetti'), ctx = c.getContext && c.getContext('2d');
     if (!ctx) return;
     var W = c.width = innerWidth * devicePixelRatio, H = c.height = innerHeight * devicePixelRatio;
-    var colors = ['#FFC233', '#13224A', '#D7263D', '#1F4FBF', '#FFFFFF'];
+    var colors = ['#F2603E', '#1B264F', '#F5B700', '#9AA5B1', '#FFFFFF'];
     var ps = [];
     for (var i = 0; i < 140; i++) ps.push({ x: W / 2 + (Math.random() - .5) * W * .3, y: H * .35, vx: (Math.random() - .5) * 18 * devicePixelRatio,
       vy: (-Math.random() * 16 - 6) * devicePixelRatio, r: Math.random() * Math.PI, vr: (Math.random() - .5) * .4, w: (6 + Math.random() * 6) * devicePixelRatio,
