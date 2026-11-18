@@ -37,17 +37,27 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm install -g @google/clasp@2.5.0
-      - name: Write clasp credentials and project config
+      - name: Check secrets and write clasp config
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
           SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+          DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
         run: |
-          echo "$CLASPRC_JSON" > ~/.clasprc.json
-          echo "{\"scriptId\":\"$SCRIPT_ID\",\"rootDir\":\"apps-script\",\"fileExtension\":\"gs\"}" > .clasp.json
+          # Strip spaces and line breaks that sneak in when pasting secrets.
+          SCRIPT_ID=$(printf '%s' "$SCRIPT_ID" | tr -d '[:space:]')
+          DEPLOYMENT_ID=$(printf '%s' "$DEPLOYMENT_ID" | tr -d '[:space:]')
+          fail=0
+          [ ${#SCRIPT_ID} -ge 40 ] || { echo "::error::SCRIPT_ID is missing or too short (${#SCRIPT_ID} chars). Add it to the 'production' environment."; fail=1; }
+          [[ "$DEPLOYMENT_ID" == AKfyc* ]] || { echo "::error::DEPLOYMENT_ID is missing or doesn't start with AKfyc (${#DEPLOYMENT_ID} chars)."; fail=1; }
+          printf '%s' "$CLASPRC_JSON" | node -e "const j=JSON.parse(require('fs').readFileSync(0,'utf8'));if(!(j.token||j.tokens))throw 0" \
+            || { echo "::error::CLASPRC_JSON is missing or is not the full .clasprc.json file."; fail=1; }
+          [ $fail = 0 ] || exit 1
+          echo "Secrets look OK: SCRIPT_ID ${#SCRIPT_ID} chars, DEPLOYMENT_ID ${#DEPLOYMENT_ID} chars."
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          printf '{"scriptId":"%s","rootDir":"apps-script","fileExtension":"gs"}' "$SCRIPT_ID" > .clasp.json
+          echo "DEPLOYMENT_ID=$DEPLOYMENT_ID" >> "$GITHUB_ENV"
       - run: clasp push --force
       - name: Deploy a new version to the existing /exec URL
-        env:
-          DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
         run: clasp deploy -i "$DEPLOYMENT_ID" -d "${GITHUB_REF_NAME} ${GITHUB_SHA::7}"
 
   pages:
