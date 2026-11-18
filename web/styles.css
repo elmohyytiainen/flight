@@ -472,3 +472,68 @@ button.exprog { width: 100%; border: 0; background: transparent; text-align: lef
 .goal b { font-weight: 600; font-size: 15px; }
 .goal .progress { margin: 8px 0 6px; background: var(--line); }
 .goal.done { box-shadow: inset 0 0 0 2px var(--taxi); }
+
+/* ---------- train tab: workout first ---------- */
+.hero { background: var(--ink); color: #fff; border-radius: 20px; padding: 18px 18px 16px; margin-top: 4px; }
+.hero .kicker { font-size: 14px; font-weight: 600; color: rgba(255,255,255,.75); text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hero .pill { text-transform: none; letter-spacing: 0; background: var(--taxi); color: var(--taxi-ink); border-radius: 999px; padding: 1px 9px; font-size: 13px; }
+.hero h2 { font-size: 44px; line-height: 1; margin: 6px 0 4px; }
+.hero .meta { font-size: 15px; color: rgba(255,255,255,.8); }
+.hero .muscles { margin: 14px 0 16px; }
+.hero .muscles span { background: rgba(255,255,255,.08); border-radius: 10px; display: grid; place-items: center; }
+.hero .muscle .body { fill: rgba(255,255,255,.28); }
+.hero .muscle .spine { stroke: rgba(19,34,74,.7); }
+.hero .btn { min-height: 56px; font-size: 23px; }
+
+.muscle { width: 24px; height: 32px; display: block; flex: none; }
+.muscle .body { fill: var(--border-c); }
+.muscle .spine { stroke: #fff; stroke-width: .9; fill: none; }
+.muscle .hit { fill: var(--taxi); stroke: var(--ink); stroke-width: .6; }
+
+.miniflight { margin-top: 16px; }
+.mapbtn { display: block; width: calc(100% + 36px); margin: 0 -18px; padding: 0; border: 0; background: none; position: relative; text-align: left; }
+.map.minimap { margin: 0; }
+.maphint { position: absolute; right: 12px; bottom: 10px; background: rgba(255,255,255,.92); color: var(--ink); font-size: 13px; font-weight: 600; border-radius: 999px; padding: 3px 10px; box-shadow: 0 0 0 1px var(--line); }
+.fline { display: flex; width: 100%; justify-content: space-between; align-items: baseline; gap: 10px; border: 0; background: none; padding: 10px 0 0; font-size: 15px; text-align: left; }
+.fline b { font-family: var(--display); font-size: 26px; font-weight: 700; }
+.miniflight .progress { margin: 6px 0 6px; }
+.miniflight .nextcard { margin: 0; }
+
+.weekhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.streakchip { border: 0; background: color-mix(in srgb, var(--taxi) 25%, #fff); color: var(--ink); border-radius: 999px; padding: 4px 11px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+
+/* ---------- plan rows with muscle figures ---------- */
+.prow { grid-template-columns: auto 1fr auto; }
+.pblock.paired .prow { grid-template-columns: 26px auto 1fr auto; }
+.prow .mi { display: grid; place-items: center; background: var(--paper); border-radius: 10px; padding: 4px 6px; }
+.musclegrid .mg { display: inline-flex; align-items: center; gap: 8px; }
+.musclegrid .muscle { width: 15px; height: 20px; }
+
+/* ---------- progress tab: streak and calendar ---------- */
+.streak { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; margin-top: 4px; background: color-mix(in srgb, var(--taxi) 16%, #fff); box-shadow: inset 0 0 0 2px var(--taxi); }
+.streak .flame { font-size: 40px; line-height: 1; }
+.streak .big { font-family: var(--display); font-size: 40px; font-weight: 700; line-height: 1; }
+.streak .big small { font-size: 20px; font-weight: 600; margin-left: 6px; color: var(--ink-2); }
+.streak .wk { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-weight: 600; }
+.streak .dots { display: inline-flex; gap: 4px; }
+.streak .dots i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--ink); }
+.streak .dots i.on { background: var(--ink); }
+
+.cal { padding-top: 12px; }
+.calhead { display: flex; align-items: center; justify-content: space-between; }
+.calhead .ib { font-size: 22px; line-height: 1; }
+.calhead .ib:disabled { opacity: .3; }
+.calgrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; text-align: center; }
+.calgrid .dow { font-size: 12px; color: var(--ink-2); padding-bottom: 2px; }
+.cd { border: 0; background: transparent; border-radius: 10px; min-height: 46px; padding: 4px 0 3px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-family: var(--display); font-size: 17px; font-weight: 600; color: var(--ink); }
+.cd .marks { display: flex; gap: 1px; min-height: 12px; }
+.cd .mk svg { width: 11px; height: 11px; }
+.cd.gym { background: var(--taxi); color: var(--taxi-ink); }
+.cd.today { box-shadow: inset 0 0 0 2px var(--ink); }
+.cd.future { color: var(--ink-2); opacity: .55; }
+.gymdot { width: 12px; height: 12px; border-radius: 4px; background: var(--taxi); display: inline-block; }
+.mapbtn .map.minimap, .mapbtn .map { width: 100%; }
+.mapbtn svg { width: 100%; height: auto; }
+.hero .muscles { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
+.hero .muscles span { padding: 5px 0; }
+.hero .muscle { width: 26px; height: 35px; }

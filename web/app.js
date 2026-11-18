@@ -62,6 +62,12 @@
     camera: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="13.2" r="3.4" fill="none" stroke="currentColor" stroke-width="1.9"/></svg>',
     tabHome: '<svg viewBox="-12 -12 24 24" aria-hidden="true"><path class="accent" d="' + PLANE + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" transform="rotate(-35)"/></svg>',
     tabLog: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="accent" x="4" y="3" width="16" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    tabTrain: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="accent" x="4.6" y="6" width="3.4" height="12" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/>' +
+      '<rect class="accent" x="16" y="6" width="3.4" height="12" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/>' +
+      '<path d="M2 9.5v5M22 9.5v5M8 12h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    tabProgress: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="accent" x="4" y="12" width="4" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/>' +
+      '<rect class="accent" x="10" y="8" width="4" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/>' +
+      '<rect class="accent" x="16" y="4" width="4" height="16" rx="1" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>',
     tabCoach: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="accent" cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 20c1.2-4 4-6 7.5-6s6.3 2 7.5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
   };
 
@@ -352,7 +358,13 @@
     var k = mapKm(gameKm, routeKm);
     var all = M.route.map(function (p) { return p[1] + ',' + p[2]; }).join(' ');
     var plane = routeXY(k);
-    var h = '<svg viewBox="0 0 ' + M.w + ' ' + M.h + '" role="img" aria-label="Route from Tampere to Luxembourg, ' + km(gameKm) + ' km flown">';
+    var vb = '0 0 ' + M.w + ' ' + M.h;
+    if (opts.mini) { // a band around the plane
+      var cw = 250, ch = 96;
+      var vx = Math.max(0, Math.min(M.w - cw, plane[0] - cw * 0.45)), vy = Math.max(0, Math.min(M.h - ch, plane[1] - ch / 2));
+      vb = vx.toFixed(1) + ' ' + vy.toFixed(1) + ' ' + cw + ' ' + ch;
+    }
+    var h = '<svg viewBox="' + vb + '" role="img" aria-label="Route from Tampere to Luxembourg, ' + km(gameKm) + ' km flown">';
     h += '<rect width="' + M.w + '" height="' + M.h + '" fill="var(--sea)"/>';
     h += '<path class="land" d="' + M.land + '"/><path class="borders" d="' + M.borders + '"/>';
     h += '<polyline class="route-todo" points="' + all + '"/>';
@@ -375,7 +387,7 @@
     h += '<g id="planeG" transform="translate(' + plane[0].toFixed(1) + ' ' + plane[1].toFixed(1) + ') rotate(' + plane[2].toFixed(1) + ')">' +
       '<circle class="plane-halo" r="12.5"/><path class="plane" d="' + PLANE + '"/></g>';
     h += '</svg>';
-    return '<div class="map" id="map">' + h + '</div>';
+    return '<div class="map' + (opts.mini ? ' minimap' : '') + '" id="map">' + h + '</div>';
   }
   function animatePlane(fromKm, toKm) {
     var routeKm = Number(S.state.settings.routeKm) || MAPDATA.routeKm;
@@ -477,7 +489,7 @@
   function weekStrip(res) {
     var st = res.settings, t = todayStr();
     var dow = (dateObj(t).getDay() + 6) % 7, monday = E.addDays(t, -dow);
-    var h = '<section class="panel"><h3>This week</h3><div class="week">';
+    var h = '<section class="panel"><div class="weekhead"><h3>This week</h3><button class="streakchip" data-act="tab" data-v="log">' + esc(streakText(weekStreak(res))) + '</button></div><div class="week">';
     for (var i = 0; i < 7; i++) {
       var d = E.addDays(monday, i), wd = E.weekday(d), ti = st.trainingWeekdays.indexOf(wd);
       var done = completedOn(res, d).length > 0, marks = '';
@@ -495,10 +507,125 @@
     return h;
   }
 
-  // ---------- home ----------
+  // ---------- muscle figures ----------
+  // A small body figure with the trained muscle highlighted. Back-view figures have a spine line.
+  var MUSCLES = {
+    'chest': { back: false, parts: ['<rect x="7.7" y="9.2" width="4.1" height="3.6" rx="1.3"/><rect x="12.2" y="9.2" width="4.1" height="3.6" rx="1.3"/>',
+      '<circle cx="6.9" cy="9.6" r="1.6"/><circle cx="17.1" cy="9.6" r="1.6"/>'] },
+    'side-delts': { back: false, parts: ['<circle cx="6.6" cy="9.4" r="2.1"/><circle cx="17.4" cy="9.4" r="2.1"/>'] },
+    'abs': { back: false, parts: ['<rect x="9.3" y="13.2" width="5.4" height="5.8" rx="1.4"/>'] },
+    'biceps': { back: false, parts: ['<rect x="3.8" y="10" width="2.8" height="4.6" rx="1.3"/><rect x="17.4" y="10" width="2.8" height="4.6" rx="1.3"/>'] },
+    'upper-back': { back: true, parts: ['<rect x="7.8" y="8.8" width="8.4" height="4.8" rx="1.6"/>'] },
+    'lats': { back: true, parts: ['<path d="M7.4 10.5 L10.6 12 L10.2 17.5 L7.6 16.4 Z"/><path d="M16.6 10.5 L13.4 12 L13.8 17.5 L16.4 16.4 Z"/>'] },
+    'triceps': { back: true, parts: ['<rect x="3.8" y="10" width="2.8" height="4.6" rx="1.3"/><rect x="17.4" y="10" width="2.8" height="4.6" rx="1.3"/>'] },
+    'glutes': { back: true, parts: ['<rect x="7.6" y="18.2" width="4.2" height="4.4" rx="1.8"/><rect x="12.2" y="18.2" width="4.2" height="4.4" rx="1.8"/>'] }
+  };
+  function muscleSVG(slotKey, label) {
+    var m = MUSCLES[slotKey];
+    if (!m) return '';
+    return '<svg class="muscle" viewBox="0 0 24 32" role="img" aria-label="' + esc(label || slotKey) + '"><g class="body">' +
+      '<circle cx="12" cy="4.2" r="2.9"/><rect x="7" y="8" width="10" height="11.5" rx="2.6"/>' +
+      '<rect x="3.6" y="8.6" width="3.2" height="11" rx="1.6"/><rect x="17.2" y="8.6" width="3.2" height="11" rx="1.6"/>' +
+      '<rect x="7.4" y="18.5" width="4.3" height="12" rx="2"/><rect x="12.3" y="18.5" width="4.3" height="12" rx="2"/></g>' +
+      (m.back ? '<path class="spine" d="M12 8.6V18"/>' : '') + '<g class="hit">' + m.parts.join('') + '</g></svg>';
+  }
+
+  // ---------- streak and calendar ----------
+  function mondayOf(ds) { return E.addDays(ds, -((dateObj(ds).getDay() + 6) % 7)); }
+  /** Weeks in a row with every planned workout done. The current week only adds once it is full, and never breaks the streak. */
+  function weekStreak(res) {
+    var st = res.settings, per = st.trainingWeekdays.length, thisMon = mondayOf(todayStr()), count = {}, first = mondayOf(st.startDate);
+    res.sessions.forEach(function (s) {
+      if (!s.completed) return;
+      var m = mondayOf(s.date); count[m] = (count[m] || 0) + 1;
+      if (m < first) first = m;
+    });
+    var run = 0, best = 0;
+    for (var m = first; m <= thisMon; m = E.addDays(m, 7)) {
+      if ((count[m] || 0) >= per) run++;
+      else if (m !== thisMon) run = 0;
+      if (run > best) best = run;
+    }
+    return { current: run, best: best, thisWeek: count[thisMon] || 0, per: per, started: todayStr() >= st.startDate || res.sessions.length > 0 };
+  }
+  function streakText(sk) {
+    if (sk.current > 0) return '🔥 ' + plural(sk.current, 'week', 'weeks') + ' in a row';
+    return sk.thisWeek > 0 ? '🔥 ' + sk.thisWeek + ' of ' + sk.per + ' this week' : '🔥 Start a streak this week';
+  }
+  function calendarHTML(res) {
+    var t = todayStr(), base = S.calMonth || t.slice(0, 7);
+    var y = +base.slice(0, 4), mo = +base.slice(5, 7);
+    var first = base + '-01', days = new Date(y, mo, 0).getDate(), lead = (dateObj(first).getDay() + 6) % 7;
+    var gym = {}, n = { gym: 0, ballet: 0, run: 0 };
+    res.sessions.forEach(function (s) { if (s.completed && s.date.slice(0, 7) === base) { gym[s.date] = s.day; n.gym++; } });
+    var stamps = {};
+    S.state.stamps.forEach(function (s) {
+      if ((s.type === 'ballet' || s.type === 'run') && s.date.slice(0, 7) === base) { (stamps[s.date] = stamps[s.date] || {})[s.type] = 1; n[s.type]++; }
+    });
+    var prev = mo === 1 ? (y - 1) + '-12' : y + '-' + pad(mo - 1), next = mo === 12 ? (y + 1) + '-01' : y + '-' + pad(mo + 1);
+    var title = dateObj(first).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    var h = '<section class="panel cal"><div class="calhead"><button class="ib" data-act="calMonth" data-m="' + prev + '" aria-label="Previous month">‹</button><h3>' + esc(title) + '</h3>' +
+      '<button class="ib" data-act="calMonth" data-m="' + next + '" aria-label="Next month"' + (next > t.slice(0, 7) ? ' disabled' : '') + '>›</button></div><div class="calgrid">';
+    ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].forEach(function (d) { h += '<span class="dow">' + d + '</span>'; });
+    for (var i = 0; i < lead; i++) h += '<span></span>';
+    for (var d = 1; d <= days; d++) {
+      var ds = base + '-' + pad(d), g = gym[ds], st = stamps[ds] || {};
+      h += '<button class="cd' + (g ? ' gym' : '') + (ds === t ? ' today' : '') + (ds > t ? ' future' : '') + '" data-act="day" data-date="' + ds + '" aria-label="' +
+        esc(fmtLong(ds) + (g ? ', ' + dayName(g) + ' workout' : '') + (st.ballet ? ', ballet' : '') + (st.run ? ', run' : '')) + '"><span>' + d + '</span><span class="marks">' +
+        (st.ballet ? '<i class="mk ballet">' + IC.ballet + '</i>' : '') + (st.run ? '<i class="mk run">' + IC.run + '</i>' : '') + '</span></button>';
+    }
+    h += '</div><div class="legend"><span><i class="gymdot"></i>' + plural(n.gym, 'workout', 'workouts') + '</span><span><i class="mk ballet">' + IC.ballet + '</i>' +
+      n.ballet + ' ballet</span><span><i class="mk run">' + IC.run + '</i>' + plural(n.run, 'run', 'runs') + '</span></div></section>';
+    return h;
+  }
+  function streakHTML(res) {
+    var sk = weekStreak(res);
+    var dots = '';
+    for (var i = 0; i < sk.per; i++) dots += '<i class="' + (i < sk.thisWeek ? 'on' : '') + '"></i>';
+    return '<section class="panel streak"><div class="flame">🔥</div><div><div class="big">' + sk.current + '<small>' + (sk.current === 1 ? 'week' : 'weeks') + ' in a row</small></div>' +
+      '<div class="small muted">' + (sk.current ? 'Every planned workout done, week after week.' : 'Do both workouts this week to start your streak.') +
+      (sk.best > sk.current ? ' Best: ' + plural(sk.best, 'week', 'weeks') + '.' : '') + '</div>' +
+      '<div class="wk small"><span class="dots">' + dots + '</span>This week ' + sk.thisWeek + ' of ' + sk.per + '</div></div></section>';
+  }
+
+  function estMinutes(res, day, p) {
+    var m = res.sessions.filter(function (s) { return s.day === day && s.minutes && s.mode === 'normal'; }).slice(-4).map(function (s) { return s.minutes; });
+    if (m.length) return Math.round(m.reduce(function (a, b) { return a + b; }, 0) / m.length / 5) * 5;
+    return Math.max(20, Math.round(p.setsTotal * 3.2 / 5) * 5);
+  }
+
+  // ---------- train (home) ----------
+  function heroHTML(res) {
+    var t = todayStr();
+    if (S.draft) {
+      return '<section class="hero"><div class="kicker">Workout in progress</div><h2>' + esc(dayName(S.draft.day)) + '</h2><div class="meta">Started ' +
+        new Date(S.draft.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + '</div>' +
+        '<button class="btn taxi wide" data-act="resume">Resume workout</button></section>';
+    }
+    var nd = nextSessionDate(res), day = E.nextDay(res), p = E.plan(res, nd, day);
+    var mode = p.mode === 'intro' ? 'Intro week' : p.mode === 'back' ? 'Welcome back' : p.mode === 'deload' ? 'Easier week' : '';
+    var h = '<section class="hero"><div class="kicker">' + (nd === t ? 'Today' : 'Next workout, ' + esc(fmtLong(nd))) + (mode ? '<span class="pill">' + mode + '</span>' : '') + '</div>' +
+      '<h2>' + esc(dayName(day)) + '</h2><div class="meta">' + plural(p.items.length, 'exercise', 'exercises') + ' · ' + p.setsTotal + ' sets · about ' + estMinutes(res, day, p) + ' min</div>' +
+      '<div class="muscles">' + p.items.map(function (it) { return '<span title="' + esc(it.muscle) + '">' + muscleSVG(it.slot, it.muscle) + '</span>'; }).join('') + '</div>' +
+      '<button class="btn taxi wide" data-act="board">' + (nd === t ? 'Let\'s go' : 'See the workout') + '</button></section>';
+    return h;
+  }
+  function miniFlight(res) {
+    var st = res.settings, eta = E.eta(res, todayStr(), completedOn(res, todayStr()).length > 0);
+    var h = '<section class="miniflight"><button class="mapbtn" data-act="mapToggle" aria-expanded="' + (S.mapOpen ? 'true' : 'false') + '" aria-label="' + (S.mapOpen ? 'Shrink the map' : 'Show the whole map') + '">' +
+      mapSVG(res.cumKm, { mini: !S.mapOpen }) + '<span class="maphint">' + (S.mapOpen ? 'Shrink' : 'Whole map') + '</span></button>' +
+      '<button class="fline" data-act="tab" data-v="trip"><span><b>' + km(res.cumKm) + '</b> of ' + km(st.routeKm) + ' km</span><span class="muted">' +
+      (eta.landed ? 'Landed ✈' : 'Landing ' + esc(fmtDate(eta.date))) + ' ›</span></button>' +
+      '<div class="progress"><span style="width:' + Math.min(100, res.cumKm / st.routeKm * 100).toFixed(1) + '%"></span></div>';
+    var next = sealedAhead(res)[0];
+    if (next && !eta.landed) h += '<p class="nextcard small">Next postcard from <b>' + esc(next.from) + '</b> in <b>' + km(next.km - res.cumKm) + ' km</b> ;)</p>';
+    return h + '</section>';
+  }
+
   function viewHome() {
     var res = calc(), t = todayStr(), coach = role() === 'coach';
-    var h = '<div class="screen">' + topHTML('TMP → LUX', flightSub()) + mapSVG(res.cumKm) + flightlineHTML(res);
+    var h = '<div class="screen">' + topHTML('Train', fmtLong(t));
+    if (!coach) h += heroHTML(res);
     var mail = coach ? [] : unopenedMail();
     if (mail.length) {
       h += '<button class="banner mail" data-act="postcard" data-id="' + esc(mail[0].id) + '">' + IC.envelope + '<p><b>' +
@@ -520,21 +647,30 @@
         'An easier week has half the sets with 3–4 reps in reserve, then you\'re back to your best weights.</p>' +
         '<div class="row2"><button class="btn small taxi" data-act="deload">Take an easier week</button><button class="btn small ghost" data-act="fatigueLater" data-id="' + esc(lastId) + '">Not now</button></div></section>';
     }
-    if (coach) {
-      h += '';
-    } else if (S.draft) {
-      h += '<section class="panel next"><div><h2>Workout in progress</h2><div class="muted small">' + esc(dayName(S.draft.day)) + ', started ' +
-        new Date(S.draft.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + '</div></div>' +
-        '<button class="btn taxi" data-act="resume">Resume</button></section>';
-    } else {
-      var nd = nextSessionDate(res), day = E.nextDay(res), p = E.plan(res, nd, day);
-      h += '<section class="panel next"><div><div class="small muted">Next workout, ' + esc(nd === t ? 'today' : fmtLong(nd)) + '</div>' +
-        '<h2>' + esc(dayName(day)) + '</h2><div class="small muted">' + plural(p.items.length, 'exercise', 'exercises') + ', ' + p.setsTotal + ' sets' +
-        (p.mode === 'intro' ? ', intro week' : p.mode === 'back' ? ', welcome back' : p.mode === 'deload' ? ', easier week' : '') + '</div></div>' +
-        '<button class="btn taxi" data-act="board">Let\'s go</button></section>';
-    }
-    h += weekStrip(res) + '</div>';
+    if (coach) h += heroHTML(res);
+    h += miniFlight(res) + weekStrip(res) + '</div>';
     return h;
+  }
+
+  // ---------- flight (map and postcards) ----------
+  function postcardBox() {
+    var cards = S.state.postcards, got = cards.filter(function (c) { return c.delivered; });
+    var h = '<div class="section-h"><h2>Postcard box</h2><span class="small muted">' + got.length + ' of ' + cards.length + '</span></div><div class="box">';
+    cards.forEach(function (c) {
+      if (c.delivered) h += '<button class="thumb" data-act="postcard" data-id="' + esc(c.id) + '">' + (c.photo ? '<img src="' + esc(c.photo) + '" alt="" loading="lazy">' : frontArt(c, true)) + '<span>' + esc(c.place) + '</span></button>';
+      else h += '<div class="thumb sealed">Sealed ;)<br>' + km(c.km) + ' km</div>';
+    });
+    return h + '</div>';
+  }
+  function viewTrip() {
+    var res = calc(), coach = role() === 'coach';
+    var h = '<div class="screen">' + topHTML('TMP → LUX', flightSub()) + mapSVG(res.cumKm) + flightlineHTML(res);
+    var mail = coach ? [] : unopenedMail();
+    if (mail.length) {
+      h += '<button class="banner mail" data-act="postcard" data-id="' + esc(mail[0].id) + '">' + IC.envelope + '<p><b>' +
+        (mail.length > 1 ? plural(mail.length, 'postcard', 'postcards') + ' waiting for you ;)' : 'You have mail from ' + esc(mail[0].from) + ' ;)') + '</b>Tap to open.</p></button>';
+    }
+    return h + postcardBox() + '</div>';
   }
 
   // ---------- boarding pass (today's workout before starting) ----------
@@ -561,7 +697,7 @@
       h += '<section class="pblock' + (paired ? ' paired' : '') + '">' +
         (paired ? '<div class="pairlbl">Superset ' + sn + ': ' + b.items.map(function (it) { return esc(it.muscle); }).join(' + ') + '<span>back to back, then rest</span></div>' : '');
       b.items.forEach(function (it, k) {
-        h += '<div class="prow">' + (paired ? '<span class="letter">' + 'AB'.charAt(k) + '</span>' : '') +
+        h += '<div class="prow">' + (paired ? '<span class="letter">' + 'AB'.charAt(k) + '</span>' : '') + '<span class="mi">' + muscleSVG(it.slot, it.muscle) + '</span>' +
           '<div><div class="small muted">' + esc(it.muscle) + '</div><b>' + esc(it.exercise.name) + '</b>' +
           '<div class="small">' + esc(itemLine(it)) + '</div></div>' +
           (it.options.length > 1 ? '<button class="linkbtn" data-act="choose" data-slot="' + esc(it.slot) + '" data-ctx="pass" data-day="' + day + '">Change</button>' : '') + '</div>';
@@ -844,7 +980,8 @@
 
   function viewLog() {
     var res = calc(), st = res.settings, ws = weekStats(res);
-    var h = '<div class="screen">' + topHTML('Log', flightSub());
+    var h = '<div class="screen">' + topHTML('Progress', plural(res.completedCount, 'workout', 'workouts') + ' so far');
+    h += streakHTML(res) + calendarHTML(res);
     h += strengthSummary(res);
     h += '<div class="pcards">' + progressCard(res, 'Push', 'chest') + progressCard(res, 'Pull', 'upper-back') + '</div>';
     var ms = res.milestones.slice().reverse();
@@ -874,17 +1011,9 @@
       (s.sets || []).forEach(function (x) { if (x.done && !x.skip) count[x.slot] = (count[x.slot] || 0) + 1; });
     });
     h += '<div class="section-h"><h2>Working sets this week</h2></div><section class="panel" style="margin-top:0"><div class="musclegrid">';
-    res.prog.slots.forEach(function (sl) { h += '<div><span>' + esc(sl.muscle) + '</span><b>' + (count[sl.key] || 0) + '</b></div>'; });
+    res.prog.slots.forEach(function (sl) { h += '<div><span class="mg">' + muscleSVG(sl.key, sl.muscle) + esc(sl.muscle) + '</span><b>' + (count[sl.key] || 0) + '</b></div>'; });
     h += '</div></section>';
 
-    // postcards
-    var cards = S.state.postcards, got = cards.filter(function (c) { return c.delivered; });
-    h += '<div class="section-h"><h2>Postcard box</h2><span class="small muted">' + got.length + ' of ' + cards.length + '</span></div><div class="box">';
-    cards.forEach(function (c) {
-      if (c.delivered) h += '<button class="thumb" data-act="postcard" data-id="' + esc(c.id) + '">' + (c.photo ? '<img src="' + esc(c.photo) + '" alt="" loading="lazy">' : frontArt(c, true)) + '<span>' + esc(c.place) + '</span></button>';
-      else h += '<div class="thumb sealed">Sealed ;)<br>' + km(c.km) + ' km</div>';
-    });
-    h += '</div>';
 
     // exercises
     h += '<div class="section-h"><h2>Exercises</h2><span class="small muted">strength trend, tap for details</span></div><section class="panel" style="margin-top:0;padding-top:6px;padding-bottom:6px">';
@@ -1093,8 +1222,8 @@
 
   function tabsHTML() {
     var tabs = role() === 'coach'
-      ? [['coach', 'Coach', IC.tabCoach], ['home', 'Her view', IC.tabHome], ['log', 'Log', IC.tabLog]]
-      : [['home', 'Home', IC.tabHome], ['log', 'Log', IC.tabLog]];
+      ? [['coach', 'Coach', IC.tabCoach], ['home', 'Her view', IC.tabTrain], ['trip', 'Flight', IC.tabHome], ['log', 'Progress', IC.tabProgress]]
+      : [['home', 'Train', IC.tabTrain], ['trip', 'Flight', IC.tabHome], ['log', 'Progress', IC.tabProgress]];
     return '<div class="tabs"><nav>' + tabs.map(function (t) {
       return '<button class="' + (S.view === t[0] ? 'on' : '') + '" data-act="tab" data-v="' + t[0] + '">' + t[2] + t[1] + '</button>';
     }).join('') + '</nav></div>';
@@ -1521,6 +1650,8 @@
       case 'deload': enqueue({ type: 'deload', date: todayStr() }); render(); break;
       case 'fatigueLater': S.seen['fat:' + t.dataset.id] = 1; store.set('seen', S.seen); render(); break;
       case 'day': daySheet(t.dataset.date); break;
+      case 'mapToggle': S.mapOpen = !S.mapOpen; render(); break;
+      case 'calMonth': S.calMonth = t.dataset.m; render(); break;
       case 'stamp': enqueue({ type: 'stamp', date: t.dataset.date, stampType: t.dataset.type, on: t.dataset.on === '1' }); daySheet(t.dataset.date); render(); break;
       case 'exDetail': exDetail(t.dataset.ex); break;
       case 'sendCheer': {
@@ -1609,8 +1740,8 @@
     if (v === 'coach' && role() !== 'coach') v = 'home';
     S.view = v;
     var html = v === 'home' ? viewHome() : v === 'board' ? viewBoard() : v === 'flight' ? viewFlight() : v === 'landing' ? viewLanding()
-      : v === 'log' ? viewLog() : viewCoach();
-    if (v === 'home' || v === 'log' || v === 'coach') html += tabsHTML();
+      : v === 'log' ? viewLog() : v === 'trip' ? viewTrip() : viewCoach();
+    if (v === 'home' || v === 'log' || v === 'coach' || v === 'trip') html += tabsHTML();
     app.innerHTML = html;
   }
 
