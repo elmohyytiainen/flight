@@ -1,0 +1,67 @@
+name: Test and deploy
+
+# main    -> tests, then the live app (GitHub Pages) and the live Apps Script deployment
+# staging -> tests, then the staging Apps Script deployment only
+on:
+  push:
+    branches: [main, staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node scripts/build.js
+      - name: Generated .gs files are up to date
+        run: git diff --exit-code apps-script/ || (echo "Run 'npm run build' and commit the .gs files" && exit 1)
+      - run: npm test
+
+  apps-script:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install -g @google/clasp@2.5.0
+      - name: Write clasp credentials and project config
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: ${{ secrets.SCRIPT_ID }}
+        run: |
+          echo "$CLASPRC_JSON" > ~/.clasprc.json
+          echo "{\"scriptId\":\"$SCRIPT_ID\",\"rootDir\":\"apps-script\",\"fileExtension\":\"gs\"}" > .clasp.json
+      - run: clasp push --force
+      - name: Deploy a new version to the existing /exec URL
+        env:
+          DEPLOYMENT_ID: ${{ secrets.DEPLOYMENT_ID }}
+        run: clasp deploy -i "$DEPLOYMENT_ID" -d "${GITHUB_REF_NAME} ${GITHUB_SHA::7}"
+
+  pages:
+    if: github.ref_name == 'main'
+    needs: apps-script
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: BUILD_VERSION=$(date -u +%Y%m%d%H%M) node scripts/build.js --stamp
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: web }
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -1,5 +1,5 @@
 // Offline shell: serve the app from cache instantly, refresh the cache in the background.
-// Bump VERSION when you change any app file so phones pick up the new version.
+// VERSION is stamped automatically on every deploy (scripts/build.js --stamp). Do not edit by hand.
 var VERSION = 'flight-v14';
 var SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'engine.js', 'core.js', 'mapdata.js', 'config.js',
   'manifest.webmanifest', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png',
