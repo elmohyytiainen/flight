@@ -409,13 +409,16 @@ section.offer, .flightview > .offer { margin: 12px 18px 0; }
 .btn svg { flex: none; }
 .navrow .btn { gap: 6px; }
 .choicehint { margin: 6px 0 10px; }
-/* the "progress lifts" note in the workout preview: hard to miss */
-.mainnote { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0 12px; padding: 12px 14px; border-radius: 14px;
-  background: color-mix(in srgb, var(--warn) 9%, #fff); box-shadow: inset 4px 0 0 var(--warn); }
-.mainnote .bang { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--warn); color: #fff;
-  font-weight: 700; font-size: 15px; line-height: 24px; text-align: center; margin-top: 1px; }
-.mainnote p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink); }
-.mainnote b { font-weight: 600; }
+/* the "progress lifts" note in the workout preview: noticeable but quiet, and dismissable */
+.mainnote { position: relative; display: flex; gap: 9px; align-items: flex-start; margin: 10px 0 12px; padding: 10px 36px 10px 12px; border-radius: 14px;
+  background: color-mix(in srgb, var(--warn) 5%, #fff); box-shadow: inset 3px 0 0 color-mix(in srgb, var(--warn) 70%, #fff); }
+.mainnote .bang { flex: none; width: 18px; height: 18px; border-radius: 50%; background: color-mix(in srgb, var(--warn) 80%, #fff); color: #fff;
+  font-weight: 700; font-size: 12px; line-height: 18px; text-align: center; margin-top: 2px; }
+.mainnote p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+.mainnote b { font-weight: 600; color: var(--ink); }
+.mainnote .mnx { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent;
+  color: var(--ink-2); display: grid; place-items: center; padding: 0; }
+.mainnote .mnx svg { width: 14px; height: 14px; }
 .todayh { margin-top: 4px; }
 .screen > .note { margin-top: 12px; background: color-mix(in srgb, var(--taxi) 26%, #fff); border-radius: 12px; padding: 10px 12px; font-size: 15px; }
 .pblock { background: var(--steel); border-radius: 16px; padding: 4px 14px; margin-top: 10px; }
