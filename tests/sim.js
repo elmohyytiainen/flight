@@ -7,7 +7,7 @@ const E = global.FlightEngine;
 
 // Starting one-rep-max guesses per exercise (in the kg the app shows, e.g. per hand).
 const START_1RM = {
-  'incline-db-press': 12, 'cable-row': 40, 'neutral-pulldown': 38, 'hip-thrust-machine': 70,
+  'back-squat': 45, 'incline-db-press': 12, 'lat-pulldown': 38, 'cable-row': 40,
   'lateral-raise': 6, 'cable-crunch': 30, 'incline-curl': 9, 'rope-pressdown': 18
 };
 
@@ -61,7 +61,10 @@ function simulate(o = {}) {
         const done = [];
         it.targets.forEach((t, i) => {
           const hit = rand() < opt.hitRate;
-          const reps = Math.max(1, Math.min(can - i, hit ? t : t - 1 - Math.floor(rand() * 2)));
+          // a test set (last set of the test week, or after "Too easy"): keep going while 1–2 reps are left
+          const test = it.calibrate && i === it.targets.length - 1;
+          const reps = test ? Math.max(1, can - i - (hit ? 1 : 2))
+            : Math.max(1, Math.min(can - i, hit ? t : t - 1 - Math.floor(rand() * 2)));
           done.push(reps);
           sets.push({ slot: it.slot, ex, set: i + 1, kg, reps, done: true, fb: opt.fb, rir: it.rir[i], target: t });
         });
@@ -77,8 +80,8 @@ function simulate(o = {}) {
   return { data, log, res: result(data), nextDate: date };
 }
 
-/** Working weights for one exercise on one day ('A' Heavy, 'B' Volume), in order. */
-const weights = (log, ex, day) => log.filter(s => s.day === day)
+/** Working weights for one exercise on one day ('A' or 'B'), in order. */
+const weights = (log, ex, day) => log.filter(s => !day || s.day === day)
   .map(s => (s.items.find(i => i.ex === ex) || {}).kg).filter(k => k != null);
 
 module.exports = { simulate, newData, result, weights, START_1RM, C, E };
