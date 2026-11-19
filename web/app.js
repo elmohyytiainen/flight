@@ -354,9 +354,9 @@
     if (S.queue.length && S.sync !== 'offline' && S.sync !== 'error') return ['pending', 'Saving'];
     if (S.sync === 'offline') return ['offline', S.queue.length ? 'Offline, saved on phone' : 'Offline'];
     if (S.sync === 'error') return ['error', S.queue.length ? 'Not synced yet, saved on phone' : 'Can\'t reach the Sheet'];
-    return [DEMO ? 'demo' : 'ok', DEMO ? (demoEmpty() ? 'Demo' : 'Demo, example data') : 'Synced'];
+    return ['', DEMO ? (demoEmpty() ? 'Demo' : 'Demo, example data') : 'Synced'];
   }
-  function syncHTML() { var l = syncLabel(); return '<span class="sync ' + l[0] + '" id="sync" title="' + esc(l[1]) + '"><i></i><span class="sl">' + esc(l[1]) + '</span></span>'; }
+  function syncHTML() { var l = syncLabel(); return '<span class="sync ' + l[0] + '" id="sync"><i></i>' + esc(l[1]) + '</span>'; }
   function paintSync() { var el = document.getElementById('sync'); if (el) el.outerHTML = syncHTML(); }
 
   // ---------- map ----------
@@ -494,9 +494,7 @@
   function topHTML(title, sub) {
     var me = role() === 'coach' ? 'coach' : 'her';
     return '<header class="top"><div class="who"><h1>' + esc(title) + '</h1><div class="small muted">' + esc(sub) + '</div></div>' +
-      '<div class="topr' + (me === 'her' ? ' her' : '') + '">' + syncHTML() + (me === 'her' ? '<button class="lovebtn" data-act="love" aria-label="Send ' + esc(who()) + ' love. Hold for a bigger one">' +
-      '<span class="lh">' + IC.heart + '</span></button>' : '') +
-      '<button class="avbtn" data-act="profile" aria-label="Your profile photo">' + avatarHTML(me, 'av-44') + '</button></div></header>';
+      '<div class="topr">' + syncHTML() + '<button class="avbtn" data-act="profile" aria-label="Your profile photo">' + avatarHTML(me, 'av-44') + '</button></div></header>';
   }
 
   // ---------- two answers ----------
@@ -1372,7 +1370,7 @@
     if (card) floatHearts(card, Math.min(12, (L.total - seen) * 2 + 2));
   }
   function floatHearts(el, n) {
-    var r = el.getBoundingClientRect();
+    var r = el.getBoundingClientRect(), lean = r.left + r.width / 2 > window.innerWidth * 0.7 ? -45 : 0; // from the corner: drift inwards
     for (var i = 0; i < n; i++) {
       var h = document.createElement('span');
       h.className = 'floatheart';
@@ -1381,7 +1379,7 @@
       h.style.left = (r.left + r.width / 2 - size / 2 + (Math.random() - 0.5) * 30) + 'px';
       h.style.top = (r.top + r.height / 2 - size / 2) + 'px';
       h.style.width = h.style.height = size + 'px';
-      h.style.setProperty('--dx', Math.round((Math.random() - 0.5) * 120) + 'px');
+      h.style.setProperty('--dx', Math.round(lean + (Math.random() - 0.5) * 110) + 'px');
       h.style.setProperty('--dy', -Math.round(140 + Math.random() * 160) + 'px');
       h.style.animationDelay = Math.round(i * 60 + Math.random() * 80) + 'ms';
       document.body.appendChild(h);
@@ -1402,6 +1400,20 @@
     enqueue({ type: 'love', id: 'l' + Date.now().toString(36) + uid(), date: todayStr(), size: size });
     if (el) floatHearts(el, size === 3 ? 14 : size === 2 ? 8 : 4);
     loveToast(size === 3 ? 'Huge love sent to ' + who() + ' 💗' : size === 2 ? 'Big love sent to ' + who() + ' 💗' : 'Sent to ' + who() + ' 💗');
+  }
+  /** Her floating heart, bottom right above the tabs on Train, Flight and Progress. Lives outside #app. */
+  function syncFab(v) {
+    var show = !!S.state && role() === 'athlete' && (v === 'home' || v === 'trip' || v === 'log');
+    var b = document.getElementById('lovefab');
+    if (show && !b) {
+      b = document.createElement('button');
+      b.id = 'lovefab'; b.type = 'button'; b.className = 'lovebtn lovefab'; b.setAttribute('data-act', 'love');
+      b.setAttribute('aria-label', 'Send ' + who() + ' love. Hold for a bigger one');
+      b.innerHTML = '<span class="lh">' + IC.heart + '</span>';
+      document.body.appendChild(b);
+    }
+    if (b) b.hidden = !show;
+    document.body.classList.toggle('hasfab', show);
   }
   // hold the heart to make it bigger: tap = 1, held 0.6 s = big, held 1.5 s = huge
   var loveHold = null;
@@ -2205,7 +2217,9 @@
   }, 1000);
 
   // ---------- render ----------
-  function render() {
+  function render() { syncFab(renderView()); }
+  /** Draws the current screen and returns its view name ('' while there is nothing to show). */
+  function renderView() {
     if (!DEMO && !KEY) {
       app.innerHTML = '<div class="err"><h1>This link is missing its key</h1><p class="muted">Open the exact link your coach sent you, then add it to your Home Screen from there.</p></div>';
       return;
@@ -2232,6 +2246,7 @@
     if (v === 'home' || v === 'log' || v === 'coach' || v === 'trip') html += tabsHTML();
     app.innerHTML = html;
     if (v === 'coach') loveArrived();
+    return v;
   }
 
   // ---------- boot ----------

@@ -762,17 +762,21 @@ h3.withav { display: flex; }
 .hero .linkbtn.heroalt { display: block; margin: 10px auto 0; color: rgba(255,255,255,.85); font-size: 14px; }
 .mainnote.soft { padding-right: 10px; }
 
-/* send love: the heart in her top bar (tap, or hold to grow), floating hearts, the coach's running total */
-.lovebtn { position: relative; flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; padding: 0;
-  background: var(--pink-soft); color: var(--pink); display: grid; place-items: center;
-  -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
-.lovebtn .lh { display: grid; place-items: center; width: 20px; height: 20px; transform: scale(var(--g, 1)); transition: transform .12s ease-out; }
-.lovebtn .lh svg { width: 20px; height: 20px; }
+/* send love: her floating heart bottom right above the tabs (tap, or hold to grow), floating hearts, the coach's total */
+.lovebtn { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
+.lovefab { position: fixed; z-index: 15; width: 56px; height: 56px; border: 0; border-radius: 50%; padding: 0;
+  right: max(16px, calc((100vw - 520px) / 2 + 16px)); bottom: calc(80px + var(--safe-b));
+  background: linear-gradient(145deg, #FF7AA2, var(--pink)); color: #fff; display: grid; place-items: center;
+  box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--pink) 70%, transparent), 0 0 0 3px #fff; }
+.lovefab[hidden] { display: none; }
+.lovebtn .lh { display: grid; place-items: center; width: 26px; height: 26px; transform: scale(var(--g, 1)); transition: transform .12s ease-out; }
+.lovebtn .lh svg { width: 26px; height: 26px; }
 .lovebtn.holding .lh { transition: none; }
 .lovebtn.holding { animation: lovepulse .6s ease-in-out infinite; }
-.lovebtn.lv2 { box-shadow: 0 0 0 4px color-mix(in srgb, var(--pink) 25%, transparent); }
-.lovebtn.lv3 { background: var(--pink); color: #fff; box-shadow: 0 0 0 6px color-mix(in srgb, var(--pink) 30%, transparent); }
+.lovebtn.lv2 { box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--pink) 70%, transparent), 0 0 0 3px #fff, 0 0 0 9px color-mix(in srgb, var(--pink) 22%, transparent); }
+.lovebtn.lv3 { box-shadow: 0 10px 24px -8px color-mix(in srgb, var(--pink) 70%, transparent), 0 0 0 3px #fff, 0 0 0 9px color-mix(in srgb, var(--pink) 35%, transparent), 0 0 0 16px color-mix(in srgb, var(--pink) 14%, transparent); }
 @keyframes lovepulse { 50% { transform: scale(1.06); } }
+body.hasfab #app { padding-bottom: calc(150px + var(--safe-b)); }
 .floatheart { position: fixed; z-index: 60; pointer-events: none; color: var(--pink); opacity: 0;
   animation: floatheart 1.7s cubic-bezier(.2,.6,.4,1) forwards; }
 .floatheart svg { width: 100%; height: 100%; display: block; }
@@ -793,5 +797,3 @@ h3.withav { display: flex; }
 .lovecard p .small { display: block; font-size: 12px; margin-top: 1px; }
 .lovecard.empty p { font-size: 13px; color: var(--ink-2); }
 @media (prefers-reduced-motion: reduce) { .floatheart { display: none; } .lovebtn.holding { animation: none; } }
-/* her top bar has the heart too: when everything is saved, the green dot alone says "Synced" */
-.topr.her .sync.ok .sl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
