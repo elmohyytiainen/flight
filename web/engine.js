@@ -24,6 +24,11 @@
  *   - Several lifts declining over two weeks -> an easier week is offered.
  *
  * Flight: every rep on a completed working set earns kmPerRep.
+ *
+ * Extra exercises (slot "x:<id>:<n>", from EXTRAS): she can add any common exercise to a workout with her own sets and
+ * reps. They never touch progression, goals, PBs or whether the workout counts as done. Their reps earn
+ * extraKmShare (half) of kmPerRep, capped at extraKmCap (a quarter) of what the program's own sets earned that workout,
+ * so extras are rewarded but can't replace the program or fly the plane on their own.
  */
 var FlightEngine = (function () {
   'use strict';
@@ -37,6 +42,8 @@ var FlightEngine = (function () {
     deloadSessions: 2,
     fatigueLifts: 3,
     completeShare: 0.8,
+    extraKmShare: 0.5,   // an extra exercise's rep earns half a program rep's km
+    extraKmCap: 0.25,    // extras add at most a quarter on top of the workout's own km
     goals: ''
   };
 
@@ -76,12 +83,49 @@ var FlightEngine = (function () {
     return a && b ? 'AB' : b ? 'B' : a ? 'A' : 'AB';
   }
 
+  /**
+   * Common exercises she can add to a workout as extras (her own sets and reps). g = group, m = loadMult (2 = a weight
+   * per hand or side), st = step, bw = body weight (kg = added weight). Ids start with "x-" so they never clash with the
+   * program's exercises. Time-based moves (planks) are left out on purpose: reps drive the km.
+   */
+  var EXTRA_GROUPS = ['Legs and glutes', 'Chest', 'Back', 'Shoulders', 'Arms', 'Core'];
+  var EXTRAS = [
+    ['x-hip-thrust', 'Barbell hip thrust', 0, 1, 2.5], ['x-glute-bridge', 'Glute bridge', 0, 1, 2.5, 1], ['x-rdl', 'Romanian deadlift', 0, 1, 2.5],
+    ['x-db-rdl', 'Dumbbell Romanian deadlift', 0, 2, 1], ['x-deadlift', 'Deadlift', 0, 1, 2.5], ['x-leg-press', 'Leg press', 0, 1, 5],
+    ['x-goblet-squat', 'Goblet squat', 0, 1, 1], ['x-split-squat', 'Bulgarian split squat', 0, 2, 1], ['x-lunge', 'Walking lunge', 0, 2, 1],
+    ['x-step-up', 'Step-up', 0, 2, 1], ['x-leg-ext', 'Leg extension', 0, 1, 2.5], ['x-leg-curl', 'Leg curl', 0, 1, 2.5],
+    ['x-abduction', 'Hip abduction machine', 0, 1, 2.5], ['x-adduction', 'Hip adduction machine', 0, 1, 2.5],
+    ['x-kickback', 'Cable glute kickback', 0, 2, 2.5], ['x-back-ext', '45° back extension', 0, 1, 2.5, 1], ['x-calf', 'Calf raise', 0, 1, 2.5],
+    ['x-bench', 'Barbell bench press', 1, 1, 2.5], ['x-db-bench', 'Dumbbell bench press', 1, 2, 1], ['x-machine-press', 'Chest press machine', 1, 1, 2.5],
+    ['x-pec-deck', 'Pec deck (machine fly)', 1, 1, 2.5], ['x-cable-fly', 'Cable fly', 1, 2, 2.5], ['x-pushup', 'Push-up', 1, 1, 2.5, 1],
+    ['x-dip', 'Dip', 1, 1, 2.5, 1],
+    ['x-pullup', 'Pull-up or chin-up', 2, 1, 2.5, 1], ['x-pulldown', 'Lat pulldown', 2, 1, 2.5], ['x-cable-row', 'Seated cable row', 2, 1, 2.5],
+    ['x-db-row', 'One-arm dumbbell row', 2, 1, 1], ['x-machine-row', 'Chest-supported machine row', 2, 1, 2.5], ['x-face-pull', 'Face pull', 2, 1, 2.5],
+    ['x-straight-arm', 'Straight-arm pulldown', 2, 1, 2.5],
+    ['x-ohp', 'Barbell overhead press', 3, 1, 2.5], ['x-db-shoulder', 'Seated dumbbell shoulder press', 3, 2, 1],
+    ['x-machine-shoulder', 'Shoulder press machine', 3, 1, 2.5], ['x-lateral', 'Dumbbell lateral raise', 3, 2, 1],
+    ['x-rear-delt', 'Rear delt fly', 3, 2, 1], ['x-front-raise', 'Front raise', 3, 2, 1],
+    ['x-db-curl', 'Dumbbell curl', 4, 2, 1], ['x-hammer', 'Hammer curl', 4, 2, 1], ['x-bb-curl', 'Barbell curl', 4, 1, 2.5],
+    ['x-cable-curl', 'Cable curl', 4, 1, 2.5], ['x-pressdown', 'Triceps pressdown', 4, 1, 2.5], ['x-overhead-ext', 'Overhead triceps extension', 4, 1, 2.5],
+    ['x-skullcrusher', 'Skull crusher', 4, 1, 2.5], ['x-tri-kickback', 'Triceps kickback', 4, 2, 1],
+    ['x-crunch', 'Cable crunch', 5, 1, 2.5], ['x-knee-raise', 'Hanging knee raise', 5, 1, 2.5, 1], ['x-ab-wheel', 'Ab wheel rollout', 5, 1, 2.5, 1],
+    ['x-russian-twist', 'Russian twist', 5, 1, 1, 1], ['x-dead-bug', 'Dead bug', 5, 1, 1, 1], ['x-side-bend', 'Dumbbell side bend', 5, 1, 1]
+  ].map(function (r) {
+    var mult = r[3], bw = !!r[5];
+    return { id: r[0], name: r[1], group: EXTRA_GROUPS[r[2]], loadMult: mult, stepKg: r[4], bodyweight: bw,
+      kgLabel: bw ? 'kg added' : mult === 2 ? (/fly|kickback/i.test(r[1]) && !/^Triceps/.test(r[1]) && !/Rear/.test(r[1]) ? 'kg / side' : 'kg / hand') : 'kg' };
+  });
+  var EXTRA_BY_ID = {};
+  EXTRAS.forEach(function (x) { EXTRA_BY_ID[x.id] = x; });
+  /** A set of an extra exercise (its slot is "x:<exercise id>:<n>"). */
+  function isExtra(x) { return !!x && String(x.slot || '').indexOf('x:') === 0; }
+
   function normSettings(s) {
     s = s || {};
     var out = {};
     for (var k in DEFAULTS) out[k] = DEFAULTS[k];
     for (var key in s) if (s[key] !== '' && s[key] !== null && s[key] !== undefined) out[key] = s[key];
-    ['routeKm', 'kmPerRep', 'introWeeks', 'deloadSessions', 'fatigueLifts', 'completeShare'].forEach(function (k) {
+    ['routeKm', 'kmPerRep', 'introWeeks', 'deloadSessions', 'fatigueLifts', 'completeShare', 'extraKmShare', 'extraKmCap'].forEach(function (k) {
       out[k] = num(out[k], DEFAULTS[k]);
     });
     if (typeof out.trainingWeekdays === 'string') out.trainingWeekdays = out.trainingWeekdays.split(/[,; ]+/).filter(Boolean).map(Number);
@@ -353,7 +397,20 @@ var FlightEngine = (function () {
 
       var completed = prescribed > 0 && doneN / prescribed >= st.completeShare - 1e-9;
       if (completed) completedCount++;
-      var km = round1(reps * st.kmPerRep);
+      // extras: half km per rep, at most a quarter on top of the program's own km
+      var xReps = 0, xNames = {};
+      sets.forEach(function (x) {
+        if (!isExtra(x) || !x.done || x.skip) return;
+        var xe = EXTRA_BY_ID[x.ex], r = Math.max(0, num(x.reps, 0));
+        xReps += r;
+        if (xe && !xe.bodyweight) volume += num(x.kg, 0) * r * xe.loadMult;
+        xNames[x.ex] = (xNames[x.ex] || 0) + 1;
+      });
+      var progKm = reps * st.kmPerRep;
+      var xKm = Math.min(xReps * st.kmPerRep * st.extraKmShare, progKm * st.extraKmCap);
+      var km = round1(progKm + xKm);
+      var extras = Object.keys(xNames).map(function (id) { return { ex: id, sets: xNames[id] }; });
+      reps += xReps;
       var before = cum;
       cum = Math.min(st.routeKm, round1(cum + km));
       if (!landedOn && cum >= st.routeKm) landedOn = sess.date;
@@ -361,7 +418,7 @@ var FlightEngine = (function () {
       totalReps += reps;
       out.push({
         id: sess.id, date: sess.date, day: sess.day, week: week, mode: mode, minutes: num(sess.minutes, null),
-        prescribed: prescribed, done: doneN, completed: completed, reps: reps, km: km,
+        prescribed: prescribed, done: doneN, completed: completed, reps: reps, km: km, extraReps: xReps, extraKm: round1(xKm), extras: extras,
         volume: Math.round(volume), upgrades: ups, steps: steps, improvements: improvements, prs: prs, goals: goalsHit,
         cumBefore: before, cumKm: cum, effort: sess.effort, note: sess.note, photo: !!sess.photo
       });
@@ -696,6 +753,7 @@ var FlightEngine = (function () {
 
   return {
     DEFAULTS: DEFAULTS, replay: replay, plan: plan, nextDay: nextDay, eta: eta, previewSession: previewSession,
+    EXTRAS: EXTRAS, EXTRA_GROUPS: EXTRA_GROUPS, EXTRA_BY_ID: EXTRA_BY_ID, isExtra: isExtra,
     normSettings: normSettings, parseGoals: parseGoals, strengthChange: strengthChange, buildProgram: buildProgram, slotsOn: slotsOn, choiceFor: choiceFor,
     compare: compare, estimateKg: estimateKg, plusOne: plusOne, decide: decide, predReps: predReps, dayOf: dayOf,
     weekOf: weekOf, addDays: addDays, weekday: weekday, roundToStep: roundToStep
