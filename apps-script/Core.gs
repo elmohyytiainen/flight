@@ -536,6 +536,7 @@ var FlightCore = (function () {
     if (op.type === 'saveSession') {
       var s = op.session || {};
       if (!s.id || !isDate(s.date) || (s.day !== 'A' && s.day !== 'B')) bad('invalid session');
+      if (s.date > FlightEngine.addDays(nowIso.slice(0, 10), 1)) bad('a workout can\'t be in the future'); // past days are fine (logged afterwards)
       var sets = (s.sets || []).slice(0, 200).map(function (x) {
         return { slot: clip(x.slot, 40), ex: clip(x.ex, 60), set: Number(x.set) || 0, kg: Number(x.kg) || 0,
           reps: Number(x.reps) || 0, done: !!x.done, fb: ['easy', 'ok', 'hard'].indexOf(x.fb) >= 0 ? x.fb : '', skip: !!x.skip,
@@ -563,7 +564,7 @@ var FlightCore = (function () {
         for (var k in p) if (str(cur[k]) !== str(p[k])) changed = true;
         if (changed) patch('Sessions', 'id', c.id, p);
       });
-      if (isNew) notify = report(data, result, row.id);
+      if (isNew) notify = report(data, result, row.id, !!s.retro);
     } else if (op.type === 'stamp') {
       if (!isDate(op.date) || ['ballet', 'run'].indexOf(op.stampType) < 0) bad('invalid stamp');
       var has = data.stamps.some(function (r) { return str(r.date).slice(0, 10) === op.date && r.type === op.stampType; });
@@ -653,7 +654,8 @@ var FlightCore = (function () {
     return { writes: writes, notify: notify, photo: photo };
   }
 
-  function report(data, result, sessionId) {
+  /** The workout email. retro = she logged it afterwards for a past day. */
+  function report(data, result, sessionId, retro) {
     var c = null, n = 0;
     result.sessions.forEach(function (s, i) { if (s.id === sessionId) { c = s; n = i + 1; } });
     if (!c) return null;
@@ -662,9 +664,10 @@ var FlightCore = (function () {
     var st = result.settings, who = str(data.settings.travellerName) || 'Elmo';
     var dayName = str(data.settings[c.day === 'A' ? 'dayAName' : 'dayBName']) || 'Day ' + c.day;
     if (dayName === (str(data.settings[c.day === 'A' ? 'dayBName' : 'dayAName']) || 'Day ' + (c.day === 'A' ? 'B' : 'A'))) dayName = '';
-    var left = Math.max(0, Math.round(st.routeKm - c.cumKm));
+    var left = Math.max(0, Math.round(st.routeKm - (retro ? result.cumKm : c.cumKm)));
     var lines = [];
-    var about = [dayName, c.mode === 'deload' ? 'easier week' : c.mode === 'intro' ? 'test week' : c.mode === 'back' ? 'first workout after a break' : '',
+    var about = [dayName, retro ? 'logged afterwards for ' + c.date : '',
+      c.mode === 'deload' ? 'easier week' : c.mode === 'intro' ? 'test week' : c.mode === 'back' ? 'first workout after a break' : '',
       c.minutes ? c.minutes + ' min' : ''].filter(Boolean).join(', ');
     lines.push('Workout ' + n + (about ? ' (' + about + ')' : '') + ': ' + c.reps + ' reps, +' + c.km + ' km.');
     lines.push(left > 0 ? left + ' km until ' + who + ' flies to Luxembourg.' : 'Flight unlocked: ' + who + ' to LUX!');

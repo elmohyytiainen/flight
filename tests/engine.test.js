@@ -389,3 +389,32 @@ test('extras catalogue: common exercises, unique ids, no clash with the program'
   assert.ok(ids.every(id => id.indexOf('x-') === 0));
   E.EXTRAS.forEach(x => assert.ok(E.EXTRA_GROUPS.includes(x.group) && x.stepKg > 0 && x.kgLabel, x.id));
 });
+
+// ---------- logging a workout afterwards for a past day ----------
+test('a workout logged afterwards slots into history on its date, and the email says so', () => {
+  const data = newData();
+  data.settings.coachEmail = 'coach@example.com';
+  const sessionFor = (date, day, reps) => {
+    const p = E.plan(result(data), date, day), sets = [];
+    p.items.forEach(it => it.targets.forEach((t, i) => sets.push({ slot: it.slot, ex: it.exercise.id, set: i + 1, kg: 20, reps: reps || t, done: true, rir: '1', target: t })));
+    return { id: date + '-x', date, day, effort: 3, sets };
+  };
+  C.applyOp(data, { type: 'saveSession', session: sessionFor('2026-11-26', 'A') }, 'athlete', '2026-11-26T18:00:00Z');
+  // a few days later she logs Monday the 23rd, which she forgot: as of that day nothing was logged yet, so it's an A
+  const before = E.replay(Object.assign({}, data, { sessions: data.sessions.filter(s => s.date < '2026-11-23') }));
+  const retroDay = E.nextDay(before);
+  const out = C.applyOp(data, { type: 'saveSession', session: Object.assign(sessionFor('2026-11-23', retroDay, 9), { retro: true }) }, 'athlete', '2026-11-28T10:00:00Z');
+  const res = result(data);
+  assert.deepStrictEqual(res.sessions.map(s => s.date), ['2026-11-23', '2026-11-26']);
+  assert.ok(res.sessions.every(s => s.completed));
+  assert.ok(res.sessions[1].cumKm > res.sessions[0].cumKm, 'km add up in date order');
+  assert.ok(out && out.notify && /Workout 1 \(logged afterwards for 2026-11-23/.test(out.notify.body), out && out.notify && out.notify.body.split('\n')[0]);
+  const left = Math.round(res.settings.routeKm - res.cumKm);
+  assert.ok(out.notify.body.indexOf(left + ' km until') >= 0, 'km left counts every workout, not just up to that day');
+});
+
+test('a workout can\'t be logged for a future day', () => {
+  const data = newData();
+  assert.throws(() => C.applyOp(data, { type: 'saveSession', session: { id: 'f', date: '2026-12-05', day: 'A', effort: 3, sets: [] } }, 'athlete', '2026-11-28T10:00:00Z'), /future/);
+  C.applyOp(data, { type: 'saveSession', session: { id: 't', date: '2026-11-29', day: 'A', effort: 3, sets: [] } }, 'athlete', '2026-11-28T23:30:00Z'); // tomorrow in UTC terms is fine (time zones)
+});
