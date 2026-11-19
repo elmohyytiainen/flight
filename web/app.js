@@ -431,6 +431,14 @@
   function settings() { return E.normSettings(S.state.settings); }
   function who() { return S.state.settings.travellerName || 'Elmo'; }
   function dayName(day) { return S.state.settings[day === 'A' ? 'dayAName' : 'dayBName'] || ('Day ' + day); }
+  /** Both days have the same name (default "Workout"): the name alone doesn't tell A from B. */
+  function sameNames() { return dayName('A') === dayName('B'); }
+  /** A name that tells the days apart, for the few places that need it (per-day picks): "Workout A". */
+  function dayTag(day) { return sameNames() ? dayName(day) + ' ' + day : dayName(day); }
+  /** "Workout" or "Day A workout", for sentences. */
+  function workoutOf(day) { var n = dayName(day); return /workout$/i.test(n) ? n : n + ' workout'; }
+  /** "Day A, " before a date, or nothing when both days share the name. */
+  function dayPrefix(day) { return sameNames() ? '' : dayName(day) + ', '; }
   function exName(id) { var e = S.state.exercises.filter(function (x) { return String(x.id) === id; })[0]; return e ? e.name : id; }
   function completedOn(res, ds) { return res.sessions.filter(function (s) { return s.date === ds && s.completed; }); }
   /** True once the Mon–Sun week of ds has all its workouts done (e.g. Mon + Thu instead of Mon + Fri). */
@@ -487,7 +495,7 @@
     return { who: coach ? 'her' : 'coach', name: coach ? (String(S.state.settings.herName || '').trim() || 'She') : who() };
   }
   function qaRow(whoKey, label, text) {
-    return '<div class="qrow' + (whoKey === 'her' ? ' her' : '') + '">' + avatarHTML(whoKey, 'av-32') + '<div><b>' + esc(label) + '</b>' + esc(text) + '</div></div>';
+    return '<div class="qrow ' + (whoKey === 'her' ? 'her' : 'coach') + '">' + avatarHTML(whoKey, 'av-32') + '<div><b>' + esc(label) + '</b>' + esc(text) + '</div></div>';
   }
   /** One day: the question, then a box to answer, or both answers, or a wait for the other. */
   function qaDayHTML(q, inSheet) {
@@ -610,7 +618,7 @@
       var planned = ti >= 0 && !done && !weekFull(res, d);
       if (S.state.stamps.some(function (s) { return s.date === d && s.type === 'ballet'; })) marks += '<i class="mk ballet">' + IC.ballet + '</i>';
       if (S.state.stamps.some(function (s) { return s.date === d && s.type === 'run'; })) marks += '<i class="mk run">' + IC.run + '</i>';
-      var label = done ? dayName(doneS[0].day) : planned ? (ti === 0 ? dayName('A') : ti === 1 ? dayName('B') : '') : '';
+      var label = sameNames() ? '' : done ? dayName(doneS[0].day) : planned ? (ti === 0 ? dayName('A') : ti === 1 ? dayName('B') : '') : '';
       h += '<button class="day' + (planned ? ' plan' : '') + (done ? ' done' : '') + (d === t ? ' today' : '') + '" data-act="day" data-date="' + d +
         '" aria-label="' + esc(fmtLong(d) + (label ? ', ' + label : '')) + '"><span class="d">' +
         dateObj(d).toLocaleDateString('en-GB', { weekday: 'short' }).slice(0, 2) + '</span><span class="n">' + dateObj(d).getDate() + '</span>' +
@@ -691,7 +699,7 @@
       if (planned) n.planned++;
       var state = g ? IC.goldCheck : planned ? IC.dbOutline : '';
       h += '<button class="cd' + (g ? ' gym' : planned ? ' planned' : '') + (ds === t ? ' today' : '') + (ds > t ? ' future' : '') + '" data-act="day" data-date="' + ds + '" aria-label="' +
-        esc(fmtLong(ds) + (g ? ', ' + dayName(g) + ' workout done' : planned ? ', ' + dayName(ti === 0 ? 'A' : 'B') + ' workout planned' : '') + (stp.ballet ? ', ballet' : '') + (stp.run ? ', run' : '')) +
+        esc(fmtLong(ds) + (g ? ', ' + workoutOf(g) + ' done' : planned ? ', ' + workoutOf(ti === 0 ? 'A' : 'B') + ' planned' : '') + (stp.ballet ? ', ballet' : '') + (stp.run ? ', run' : '')) +
         '"><span class="dn">' + d + '</span><span class="st">' + state + '</span><span class="marks">' +
         (stp.ballet ? '<i class="mk ballet">' + IC.ballet + '</i>' : '') + (stp.run ? '<i class="mk run">' + IC.run + '</i>' : '') + '</span></button>';
     }
@@ -761,7 +769,7 @@
     (coach ? [] : unseenReactions().slice(-1)).forEach(function (r) {
       var s = res.sessions.filter(function (x) { return x.id === r.sessionId; })[0];
       h += '<button class="banner react" data-act="reactionSeen" data-id="' + esc(r.id) + '"><span class="avwrap">' + avatarHTML('coach', 'av-44') + '<i class="avbadge">' + esc(r.emoji || '💬') + '</i></span><p><b>' +
-        esc(who()) + ' reacted to your ' + esc(s ? dayName(s.day) + ' workout, ' + fmtDate(s.date) : 'workout') + '</b>' +
+        esc(who()) + ' reacted to your ' + esc(s ? workoutOf(s.day).toLowerCase() + ', ' + fmtDate(s.date) : 'workout') + '</b>' +
         (r.text ? '“' + esc(r.text) + '”<br>' : '') + '<span class="small muted">Tap to dismiss.</span></p></button>';
     });
     var lastId = res.sessions.length ? res.sessions[res.sessions.length - 1].id : '';
@@ -809,12 +817,12 @@
     var day = S.boardDay || E.nextDay(res);
     var p = E.plan(res, t, day);
     var h = '<div class="screen"><header class="top"><button class="linkbtn backlink" data-act="home">' + IC.back + 'Home</button>' + syncHTML() + '</header>';
-    h += '<h1 class="todayh">Today: ' + esc(dayName(day)) + '</h1><div class="small muted">' + plural(p.items.length, 'exercise', 'exercises') + ', ' + p.setsTotal + ' sets</div>';
+    h += '<h1 class="todayh">' + (sameNames() ? 'Today\'s workout' : 'Today: ' + esc(dayName(day))) + '</h1><div class="small muted">' + plural(p.items.length, 'exercise', 'exercises') + ', ' + p.setsTotal + ' sets</div>';
     if (p.mode === 'intro') h += '<div class="note">Test week :) Pick weights where the goal reps leave 1–2 in the tank. On the last set keep going while you still have 1–2 left. The app sets your weights from next week.</div>';
     if (p.mode === 'back') h += '<div class="note">Welcome back :) First workout after a break: one set fewer and 2–3 reps in reserve. Back to normal next time.</div>';
     if (p.mode === 'deload') h += '<div class="note">Easier week: half the sets, 3–4 reps in reserve, same weights. Recovery is part of the flight ;)</div>';
     h += '<p class="small muted choicehint">Legs, chest and lats are your progress lifts: keep them the same for a few weeks. The rest you can change, a different one for ' +
-      esc(dayName('A')) + ' and ' + esc(dayName('B')) + ' if you like :)</p>';
+      esc(dayTag('A')) + ' and ' + esc(dayTag('B')) + ' if you like :)</p>';
     var sn = 0;
     p.blocks.forEach(function (b) {
       var paired = b.items.length > 1;
@@ -829,8 +837,8 @@
       });
       h += '</section>';
     });
-    h += '<div class="daypick"><button class="chip' + (day === 'A' ? ' on' : '') + '" data-act="boardDay" data-day="A">' + esc(dayName('A')) + '</button>' +
-      '<button class="chip' + (day === 'B' ? ' on' : '') + '" data-act="boardDay" data-day="B">' + esc(dayName('B')) + '</button></div>' +
+    h += '<div class="daypick"><button class="chip' + (day === 'A' ? ' on' : '') + '" data-act="boardDay" data-day="A">' + esc(dayTag('A')) + '</button>' +
+      '<button class="chip' + (day === 'B' ? ' on' : '') + '" data-act="boardDay" data-day="B">' + esc(dayTag('B')) + '</button></div>' +
       '<div style="margin-top:16px"><button class="btn taxi wide" data-act="start" data-day="' + day + '">Start workout</button></div></div>';
     return h;
   }
@@ -920,7 +928,7 @@
     if (it.upSteps && !it.oneOff) h += '<span class="tag up">Heavier today >:)</span>';
     if (it.down && !it.oneOff) h += '<span class="tag">Lighter today, so you hit the reps</span>';
     if (it.held && !it.oneOff) h += '<span class="tag">Same weight again, it gets easier</span>';
-    if (it.estimated) h += '<span class="tag">Estimated from your ' + esc(dayName(d.day === 'A' ? 'B' : 'A')) + ' day</span>';
+    if (it.estimated) h += '<span class="tag">Estimated from your ' + esc(workoutOf(d.day === 'A' ? 'B' : 'A').toLowerCase()) + '</span>';
     if (it.overridden) h += '<span class="tag">Weight set by your coach</span>';
     if (it.lastReps && it.lastKg !== null && it.lastKg !== undefined && !it.upSteps) h += '<span class="tag">Last time ' + it.lastReps.join(', ') + ' at ' + kgFmt(it.lastKg) + ' kg</span>';
     h += '</div>';
@@ -956,7 +964,7 @@
     var rounds = Math.max.apply(null, its.map(function (it) { return d.sets.filter(function (s) { return s.slot === it.slot; }).length; }));
     var curRound = next !== undefined && b.slots.indexOf(d.sets[next].slot) >= 0 ? d.sets[next].set : null;
     h += '<div class="exhead"><div class="small muted">' + (b.paired ? 'Superset: ' + its.map(function (it) { return esc(it.muscle); }).join(' + ') : esc(its[0].muscle)) +
-      ', ' + esc(dayName(d.day)) + (curRound ? '. Round ' + curRound + ' of ' + rounds : '') + (b.separated ? ' (split)' : '') + '</div>';
+      (sameNames() ? '' : ', ' + esc(dayName(d.day))) + (curRound ? '. Round ' + curRound + ' of ' + rounds : '') + (b.separated ? ' (split)' : '') + '</div>';
     if (b.paired) its.forEach(function (it, k) { h += '<div class="pairex"><span class="letter">' + 'AB'.charAt(k) + '</span><div>' + exHead(it, false, d) + '</div></div>'; });
     else h += exHead(its[0], true, d);
     h += '</div>';
@@ -1029,7 +1037,7 @@
   function viewLanding() {
     var pv = preview(), c = pv.session, d = S.draft, st = pv.result.settings;
     var n = pv.result.sessions.length, left = Math.max(0, st.routeKm - c.cumKm);
-    var h = '<div class="screen"><header class="top"><div class="who"><h1>Nice work love :)</h1><div class="small muted">Workout ' + n + ', ' + esc(dayName(d.day)) +
+    var h = '<div class="screen"><header class="top"><div class="who"><h1>Nice work love :)</h1><div class="small muted">Workout ' + n + (sameNames() ? '' : ', ' + esc(dayName(d.day))) +
       ', ' + Math.max(1, Math.round(((d.finishedAt || Date.now()) - d.startedAt) / 60000)) + ' min</div></div>' + syncHTML() + '</header>' + mapSVG(c.cumKm);
     h += '<div class="kmbig">+' + kgFmt(c.km) + '<small>km</small></div>';
     h += '<p class="kmsplit">' + c.reps + ' reps toward ' + esc(who()) + '\'s flight. ' +
@@ -1094,7 +1102,7 @@
     var h = '<div class="pcard"><div class="small muted">' + esc(label) + '</div><h3>' + esc(e.name) + '</h3>';
     (sl.shared ? [null] : ['A', 'B']).forEach(function (day) {
       var two = lastTwo(res, e.id, day), cur = two[0], prev = two[1];
-      h += '<div class="pline">' + (day ? '<span class="dtag">' + esc(dayName(day)) + '</span>' : '<span class="dtag">Latest</span>');
+      h += '<div class="pline">' + (day ? '<span class="dtag">' + esc(dayTag(day)) + '</span>' : '<span class="dtag">Latest</span>');
       if (!cur) h += '<span class="muted small">No result yet</span></div>';
       else {
         var imp = prev ? E.compare(e, prev, cur) : null;
@@ -1119,7 +1127,7 @@
       ms.slice(0, 8).forEach(function (m) {
         var e = res.prog.exById[m.ex];
         h += '<div class="badge"><span class="medal">🏅</span><div><b>' + esc(exName(m.ex)) + '</b><div class="small">' + kgFmt(m.kg) + ' ' + esc(e ? e.kgLabel : 'kg') +
-          ' × ' + m.reps + '</div><div class="small muted">' + esc(dayName(m.day)) + ', ' + esc(fmtDate(m.date)) + '</div></div></div>';
+          ' × ' + m.reps + '</div><div class="small muted">' + esc(dayPrefix(m.day)) + esc(fmtDate(m.date)) + '</div></div></div>';
       });
       h += '</div>';
       if (ms.length > 8) h += '<p class="small muted">And ' + (ms.length - 8) + ' earlier ones.</p>';
@@ -1153,7 +1161,7 @@
         var a = res.states[e.id + '|A'], b = res.states[e.id + '|B'];
         h += '<button class="exprog" data-act="exDetail" data-ex="' + esc(e.id) + '"><div class="nm">' + esc(e.name) + '<small>' +
           (a && a === b ? (a.kg !== null ? kgFmt(a.kg) : '') :
-            [a && a.kg !== null ? dayName('A') + ' ' + kgFmt(a.kg) : '', b && b.kg !== null ? dayName('B') + ' ' + kgFmt(b.kg) : ''].filter(Boolean).join(', ')) + ' ' + esc(e.kgLabel) +
+            [a && a.kg !== null ? dayTag('A') + ' ' + kgFmt(a.kg) : '', b && b.kg !== null ? dayTag('B') + ' ' + kgFmt(b.kg) : ''].filter(Boolean).join(', ')) + ' ' + esc(e.kgLabel) +
           '</small></div>' + (function () {
             var sh = strengthHist(res, e.id), ch = E.strengthChange(res, e.id);
             return (sh.length ? spark(sh.map(function (x) { return x.est; })) : '<span></span>') +
@@ -1169,7 +1177,7 @@
     var list = res.sessions.slice().reverse(), n = res.sessions.length;
     if (!list.length) h += '<p class="empty">No workouts yet. They show up here after your first one :)</p>';
     list.forEach(function (s, i) {
-      h += '<div class="mini"><div class="seat">' + (n - i) + '<small>' + esc(dayName(s.day)) + '</small></div>' +
+      h += '<div class="mini"><div class="seat">' + (n - i) + (sameNames() ? '' : '<small>' + esc(dayName(s.day)) + '</small>') + '</div>' +
         '<div><b>' + esc(fmtDate(s.date)) + '</b><div class="small muted">' + s.reps + ' reps' + (s.minutes ? ', ' + s.minutes + ' min' : '') +
         (s.mode === 'deload' ? ', easier week' : s.mode === 'intro' ? ', test week' : s.mode === 'back' ? ', welcome back' : '') + (s.prs.length ? ', 🏅 ' + plural(s.prs.length, 'PB', 'PBs') : '') + (s.goals.length ? ', 🎯 goal' : '') + '</div>' +
         reactionsFor(s.id).map(function (r) { return '<div class="rx">' + esc(reactionText(r)) + '</div>'; }).join('') + '</div>' +
@@ -1262,8 +1270,8 @@
     if (sh.length) {
       h += '<p class="small muted">' + (ch ? '<b class="sdelta">' + pctText(ch.change) + '</b> strength since ' + esc(shortDate(ch.from)) + '. ' : '') +
         'Estimated from your best set each workout, both days count.</p>';
-      h += '<div class="bigspark">' + strengthChart(sh, 300, 80) + '<div class="legend small muted"><span><i class="dot-a"></i>' + esc(dayName('A')) +
-        '</span><span><i class="dot-b"></i>' + esc(dayName('B')) + '</span></div></div>';
+      h += '<div class="bigspark">' + strengthChart(sh, 300, 80) + '<div class="legend small muted"><span><i class="dot-a"></i>' + esc(dayTag('A')) +
+        '</span><span><i class="dot-b"></i>' + esc(dayTag('B')) + '</span></div></div>';
     }
     var best = null, bestReps = {};
     hist.forEach(function (x) {
@@ -1274,16 +1282,16 @@
         if (!bestReps[kg] || r > bestReps[kg].reps) bestReps[kg] = { reps: r, day: x.day };
       });
     });
-    if (best) h += '<h3>Personal record</h3><p><b>' + kgFmt(best.kg) + ' ' + esc(unit) + ' × ' + best.reps + '</b> <span class="small muted">' + esc(dayName(best.day)) + ', ' + esc(fmtDate(best.date)) + '</span></p>';
+    if (best) h += '<h3>Personal record</h3><p><b>' + kgFmt(best.kg) + ' ' + esc(unit) + ' × ' + best.reps + '</b> <span class="small muted">' + esc(dayPrefix(best.day)) + esc(fmtDate(best.date)) + '</span></p>';
     var kgs = Object.keys(bestReps).map(Number).sort(function (a, b) { return b - a; });
     if (kgs.length) {
       h += '<h3>Best reps at each weight</h3><table class="plantable">';
-      kgs.forEach(function (k) { h += '<tr><td>' + kgFmt(k) + ' ' + esc(unit) + '</td><td class="r"><b>' + bestReps[k].reps + '</b> reps <span class="small muted">' + esc(dayName(bestReps[k].day)) + '</span></td></tr>'; });
+      kgs.forEach(function (k) { h += '<tr><td>' + kgFmt(k) + ' ' + esc(unit) + '</td><td class="r"><b>' + bestReps[k].reps + '</b> reps' + (sameNames() ? '' : ' <span class="small muted">' + esc(dayName(bestReps[k].day)) + '</span>') + '</td></tr>'; });
       h += '</table>';
     }
     h += '<h3 style="margin-top:14px">Recent sets</h3><table class="plantable">';
     hist.slice(-5).reverse().forEach(function (x) {
-      h += '<tr><td>' + esc(fmtDate(x.date)) + '<div class="small muted">' + esc(dayName(x.day)) + '</div></td><td class="r">' +
+      h += '<tr><td>' + esc(fmtDate(x.date)) + (sameNames() ? '' : '<div class="small muted">' + esc(dayName(x.day)) + '</div>') + '</td><td class="r">' +
         x.reps.map(function (r, i) { return r + (x.kgs[i] !== x.kg ? ' @' + kgFmt(x.kgs[i]) : ''); }).join(', ') + ' at ' + kgFmt(x.kg) + ' ' + esc(unit) + '</td></tr>';
     });
     h += '</table><div class="row"><button class="btn ghost" data-act="closeModal">Close</button></div>';
@@ -1298,7 +1306,7 @@
     h += '<section class="panel"><h3>Easier week</h3>';
     if (res.deloadLeft > 0) h += '<p class="small">Scheduled: her next ' + plural(res.deloadLeft, 'workout is', 'workouts are') + ' easier (half the sets, 3–4 in reserve).</p>';
     else {
-      if (res.fatigue.offer) h += '<p class="small"><b>Several lifts dipped over two weeks:</b> ' + esc(res.fatigue.lifts.map(function (x) { return exName(x.ex) + ' (' + dayName(x.day) + ')'; }).join(', ')) + '. She is offered an easier week.</p>';
+      if (res.fatigue.offer) h += '<p class="small"><b>Several lifts dipped over two weeks:</b> ' + esc(res.fatigue.lifts.map(function (x) { return exName(x.ex) + (sameNames() ? '' : ' (' + dayName(x.day) + ')'); }).join(', ')) + '. She is offered an easier week.</p>';
       else h += '<p class="small muted">Half the sets at 3–4 reps in reserve for her next two workouts, then back to her best weights.</p>';
       h += '<button class="btn small ghost" data-act="deload">Schedule an easier week</button>';
     }
@@ -1334,7 +1342,7 @@
     var list = res.sessions.slice().reverse(), n = res.sessions.length;
     if (!list.length) h += '<p class="empty">Her workouts appear here as soon as she saves them.</p>';
     list.forEach(function (x, i) {
-      h += '<div class="item"><div class="l1"><span class="withav">' + avatarHTML('her', 'av-32') + '<b>Workout ' + (n - i) + ', ' + esc(dayName(x.day)) + '</b></span><span class="num">+' + kgFmt(x.km) + ' km</span></div>' +
+      h += '<div class="item"><div class="l1"><span class="withav">' + avatarHTML('her', 'av-32') + '<b>Workout ' + (n - i) + (sameNames() ? '' : ', ' + esc(dayName(x.day))) + '</b></span><span class="num">+' + kgFmt(x.km) + ' km</span></div>' +
         '<div class="l2">' + esc(fmtDate(x.date)) + (x.minutes ? ', ' + x.minutes + ' min' : '') + ', ' + x.done + '/' + x.prescribed + ' sets, ' + x.reps + ' reps' +
         (x.effort ? ', effort ' + x.effort + '/5' : '') + (x.mode !== 'normal' ? ', ' + (x.mode === 'intro' ? 'test week' : x.mode === 'back' ? 'welcome back' : 'easier week') : '') + '</div>' +
         (x.improvements.length ? '<div class="l2">Better: ' + esc(x.improvements.map(function (m) { return exName(m.ex) + ' ' + m.text; }).join('; ')) + '</div>' : '') +
@@ -1470,7 +1478,7 @@
     w.forEach(function (f) { h += dayWorkoutHTML(res, f); });
     if (!w.length) {
       var ti = res.settings.trainingWeekdays.indexOf(E.weekday(ds));
-      if (ti >= 0 && ds >= todayStr() && ds >= res.settings.startDate && !weekFull(res, ds)) h += '<p class="muted">' + esc(dayName(ti === 0 ? 'A' : 'B')) + ' workout planned :)</p>';
+      if (ti >= 0 && ds >= todayStr() && ds >= res.settings.startDate && !weekFull(res, ds)) h += '<p class="muted">' + esc(workoutOf(ti === 0 ? 'A' : 'B')) + ' planned :)</p>';
       h += '<p class="muted small">Ballet and runs don\'t move the plane, but your coach sees them ;)</p>';
     }
     h += '<div class="toggles">';
@@ -1498,9 +1506,9 @@
     var current = cc.ctx === 'flight' ? S.draft.items[cc.slot].ex : it.exercise.id;
     var h = '<h2>' + esc(it.muscle) + '</h2><p class="muted small">' + (it.main
       ? 'This is one of your progress lifts: keep the same one on both days for a few weeks so your progress shows :)'
-      : 'Pick one for ' + esc(dayName(cc.day)) + ' and another for ' + esc(dayName(cc.day === 'A' ? 'B' : 'A')) + ' if you like some variety :)') + '</p>';
-    var scopes = (cc.ctx === 'flight' ? [['today', 'Just today']] : []).concat(it.main ? [['both', 'Both days']]
-      : [['only', 'Only ' + dayName(cc.day)], ['both', 'Both days']]);
+      : 'Pick one for ' + esc(dayTag(cc.day)) + ' and another for ' + esc(dayTag(cc.day === 'A' ? 'B' : 'A')) + ' if you like some variety :)') + '</p>';
+    var scopes = (cc.ctx === 'flight' ? [['today', 'Just today']] : []).concat(it.main ? [['both', sameNames() ? 'Every workout' : 'Both days']]
+      : [['only', 'Only ' + dayTag(cc.day)], ['both', sameNames() ? 'Every workout' : 'Both days']]);
     h += '<div class="scopes">' + scopes.map(function (s) {
       return '<button class="chip' + (S.chooseScope === s[0] ? ' on' : '') + '" data-act="scope" data-v="' + s[0] + '">' + esc(s[1]) + '</button>';
     }).join('') + '</div><div class="toggles">';
