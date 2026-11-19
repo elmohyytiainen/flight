@@ -677,6 +677,8 @@ var FlightCore = (function () {
     if (c.improvements.length) lines.push('Improvements: ' + c.improvements.map(function (x) { return (names[x.ex] || x.ex) + ': ' + x.text; }).join('; ') + '.');
     if (c.goals && c.goals.length) lines.push('🎯 GOAL REACHED: ' + c.goals.map(function (g) { return g.label; }).join(', ') + '!');
     if (c.prs.length) lines.push('New personal best: ' + c.prs.map(function (p) { return (names[p.ex] || p.ex) + ' ' + p.kg + ' kg × ' + p.reps; }).join(', ') + ' >:)');
+    if (c.tired && c.tired.length) lines.push('Back to back with the last workout, so the missed reps on ' + c.tired.map(function (id) { return names[id] || id; }).join(', ') +
+      ' don\'t count: same weights and goals next time.');
     if (c.upgrades.length) lines.push('Heavier next time: ' + c.upgrades.map(function (id) { return names[id] || id; }).join(', ') + '.');
     var recent = result.sessions.slice(-3).map(function (x) { return x.id; }), hardN = 0, hardMet = 0, total = 0;
     data.sessions.forEach(function (row) {

@@ -18,10 +18,16 @@
  *   - Every set at the top -> next time one step heavier (more if a test set or "Too easy" showed she is clearly
  *     stronger, up to three steps). Right after a step up, landing up to about 2–3 reps under the range is fine.
  *   - Missed (most sets under the range): the first miss at a new weight holds it once, otherwise one step back.
+ *   - The day after another workout (or the same day): missing a goal doesn't count against her. Weights and goals stay
+ *     as they were, so the next workout asks for the same again (a good day still moves things on).
  *   - "Too hard" = same goal next time (once; if she keeps making the reps anyway, it moves on).
  *   - A slot with the same range on both days has ONE working weight per exercise, so it can move every workout.
  *     Different ranges per day (Heavy/Volume) still work: then each day keeps its own weight.
  *   - Several lifts declining over two weeks -> an easier week is offered.
+ *
+ * Week plan: trainingWeekdays are the default days, but a week is simply "this many workouts". One done on another day
+ * of the same Mon–Sun week (Thu instead of Fri, Tue instead of Mon) takes a slot, so no default day looks missed;
+ * past days are never planned, and when she is behind, today is planned too (weekPlan, used everywhere).
  *
  * Flight: every rep on a completed working set earns kmPerRep.
  *
@@ -353,6 +359,9 @@ var FlightEngine = (function () {
       if (deloadLeft > 0) deloadLeft--;
       var sets = sess.sets || [];
       var prescribed = 0, doneN = 0, reps = 0, volume = 0, ups = [], steps = {}, improvements = [], prs = [], goalsHit = [];
+      // the day after another workout (or the same day): missed reps are not held against her
+      var lastWith = out.filter(function (o) { return o.done > 0; }).pop();
+      var close = !!lastWith && lastWith.date >= addDays(sess.date, -1), tiredEx = [];
 
       slotsOn(prog, sess.day).forEach(function (slot) {
         var side = slot[sess.day];
@@ -375,8 +384,9 @@ var FlightEngine = (function () {
           if (!e.assisted) volume += num(x.kg, 0) * num(x.reps, 0) * e.loadMult;
         });
         if (!done.length) return;
-        var r = progress(e, slot, side, sess.day, done, p, mode, sess.date, stOf(e.id, sess.day));
+        var r = progress(e, slot, side, sess.day, done, p, mode, sess.date, stOf(e.id, sess.day), close);
         if (r.up) { ups.push(e.id); steps[e.id] = r.up; }
+        if (r.tired) tiredEx.push(e.id);
         if (r.improvement) improvements.push({ ex: e.id, day: sess.day, text: r.improvement });
         if (r.decline) declines.push({ date: sess.date, ex: e.id, day: sess.day });
         if (r.pr) { prs.push(r.pr); milestones.push({ date: sess.date, day: sess.day, sessionId: sess.id, ex: e.id, kg: r.pr.kg, reps: r.pr.reps }); }
@@ -419,7 +429,7 @@ var FlightEngine = (function () {
       out.push({
         id: sess.id, date: sess.date, day: sess.day, week: week, mode: mode, minutes: num(sess.minutes, null),
         prescribed: prescribed, done: doneN, completed: completed, reps: reps, km: km, extraReps: xReps, extraKm: round1(xKm), extras: extras,
-        volume: Math.round(volume), upgrades: ups, steps: steps, improvements: improvements, prs: prs, goals: goalsHit,
+        volume: Math.round(volume), upgrades: ups, steps: steps, backToBack: close, tired: tiredEx, improvements: improvements, prs: prs, goals: goalsHit,
         cumBefore: before, cumKm: cum, effort: sess.effort, note: sess.note, photo: !!sess.photo
       });
     });
@@ -429,7 +439,7 @@ var FlightEngine = (function () {
     while (di < deloads.length) { deloadLeft = st.deloadSessions; lastDeload = deloads[di]; di++; }
 
     function hasOwn(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
-    function progress(e, slot, side, day, done, prescribed, mode, date, s) {
+    function progress(e, slot, side, day, done, prescribed, mode, date, s, close) {
       var kgs = done.map(function (x) { return num(x.kg, 0); });
       var reps = done.map(function (x) { return num(x.reps, 0); });
       var fbs = done.map(function (x) { return str(x.fb); });
@@ -440,6 +450,10 @@ var FlightEngine = (function () {
       var mixed = at.length < done.length;
       var complete = done.length >= prescribed && !mixed;
       var out = {};
+      // back to back with the previous workout and short of a goal: the workout still counts (km, PBs, done), but her
+      // weights and goals stay as they were, so the next workout asks for the same again. A good day still counts.
+      var tired = !!close && s.lastKg !== null && mode !== 'deload' && (!complete || at.some(function (r, q) {
+        return r < (num(done[atIdx[q]].target, 0) || side.min); }));
 
       // personal best: the heaviest weight she has ever done a working set with (least assistance for assisted lifts)
       var top = null;
@@ -462,13 +476,13 @@ var FlightEngine = (function () {
         back.push(h[j]);
       }
       var prev = back[0] || null;
-      var entry = { date: date, day: day, mode: mode, kg: workKg, reps: reps, kgs: kgs, fbs: fbs, total: sum(at), sets: at.length };
+      var entry = { date: date, day: day, mode: mode, kg: workKg, reps: reps, kgs: kgs, fbs: fbs, total: sum(at), sets: at.length, tired: tired };
       // a lower weight the app itself prescribed after missed reps is not a decline
       var plannedDown = s.missed && s.lastKg !== null && (e.assisted ? workKg > s.lastKg : workKg < s.lastKg);
       if (prev && mode !== 'deload') {
         out.improvement = compare(e, prev, entry);
         // sustained: worse than each of the earlier results in about a week and a half (3 workouts, or 2 weeks for a weekly lift)
-        out.decline = !plannedDown && back.length === need && back.every(function (x) { return declined(e, x, entry); });
+        out.decline = !plannedDown && !tired && back.length === need && back.every(function (x) { return declined(e, x, entry); });
       }
       h.push(entry);
 
@@ -484,9 +498,10 @@ var FlightEngine = (function () {
       });
       if (best > 0) {
         var old = hasOwn(est, e.id) ? est[e.id] : 0;
-        est[e.id] = !old || best >= old ? best : old * 0.6 + best * 0.4;
+        est[e.id] = !old || best >= old ? best : tired ? old : old * 0.6 + best * 0.4;
       }
       entry.est = hasOwn(est, e.id) ? est[e.id] : null;
+      if (tired) { out.tired = true; return out; }
 
       var hard = atIdx.some(function (j3) { return fbs[j3] === 'hard'; });
       // "Too hard" while still making every rep: hold once, but not twice in a row
@@ -545,6 +560,48 @@ var FlightEngine = (function () {
     var done = result.sessions.filter(function (s) { return s.completed; });
     if (!done.length) return 'A';
     return done[done.length - 1].day === 'A' ? 'B' : 'A';
+  }
+
+  // ---------- the plan: N workouts a week, any days ----------
+  function mondayOf(ds) { return addDays(ds, -((weekday(ds) + 6) % 7)); }
+  /**
+   * The planned workout days of one Mon–Sun week. trainingWeekdays are the default days, but the week is simply
+   * "this many workouts": one done on another day (Thu instead of Fri, Tue instead of Mon) uses up a slot, so no
+   * default day is left looking missed. Past days are never planned. If she is behind (fewer default days left than
+   * workouts left), today is planned too.
+   */
+  function weekPlan(result, monday, today) {
+    var st = result.settings, wds = st.trainingWeekdays, sunday = addDays(monday, 6), start = st.startDate;
+    if (sunday < today || sunday < start) return [];
+    var target = 0, done = 0, doneDays = {};
+    for (var i = 0; i < 7; i++) { var d0 = addDays(monday, i); if (d0 >= start && wds.indexOf(weekday(d0)) >= 0) target++; }
+    result.sessions.forEach(function (s) { if (s.completed && s.date >= monday && s.date <= sunday) { done++; doneDays[s.date] = 1; } });
+    var left = target - done;
+    if (left <= 0) return [];
+    var from = monday > today ? monday : doneDays[today] ? addDays(today, 1) : today;
+    if (from < start) from = start;
+    var out = [];
+    for (var d = from; d <= sunday; d = addDays(d, 1)) if (wds.indexOf(weekday(d)) >= 0 && !doneDays[d]) out.push(d);
+    if (out.length < left && today >= monday && today >= start && !doneDays[today] && out[0] !== today) out.unshift(today);
+    return out.slice(0, left);
+  }
+  /** Planned days from this week up to `until`, in order, each with the workout (A/B) it would be. */
+  function plannedDays(result, today, until) {
+    var out = [], first = nextDay(result), other = first === 'A' ? 'B' : 'A';
+    for (var m = mondayOf(today), g = 0; m <= until && g < 160; m = addDays(m, 7), g++) {
+      weekPlan(result, m, today).forEach(function (d) { if (d <= until) out.push({ date: d, day: out.length % 2 ? other : first }); });
+    }
+    return out;
+  }
+  /** The next planned workout day (today if today is one). */
+  function nextPlanned(result, today) {
+    var p = plannedDays(result, today, addDays(today, 7 * 8));
+    return p.length ? p[0].date : today;
+  }
+  /** True when the workout on `date` comes the day after another one (or the same day): misses then don't count. */
+  function backToBack(result, date) {
+    var prev = result.sessions.filter(function (s) { return s.date <= date && s.done > 0; });
+    return prev.length > 0 && prev[prev.length - 1].date >= addDays(date, -1);
   }
 
   /** The current choice for a slot on a day: the latest choice made for that day or both days. */
@@ -712,25 +769,18 @@ var FlightEngine = (function () {
     };
   }
 
-  /** Predicted landing: average km of the last 4 workouts, stepped along the training weekdays. */
-  function eta(result, todayStr, hasSessionToday) {
+  /** Predicted landing: average km of the last 4 workouts, stepped along the planned days (weekPlan). */
+  function eta(result, todayStr) {
     var st = result.settings;
     var remaining = st.routeKm - result.cumKm;
     if (remaining <= 0) return { landed: true, date: result.landedOn, sessionsLeft: 0, avgKm: 0 };
     var recent = result.sessions.filter(function (s) { return s.reps > 0; }).slice(-4);
     var avg = recent.length ? sum(recent.map(function (s) { return s.km; })) / recent.length : st.kmPerRep * 200;
     var left = Math.ceil(remaining / avg - 1e-9);
-    var d = hasSessionToday ? addDays(todayStr, 1) : todayStr;
-    if (d < st.startDate) d = st.startDate;
-    // this week's workouts already done (e.g. Mon + Thu): the rest of this week has none left
-    var monday = addDays(todayStr, -((weekday(todayStr) + 6) % 7)), sunday = addDays(monday, 6);
-    var leftThisWeek = Math.max(0, st.trainingWeekdays.length - result.sessions.filter(function (s) {
-      return s.completed && s.date >= monday && s.date <= sunday; }).length);
-    var count = 0, guard = 0;
-    while (guard++ < 800) {
-      var thisWeek = d <= sunday;
-      if (st.trainingWeekdays.indexOf(weekday(d)) >= 0 && (!thisWeek || leftThisWeek-- > 0) && ++count >= left) break;
-      d = addDays(d, 1);
+    var count = 0, d = todayStr;
+    for (var m = mondayOf(todayStr), g = 0; g < 160; m = addDays(m, 7), g++) {
+      var days = weekPlan(result, m, todayStr);
+      for (var k = 0; k < days.length; k++) { d = days[k]; if (++count >= left) return { landed: false, date: d, sessionsLeft: left, avgKm: round1(avg) }; }
     }
     return { landed: false, date: d, sessionsLeft: left, avgKm: round1(avg) };
   }
@@ -753,6 +803,7 @@ var FlightEngine = (function () {
 
   return {
     DEFAULTS: DEFAULTS, replay: replay, plan: plan, nextDay: nextDay, eta: eta, previewSession: previewSession,
+    weekPlan: weekPlan, plannedDays: plannedDays, nextPlanned: nextPlanned, backToBack: backToBack, mondayOf: mondayOf,
     EXTRAS: EXTRAS, EXTRA_GROUPS: EXTRA_GROUPS, EXTRA_BY_ID: EXTRA_BY_ID, isExtra: isExtra,
     normSettings: normSettings, parseGoals: parseGoals, strengthChange: strengthChange, buildProgram: buildProgram, slotsOn: slotsOn, choiceFor: choiceFor,
     compare: compare, estimateKg: estimateKg, plusOne: plusOne, decide: decide, predReps: predReps, dayOf: dayOf,

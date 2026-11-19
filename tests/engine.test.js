@@ -418,3 +418,73 @@ test('a workout can\'t be logged for a future day', () => {
   assert.throws(() => C.applyOp(data, { type: 'saveSession', session: { id: 'f', date: '2026-12-05', day: 'A', effort: 3, sets: [] } }, 'athlete', '2026-11-28T10:00:00Z'), /future/);
   C.applyOp(data, { type: 'saveSession', session: { id: 't', date: '2026-11-29', day: 'A', effort: 3, sets: [] } }, 'athlete', '2026-11-28T23:30:00Z'); // tomorrow in UTC terms is fine (time zones)
 });
+
+// ---------- the week plan: two workouts a week, any days ----------
+const doSession = (data, date, opts) => {
+  opts = opts || {};
+  const p = E.plan(result(data), date), sets = [];
+  p.items.forEach(it => it.targets.forEach((t, i) => sets.push({ slot: it.slot, ex: it.exercise.id, set: i + 1, kg: it.kg != null ? it.kg : 20,
+    reps: opts.reps && opts.reps[it.exercise.id] != null ? opts.reps[it.exercise.id] : t, done: true, rir: it.rir[i], target: t })));
+  return { plan: p, out: C.applyOp(data, { type: 'saveSession', session: { id: date, date, day: p.day, effort: 3, sets } }, 'athlete', date + 'T18:00:00Z') };
+};
+
+test('week plan: Tuesday instead of Monday leaves nothing looking missed', () => {
+  const data = newData();                                         // startDate Mon 23 Nov, Mon + Fri
+  assert.deepStrictEqual(E.weekPlan(result(data), '2026-11-23', '2026-11-23'), ['2026-11-23', '2026-11-27']);
+  // Monday passed without a workout: on Tuesday she is behind, so today is planned (not Monday)
+  assert.deepStrictEqual(E.weekPlan(result(data), '2026-11-23', '2026-11-24'), ['2026-11-24', '2026-11-27']);
+  assert.strictEqual(E.nextPlanned(result(data), '2026-11-24'), '2026-11-24');
+  doSession(data, '2026-11-24');
+  assert.deepStrictEqual(E.weekPlan(result(data), '2026-11-23', '2026-11-24'), ['2026-11-27']);
+  assert.strictEqual(E.nextPlanned(result(data), '2026-11-25'), '2026-11-27');
+  doSession(data, '2026-11-27');
+  assert.deepStrictEqual(E.weekPlan(result(data), '2026-11-23', '2026-11-27'), []);
+  assert.deepStrictEqual(E.plannedDays(result(data), '2026-11-28', '2026-12-06').map(p => p.date), ['2026-11-30', '2026-12-04']);
+});
+
+test('week plan: Thursday instead of Friday; Friday is gone once Thursday is done', () => {
+  const data = newData();
+  doSession(data, '2026-11-23');
+  // on Thursday she is on track: Friday is still the plan (the app offers "Train today instead")
+  assert.deepStrictEqual(E.weekPlan(result(data), '2026-11-23', '2026-11-26'), ['2026-11-27']);
+  doSession(data, '2026-11-26');
+  const res = result(data);
+  assert.deepStrictEqual(E.weekPlan(res, '2026-11-23', '2026-11-26'), []);
+  assert.strictEqual(E.nextPlanned(res, '2026-11-26'), '2026-11-30');
+  assert.deepStrictEqual(E.plannedDays(res, '2026-11-26', '2026-12-06').map(p => p.day), ['A', 'B']);
+  // only Monday done and it's Saturday: one is left, so today is planned
+  const d2 = newData();
+  doSession(d2, '2026-11-23');
+  assert.deepStrictEqual(E.weekPlan(result(d2), '2026-11-23', '2026-11-28'), ['2026-11-28']);
+  assert.deepStrictEqual(E.weekPlan(result(d2), '2026-11-23', '2026-11-30'), [], 'a past week is never planned');
+});
+
+test('back to back: missed reps the day after a workout keep the same weights and goals', () => {
+  const run = misses => {
+    const data = newData();
+    data.settings.coachEmail = 'coach@example.com';
+    doSession(data, '2026-11-23');
+    const before = E.plan(result(data), '2026-11-24').items.find(it => it.exercise.id === 'back-squat');
+    const r = doSession(data, '2026-11-24', misses ? { reps: { 'back-squat': 6 } } : {});
+    const after = E.plan(result(data), '2026-11-27').items.find(it => it.exercise.id === 'back-squat');
+    return { data, before, after, out: r.out };
+  };
+  const tired = run(true);
+  const s = result(tired.data).sessions[1];
+  assert.ok(s.backToBack && s.completed, 'it still counts as a workout');
+  assert.deepStrictEqual(s.tired, ['back-squat']);
+  assert.deepStrictEqual([tired.after.kg, tired.after.targets], [tired.before.kg, tired.before.targets], 'same weight and goals again');
+  assert.ok(!tired.after.held && !tired.after.down, 'not held or lowered');
+  assert.ok(/Back to back with the last workout, so the missed reps on Back squat don't count/.test(tired.out.notify.body), tired.out.notify.body);
+  assert.ok(E.backToBack(result(tired.data), '2026-11-25') && !E.backToBack(result(tired.data), '2026-11-26'));
+  // a good day back to back still moves things on
+  const good = run(false);
+  assert.ok(good.after.targets.some((t, i) => t > good.before.targets[i]) || good.after.kg > good.before.kg, 'progress after a good back-to-back day');
+  // the same miss with a normal gap is not forgiven like that
+  const data = newData();
+  doSession(data, '2026-11-23');
+  const b = E.plan(result(data), '2026-11-27').items.find(it => it.exercise.id === 'back-squat');
+  doSession(data, '2026-11-27', { reps: { 'back-squat': 6 } });
+  const a = E.plan(result(data), '2026-11-30').items.find(it => it.exercise.id === 'back-squat');
+  assert.ok(a.held || a.down || a.targets.join() !== b.targets.join(), 'a normal miss still counts');
+});
