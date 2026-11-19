@@ -844,8 +844,8 @@
     if (p.mode === 'intro') h += '<div class="note">Test week :) Pick weights where the goal reps leave 1–2 in the tank. On the last set keep going while you still have 1–2 left. The app sets your weights from next week.</div>';
     if (p.mode === 'back') h += '<div class="note">Welcome back :) First workout after a break: one set fewer and 2–3 reps in reserve. Back to normal next time.</div>';
     if (p.mode === 'deload') h += '<div class="note">Easier week: half the sets, 3–4 reps in reserve, same weights. Recovery is part of the flight ;)</div>';
-    if (!S.seen.mainnote) h += '<div class="mainnote"><span class="bang" aria-hidden="true">!</span><p><b>Legs, chest and lats are your progress lifts: keep them the same for a few weeks.</b> ' +
-      'Rest you can change for ' + esc(dayTag('A')) + ' and/or ' + esc(dayTag('B')) + ' if want :)</p>' +
+    if (!S.seen.mainnote) h += '<div class="mainnote"><span class="bang" aria-hidden="true">!</span><p><b>Legs, chest and lats</b> are your progress lifts, keep them the same. ' +
+      'Rest you can change if want :)</p>' +
       '<button class="mnx" data-act="mainnoteHide" aria-label="Hide this note">' + IC.close + '</button></div>';
     var sn = 0;
     p.blocks.forEach(function (b) {
