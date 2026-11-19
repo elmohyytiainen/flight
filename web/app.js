@@ -1408,9 +1408,26 @@
     setTimeout(function () { t.classList.add('out'); }, big ? 3600 : 1600);
     setTimeout(function () { t.remove(); }, big ? 4100 : 2100);
   }
+  /** A short buzz where the browser allows it (Android). iPhones get their tick from the switch in the heart instead. */
+  function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* not allowed yet */ } }
+  /** The running total floats up from the heart in small pink numbers, like the hearts. */
+  function floatCount(el, total, size) {
+    if (!el || !total) return;
+    var r = el.getBoundingClientRect(), c = document.createElement('span');
+    c.className = 'floatcount' + (size > 1 ? ' big' : '');
+    c.textContent = total.toLocaleString('en-GB');
+    c.style.left = (r.left + r.width / 2) + 'px';
+    c.style.top = (r.top - 4) + 'px';
+    c.style.setProperty('--dx', Math.round(-8 + (Math.random() - 0.5) * 8) + 'px'); // nearly straight up: quick taps read as a rising column
+    c.style.setProperty('--dy', '-130px');
+    document.body.appendChild(c);
+    setTimeout(function () { c.remove(); }, 1800);
+  }
   function sendLove(el, size) {
     enqueue({ type: 'love', id: 'l' + Date.now().toString(36) + uid(), date: todayStr(), size: size });
     var total = S.state && S.state.love ? S.state.love.total : 0;
+    buzz(size > 1 ? 18 : 10);
+    floatCount(el, total, size);
     var isMs = window.FlightCore && window.FlightCore.isLoveMilestone ? window.FlightCore.isLoveMilestone : function () { return false; };
     if (total && isMs(total)) {
       // a milestone: a big burst, confetti and a toast that stays a little longer
@@ -1428,10 +1445,13 @@
     var show = !!S.state && role() === 'athlete' && (v === 'home' || v === 'trip' || v === 'log');
     var b = document.getElementById('lovefab');
     if (show && !b) {
-      b = document.createElement('button');
-      b.id = 'lovefab'; b.type = 'button'; b.className = 'lovebtn lovefab'; b.setAttribute('data-act', 'love');
+      // a div, not a button: it holds an invisible native switch that her finger toggles. Since iOS 26.5 that is the
+      // only way a web page gets the iPhone's haptic tick (a script can't trigger it), so every tap ticks.
+      b = document.createElement('div');
+      b.id = 'lovefab'; b.className = 'lovebtn lovefab'; b.setAttribute('data-act', 'love');
+      b.setAttribute('role', 'button'); b.tabIndex = 0;
       b.setAttribute('aria-label', 'Send ' + who() + ' love. Hold for a bigger one');
-      b.innerHTML = '<span class="lh">' + IC.heart + '</span>';
+      b.innerHTML = '<span class="lh">' + IC.heart + '</span><input type="checkbox" switch class="haptic" tabindex="-1" aria-hidden="true">';
       document.body.appendChild(b);
     }
     if (b) b.hidden = !show;
@@ -1443,6 +1463,8 @@
     if (!loveHold) return;
     var ms = Date.now() - loveHold.t0, el = loveHold.el;
     el.style.setProperty('--g', (1 + Math.min(1, ms / LOVE_HUGE) * 0.9).toFixed(3));
+    if (ms >= LOVE_BIG && !el.classList.contains('lv2')) buzz(8);
+    if (ms >= LOVE_HUGE && !el.classList.contains('lv3')) buzz(14);
     el.classList.toggle('lv2', ms >= LOVE_BIG);
     el.classList.toggle('lv3', ms >= LOVE_HUGE);
     loveHold.raf = requestAnimationFrame(loveTick);
@@ -1467,6 +1489,9 @@
   document.addEventListener('pointerup', function () { loveEnd(true); });
   document.addEventListener('pointercancel', function () { loveEnd(false); });
   document.addEventListener('contextmenu', function (ev) { if (ev.target.closest && ev.target.closest('.lovebtn')) ev.preventDefault(); });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.target && ev.target.id === 'lovefab' && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); sendLove(ev.target, 1); }
+  });
 
   // ---------- coach ----------
   function viewCoach() {
