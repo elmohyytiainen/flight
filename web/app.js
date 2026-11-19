@@ -48,6 +48,7 @@
   // ---------- icons ----------
   var PLANE = 'M11 0L4-2.2-1-10H-4L-1.2-2.2H-7L-9-5.2H-11L-9.8 0-11 5.2H-9L-7 2.2H-1.2L-4 10H-1L4 2.2Z';
   var IC = {
+    heart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.2-9.4C1.6 7.7 3.8 4.5 7.1 4.5c2.1 0 3.6 1.2 4.9 3 1.3-1.8 2.8-3 4.9-3 3.3 0 5.5 3.2 4.3 6.6-1.7 4.8-9.2 9.4-9.2 9.4Z" fill="currentColor"/></svg>',
     plane: '<svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="' + PLANE + '" fill="currentColor"/></svg>',
     ballet: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 9.6 6.4 14.5 8 9.6 9.6 8 14.5 6.4 9.6 1.5 8 6.4 6.4Z" fill="currentColor"/></svg>',
     run: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l5 5-5 5M8.5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -161,6 +162,13 @@
           { date: yd, role: 'athlete', text: 'That tiny pizza place where it rained all evening :)', question: C.questionFor(data, yd), at: nowIso() },
           { date: td, role: 'coach', text: 'Porto. Pastéis de nata for breakfast every day.', question: C.questionFor(data, td), at: nowIso() }];
         data.answerReactions = [{ date: yd, to: 'athlete', emoji: '🥹', by: 'coach', at: nowIso() }];
+        data.love = [];
+        for (var li = 0; li < 38; li++) {
+          var ldd = E.addDays(td, -Math.floor(li / 2.1) - 1);
+          data.love.push({ id: 'dl' + li, date: ldd, at: ldd + 'T20:' + pad(li % 60) + ':00Z', size: li % 7 === 3 ? 2 : li % 13 === 5 ? 3 : 1 });
+        }
+        data.love.sort(function (a, b) { return a.at < b.at ? -1 : 1; });
+        data.love.push({ id: 'dlt1', date: td, at: nowIso(), size: 1 }, { id: 'dlt2', date: td, at: nowIso(), size: 2 });
       }
       return data;
     }
@@ -271,6 +279,10 @@
       (st.reactions || []).forEach(function (r) { if (r.id === op.id) r.seenAt = r.seenAt || nowIso(); });
     } else if (op.type === 'cheer') {
       st.cheers.push({ id: 'local' + uid(), createdAt: nowIso(), text: op.text, seenAt: '' });
+    } else if (op.type === 'love') {
+      var L = st.love || (st.love = { total: 0, today: 0, todayBig: 0, lastAt: '' });
+      L.total++; L.lastAt = nowIso();
+      if (op.date === todayStr()) { L.today++; if (op.size > 1) L.todayBig++; }
     }
   }
 
@@ -1176,7 +1188,7 @@
     h += '<div class="stats"><div class="stat"><b>' + res.completedCount + '</b><span>Workouts</span></div>' +
       '<div class="stat"><b>' + ws.thisWeek + ' of ' + ws.perWeek + '</b><span>This week' + (ws.total ? ', ' + ws.good + ' of ' + ws.total + ' full weeks' : '') + '</span></div>' +
       '<div class="stat"><b>' + (mins.length ? Math.round(mins.reduce(function (a, b) { return a + b; }, 0) / mins.length) + ' min' : '—') + '</b><span>Average workout</span></div>' +
-      '<div class="stat"><b>' + km(res.cumKm) + ' km</b><span>' + res.totalReps.toLocaleString('en-GB') + ' reps so far</span></div></div>';
+      '<div class="stat"><b>' + km(res.cumKm) + ' km</b><span>' + res.totalReps.toLocaleString('en-GB') + ' reps so far</span></div>' + loveStatHTML() + '</div>';
 
     // working sets this week by muscle
     var t = todayStr(), monday = E.addDays(t, -((dateObj(t).getDay() + 6) % 7)), count = {};
@@ -1337,10 +1349,129 @@
     showModal(h);
   }
 
+  // ---------- love: she sends hearts from the top bar, the coach sees the running total ----------
+  var LOVE_BIG = 600, LOVE_HUGE = 1500; // ms held for a big / huge heart
+  function loveHTML() {
+    var L = S.state.love;
+    if (!L) return '';
+    var her = S.state.settings.herName || 'She';
+    if (!L.total) return '<section class="lovecard empty"><span class="lvh">' + IC.heart + '</span><p>No hearts yet. ' + esc(her) + ' can send them from the heart at the top of her app.</p></section>';
+    var last = L.lastAt ? new Date(L.lastAt) : null;
+    var lastTxt = last && !isNaN(last) ? (L.today ? 'Last one at ' + last.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+      : 'Last one on ' + last.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })) : '';
+    return '<section class="lovecard" id="lovecard"><span class="lvh">' + IC.heart + '</span><p><b>' + L.today + '</b> today' +
+      (L.todayBig ? ' <span class="muted">(' + L.todayBig + ' big)</span>' : '') + ' · <b>' + L.total + '</b> so far' +
+      (lastTxt ? '<span class="small muted">' + esc(lastTxt) + '</span>' : '') + '</p></section>';
+  }
+  /** Progress: the hearts she has sent (for the coach: from her). */
+  function loveStatHTML() {
+    var L = S.state.love;
+    if (!L) return '';
+    var coach = role() === 'coach', her = S.state.settings.herName || 'her';
+    return '<div class="stat lovestat"><span class="lvh">' + IC.heart + '</span><div><b>' + L.total.toLocaleString('en-GB') + '</b><span>' +
+      (coach ? 'Hearts from ' + esc(her) : 'Hearts sent to ' + esc(who())) + (L.today ? ', ' + L.today + ' today' : '') + '</span></div></div>';
+  }
+  /** New hearts since the coach last looked: let a few float up from the card, once. */
+  function loveArrived() {
+    var L = S.state && S.state.love;
+    if (!L || role() !== 'coach' || S.view !== 'coach') return;
+    var seen = Number(S.seen.love || 0);
+    if (L.total <= seen) return;
+    S.seen.love = L.total; store.set('seen', S.seen);
+    var card = document.getElementById('lovecard');
+    if (card) floatHearts(card, Math.min(12, (L.total - seen) * 2 + 2));
+  }
+  function floatHearts(el, n) {
+    var r = el.getBoundingClientRect(), lean = r.left + r.width / 2 > window.innerWidth * 0.7 ? -45 : 0; // from the corner: drift inwards
+    for (var i = 0; i < n; i++) {
+      var h = document.createElement('span');
+      h.className = 'floatheart';
+      h.innerHTML = IC.heart;
+      var size = 14 + Math.round(Math.random() * 14);
+      h.style.left = (r.left + r.width / 2 - size / 2 + (Math.random() - 0.5) * 30) + 'px';
+      h.style.top = (r.top + r.height / 2 - size / 2) + 'px';
+      h.style.width = h.style.height = size + 'px';
+      h.style.setProperty('--dx', Math.round(lean + (Math.random() - 0.5) * 110) + 'px');
+      h.style.setProperty('--dy', -Math.round(140 + Math.random() * 160) + 'px');
+      h.style.animationDelay = Math.round(i * 60 + Math.random() * 80) + 'ms';
+      document.body.appendChild(h);
+      setTimeout(function (x) { return function () { x.remove(); }; }(h), 2200 + i * 60);
+    }
+  }
+  function loveToast(text, big) {
+    var old = document.querySelector('.lovetoast');
+    if (old) old.remove();
+    var t = document.createElement('div');
+    t.className = 'lovetoast' + (big ? ' big' : '');
+    t.textContent = text;
+    document.body.appendChild(t);
+    setTimeout(function () { t.classList.add('out'); }, big ? 3600 : 1600);
+    setTimeout(function () { t.remove(); }, big ? 4100 : 2100);
+  }
+  function sendLove(el, size) {
+    enqueue({ type: 'love', id: 'l' + Date.now().toString(36) + uid(), date: todayStr(), size: size });
+    var total = S.state && S.state.love ? S.state.love.total : 0;
+    var isMs = window.FlightCore && window.FlightCore.isLoveMilestone ? window.FlightCore.isLoveMilestone : function () { return false; };
+    if (total && isMs(total)) {
+      // a milestone: a big burst, confetti and a toast that stays a little longer
+      if (el) floatHearts(el, 24);
+      confetti();
+      loveToast(total + ' hearts sent to ' + who() + '! ✨', true);
+      return;
+    }
+    if (el) floatHearts(el, size === 3 ? 14 : size === 2 ? 8 : 4);
+    loveToast((size === 3 ? 'Huge love sent to ' + who() + ' 💗' : size === 2 ? 'Big love sent to ' + who() + ' 💗' : 'Sent to ' + who() + ' 💗') +
+      (total ? ' · ' + total + ' so far' : ''));
+  }
+  /** Her floating heart, bottom right above the tabs on Train, Flight and Progress. Lives outside #app. */
+  function syncFab(v) {
+    var show = !!S.state && role() === 'athlete' && (v === 'home' || v === 'trip' || v === 'log');
+    var b = document.getElementById('lovefab');
+    if (show && !b) {
+      b = document.createElement('button');
+      b.id = 'lovefab'; b.type = 'button'; b.className = 'lovebtn lovefab'; b.setAttribute('data-act', 'love');
+      b.setAttribute('aria-label', 'Send ' + who() + ' love. Hold for a bigger one');
+      b.innerHTML = '<span class="lh">' + IC.heart + '</span>';
+      document.body.appendChild(b);
+    }
+    if (b) b.hidden = !show;
+    document.body.classList.toggle('hasfab', show);
+  }
+  // hold the heart to make it bigger: tap = 1, held 0.6 s = big, held 1.5 s = huge
+  var loveHold = null;
+  function loveTick() {
+    if (!loveHold) return;
+    var ms = Date.now() - loveHold.t0, el = loveHold.el;
+    el.style.setProperty('--g', (1 + Math.min(1, ms / LOVE_HUGE) * 0.9).toFixed(3));
+    el.classList.toggle('lv2', ms >= LOVE_BIG);
+    el.classList.toggle('lv3', ms >= LOVE_HUGE);
+    loveHold.raf = requestAnimationFrame(loveTick);
+  }
+  function loveEnd(send) {
+    if (!loveHold) return;
+    var h = loveHold, ms = Date.now() - h.t0;
+    loveHold = null;
+    cancelAnimationFrame(h.raf);
+    h.el.classList.remove('holding', 'lv2', 'lv3');
+    h.el.style.removeProperty('--g');
+    S.loveClickSkip = Date.now();
+    if (send) sendLove(h.el, ms >= LOVE_HUGE ? 3 : ms >= LOVE_BIG ? 2 : 1);
+  }
+  document.addEventListener('pointerdown', function (ev) {
+    var b = ev.target.closest && ev.target.closest('.lovebtn');
+    if (!b || loveHold) return;
+    loveHold = { t0: Date.now(), el: b, raf: 0 };
+    b.classList.add('holding');
+    loveHold.raf = requestAnimationFrame(loveTick);
+  });
+  document.addEventListener('pointerup', function () { loveEnd(true); });
+  document.addEventListener('pointercancel', function () { loveEnd(false); });
+  document.addEventListener('contextmenu', function (ev) { if (ev.target.closest && ev.target.closest('.lovebtn')) ev.preventDefault(); });
+
   // ---------- coach ----------
   function viewCoach() {
     var res = calc(), s = S.state.settings;
-    var h = '<div class="screen">' + topHTML('Coach console', (s.herName ? s.herName + ', ' : '') + 'flight ' + (s.flightNo || 'AY 1697')) + qaHTML() + mapSVG(res.cumKm) + flightlineHTML(res);
+    var h = '<div class="screen">' + topHTML('Coach console', (s.herName ? s.herName + ', ' : '') + 'flight ' + (s.flightNo || 'AY 1697')) + loveHTML() + qaHTML() + mapSVG(res.cumKm) + flightlineHTML(res);
     if (s.sheetUrl) h += '<p><a class="btn ghost wide" href="' + esc(s.sheetUrl) + '" target="_blank" rel="noopener">Open the Sheet</a></p>';
     h += '<section class="panel"><h3>Easier week</h3>';
     if (res.deloadLeft > 0) h += '<p class="small">Scheduled: her next ' + plural(res.deloadLeft, 'workout is', 'workouts are') + ' easier (half the sets, 3–4 in reserve).</p>';
@@ -1895,6 +2026,7 @@
       case 'start': startFlight(t.dataset.day); break;
       case 'resume': if (d) { d.finishedAt = null; store.set('draft', d); } S.view = 'flight'; if (!d || !d.retro) { keepAwake(); unlockAudio(); } render(); break;
       case 'retroLog': closeModal(); startFlight(null, t.dataset.date); break;
+      case 'love': if (!S.loveClickSkip || Date.now() - S.loveClickSkip > 700) sendLove(t, 1); break; // a click without a pointer (keyboard)
       case 'inc': {
         var s = d.sets[+t.dataset.i], it = d.items[s.slot], f = t.dataset.f, step = f === 'kg' ? it.step : 1;
         s[f] = Math.max(0, Math.round((Number(s[f]) + step * Number(t.dataset.d)) * 100) / 100);
@@ -2107,7 +2239,9 @@
   }, 1000);
 
   // ---------- render ----------
-  function render() {
+  function render() { syncFab(renderView()); }
+  /** Draws the current screen and returns its view name ('' while there is nothing to show). */
+  function renderView() {
     if (!DEMO && !KEY) {
       app.innerHTML = '<div class="err"><h1>This link is missing its key</h1><p class="muted">Open the exact link your coach sent you, then add it to your Home Screen from there.</p></div>';
       return;
@@ -2133,6 +2267,8 @@
       : v === 'log' ? viewLog() : v === 'trip' ? viewTrip() : viewCoach();
     if (v === 'home' || v === 'log' || v === 'coach' || v === 'trip') html += tabsHTML();
     app.innerHTML = html;
+    if (v === 'coach') loveArrived();
+    return v;
   }
 
   // ---------- boot ----------
