@@ -10,21 +10,19 @@ const first = a => a[0];
 const last = a => a[a.length - 1];
 const SEEDS = [1, 2, 3];
 
-test('first plan: test week, Day A, no weights until she picks them', () => {
+test('first plan: no test week, a normal Day A; she picks the weights and the last set is a test set', () => {
   const p = E.plan(result(newData()), '2026-11-23');
   assert.strictEqual(p.day, 'A');
-  assert.strictEqual(p.mode, 'intro');
-  assert.ok(p.items.length >= 6);
+  assert.strictEqual(p.mode, 'normal');
+  assert.strictEqual(p.setsTotal, 19);
   p.items.forEach(it => {
-    assert.ok(it.targets.length === it.sets && it.targets.every(t => t === it.min), it.slot);   // goal = bottom of the range
-    assert.strictEqual(it.sets, it.main ? 3 : 2, it.slot);                                      // every set, not one fewer
-    assert.ok(it.rir.every(r => r === '1–2'), it.slot);                                         // 1–2 in reserve
-    assert.strictEqual(it.calibrate, true, it.slot);                                             // last set is a test set
+    assert.strictEqual(it.sets, it.main ? 3 : 2, it.slot);                                      // every set
+    assert.ok(it.taxi && it.targets.length === it.sets && it.targets.every(t => t >= it.min && t <= it.max), it.slot);
+    assert.ok(it.rir.every(r => r === (it.exercise.id === 'back-squat' ? '1–2' : '1')), it.slot); // a normal, hard workout
+    assert.strictEqual(it.calibrate, true, it.slot);                                             // first time: test set
   });
 });
 
-// The simulated athlete gains +1%/week (steady) or +2%/week (strong). A 1 kg step on a 9 kg dumbbell is +11%,
-// so a steady athlete can only earn it after about 10 weeks: the weights follow her real strength, nothing faster.
 test('main lifts get heavier: all three for a strong athlete, most of them for a steady one', () => {
   for (const seed of SEEDS) {
     const strong = simulate({ seed, hitRate: 0.95, gainPerWk: 0.02 }).log, steady = simulate({ seed });
@@ -174,20 +172,20 @@ test('forced progression: one more rep on every set, more weight once every set 
   assert.ok(p.targets.every(t => t >= 8 && t <= 10), p.targets.join(','));
 });
 
-test('test week sets the weights: a strong test set means a heavier week 2, otherwise one more rep', () => {
+test('the first workout sets the weights: a strong test set means heavier next time, otherwise one more rep', () => {
   const run = testReps => {
     const data = newData();
     C.applyOp(data, { type: 'saveSession', session: { id: 't', date: '2026-11-23', day: 'A', effort: 3,
-      sets: testReps.map((r, i) => ({ slot: 'chest', ex: 'incline-db-press', set: i + 1, kg: 10, reps: r, done: true, rir: '1–2', target: 8 })) } },
+      sets: testReps.map((r, i) => ({ slot: 'chest', ex: 'incline-db-press', set: i + 1, kg: 10, reps: r, done: true, rir: '1', target: 10 })) } },
       'athlete', '2026-11-23T18:00:00Z');
-    const res = result(data);
-    return { intro: E.plan(res, '2026-11-26', 'B').items.find(it => it.slot === 'chest'), wk2: E.plan(res, '2026-11-30', 'A').items.find(it => it.slot === 'chest') };
+    const it = E.plan(result(data), '2026-11-26', 'B').items.find(x => x.slot === 'chest');
+    assert.strictEqual(it.calibrate, false);                    // only the first time
+    return it;
   };
-  const easy = run([8, 14]);
-  assert.deepStrictEqual([easy.intro.kg, easy.intro.targets], [10, [8, 8, 8]]);  // still the test week: same weight, same goal
-  assert.ok(easy.wk2.kg > 10, 'week 2 after a strong test: ' + easy.wk2.kg);
-  const ok = run([8, 9]);
-  assert.deepStrictEqual([ok.wk2.kg, ok.wk2.targets], [10, [9, 9, 9]]);
+  const strong = run([10, 10, 16]);
+  assert.ok(strong.kg > 10, 'after a strong test set: ' + strong.kg);
+  const ok = run([10, 10, 10]);
+  assert.deepStrictEqual([ok.kg, ok.targets], [10, [11, 11, 11]]);
 });
 
 test('the program: three main lifts first, the same workout on both days, accessories to vary', () => {
@@ -296,7 +294,7 @@ test('two answers streak: days in a row both answered; today never breaks it', (
 });
 
 // ---------- moving a workout (e.g. Thursday instead of Friday) ----------
-test('second workout on a Thursday: it is Day B, still the test week, and the landing estimate skips that Friday', () => {
+test('second workout on a Thursday: it is Day B, and the landing estimate skips that Friday', () => {
   const data = newData();
   const doWorkout = date => {
     const p = E.plan(result(data), date);
@@ -308,7 +306,7 @@ test('second workout on a Thursday: it is Day B, still the test week, and the la
   };
   doWorkout('2026-11-23');
   const thu = doWorkout('2026-11-26');
-  assert.deepStrictEqual([thu.day, thu.mode], ['B', 'intro']);
+  assert.deepStrictEqual([thu.day, thu.mode], ['B', 'normal']);
   const res = result(data);
   assert.ok(res.sessions.every(s => s.completed));
   assert.strictEqual(E.nextDay(res), 'A');

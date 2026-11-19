@@ -12,9 +12,10 @@
  *   Exercise = one variation inside a slot (rank 1 = recommended). She picks one per slot, per day if she likes.
  *
  * Progression (v6: as simple as possible)
- *   - Test week (introWeeks): all sets, 1–2 reps in reserve, goal = the bottom of the range, and the last set
- *     is a test set (keep going while 1–2 reps are left). No increases.
- *   - Then every workout: one more rep on every set than last time, up to the top of the range.
+ *   - No test week: every workout is a normal, hard one (about 1 rep in reserve). The first time she does an
+ *     exercise she picks the weight, and its last set is a test set (keep going while 1–2 reps are left), so the
+ *     next workout starts from her real strength. (introWeeks > 0 in Settings would bring back test weeks.)
+ *   - Every workout: one more rep on every set than last time, up to the top of the range.
  *   - Every set at the top -> next time one step heavier (more if a test set or "Too easy" showed she is clearly
  *     stronger, up to three steps). Right after a step up, landing up to about 2–3 reps under the range is fine.
  *   - Missed (most sets under the range): the first miss at a new weight holds it once, otherwise one step back.
@@ -31,7 +32,7 @@ var FlightEngine = (function () {
   var DEFAULTS = {
     routeKm: 1697,
     kmPerRep: 0.38,
-    introWeeks: 1,
+    introWeeks: 0,
     trainingWeekdays: [1, 5],
     startDate: '2026-11-23',
     deloadSessions: 2,
@@ -614,8 +615,10 @@ var FlightEngine = (function () {
       }
       rir.push(r);
     }
-    // a test set (last set: keep going while 1–2 reps are left): the test week, and the workout after a "Too easy"
-    var calibrate = mode === 'intro' || (!taxi && !estimated && mode === 'normal' && !dc.down && !!(s && s.easy));
+    // a test set (last set: keep going while 1–2 reps are left): the first time on an exercise (no weight yet),
+    // a test week if one is set, and the workout after a "Too easy"
+    var first = taxi || estimated;
+    var calibrate = mode === 'intro' || (first && mode !== 'deload') || (mode === 'normal' && !dc.down && !!(s && s.easy));
     return {
       slot: slot.key, muscle: slot.muscle, pair: slot.pair, main: slot.main, exercise: e, sets: sets, kg: taxi ? null : kg,
       taxi: taxi, estimated: estimated, targets: targets, rir: rir, failureSet: failureSet, calibrate: calibrate,

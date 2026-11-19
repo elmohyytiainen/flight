@@ -982,7 +982,7 @@
       if (s.skip) notes.push('Skipped');
       else notes.push(esc(rirText(s.rir)));
       if (i === next && s.rir === '0') notes.push('Finish the last rep you can do with your usual form and range');
-      if (i === next && s.calib) notes.push(d.mode === 'intro' ? 'Test set: keep going past the goal while you still have 1–2 reps left, and log every rep'
+      if (i === next && s.calib) notes.push(d.mode === 'intro' || it.taxi || it.estimated ? 'Test set: keep going past the goal while you still have 1–2 reps left, and log every rep'
         : 'Last set: if it moves well, keep going past the goal and log every clean rep');
       h += '<div class="rirline">' + notes.join('. ') + '</div>';
       if (d.fbFor === i) {

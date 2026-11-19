@@ -155,7 +155,7 @@ var FlightCore = (function () {
     dayAName: 'Label for Day A (the 1st workout of the week)',
     dayBName: 'Label for Day B (the 2nd workout of the week)',
     startDate: 'First Monday of the program',
-    introWeeks: 'Test weeks at the start: 1–2 reps in reserve, goal = bottom of the range, the last set is a test set. 0, 1 or 2',
+    introWeeks: 'Test weeks at the start (0 = none, every workout is a normal one): 1–2 reps in reserve, goal = bottom of the range, the last set is a test set. 0, 1 or 2',
     programVersion: 'Which built-in program the Slots and Exercises tabs were last reset to by Flight > Upgrade. Leave it alone',
     trainingWeekdays: 'Weekdays for the landing estimate and calendar: 0=Sun, 1=Mon ... 5=Fri',
     routeKm: 'Tampere-Pirkkala (TMP) to Luxembourg (LUX), great circle',
@@ -175,7 +175,7 @@ var FlightCore = (function () {
   function seedSettings(keys) {
     return [
       ['herName', keys.herName || ''], ['travellerName', 'Elmo'], ['flightNo', FLIGHT_NO],
-      ['dayAName', 'Day A'], ['dayBName', 'Day B'], ['startDate', '2026-11-23'], ['introWeeks', 1],
+      ['dayAName', 'Day A'], ['dayBName', 'Day B'], ['startDate', '2026-11-23'], ['introWeeks', 0],
       ['trainingWeekdays', '1,5'], ['routeKm', 1697], ['kmPerRep', FlightEngine.DEFAULTS.kmPerRep],
       ['coachEmail', keys.coachEmail || ''], ['appUrl', keys.appUrl || ''],
       ['athleteKey', keys.athleteKey], ['coachKey', keys.coachKey], ['goals', GOALS], ['programVersion', PROGRAM_VERSION]
@@ -409,7 +409,7 @@ var FlightCore = (function () {
     want('flightNo', FLIGHT_NO, ['', 'FL 1697']);
     want('dayAName', 'Day A', ['Push first', 'Heavy']);
     want('dayBName', 'Day B', ['Pull first', 'Volume']);
-    want('introWeeks', 1);
+    want('introWeeks', 0, ['1']); // no test week since Nov 2026 (Hyde): only an untouched 1 changes
     want('kmPerRep', FlightEngine.DEFAULTS.kmPerRep);
     want('goals', GOALS, OLD_GOALS);
     ['passengerName', 'layoverWeek', 'kmCruise', 'kmTailwind', 'jetPerUpgrade', 'jetCap', 'vBaseA', 'vBaseB'].forEach(function (k) {
