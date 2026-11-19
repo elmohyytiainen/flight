@@ -152,8 +152,8 @@ var FlightCore = (function () {
     herName: 'Her name, written on the postcards',
     travellerName: 'Who flies to LUX when the bar fills (shown on the boarding pass and in the app)',
     flightNo: 'Flight number on the boarding pass',
-    dayAName: 'Label for Day A (the 1st workout of the week)',
-    dayBName: 'Label for Day B (the 2nd workout of the week)',
+    dayAName: 'Name of workout A (the two alternate). Same name on both = the app adds A/B only where she picks per-workout accessories',
+    dayBName: 'Name of workout B',
     startDate: 'First Monday of the program',
     introWeeks: 'Test weeks at the start (0 = none, every workout is a normal one): 1–2 reps in reserve, goal = bottom of the range, the last set is a test set. 0, 1 or 2',
     programVersion: 'Which built-in program the Slots and Exercises tabs were last reset to by Flight > Upgrade. Leave it alone',
@@ -175,7 +175,7 @@ var FlightCore = (function () {
   function seedSettings(keys) {
     return [
       ['herName', keys.herName || ''], ['travellerName', 'Elmo'], ['flightNo', FLIGHT_NO],
-      ['dayAName', 'Day A'], ['dayBName', 'Day B'], ['startDate', '2026-11-23'], ['introWeeks', 0],
+      ['dayAName', 'Workout'], ['dayBName', 'Workout'], ['startDate', '2026-11-23'], ['introWeeks', 0],
       ['trainingWeekdays', '1,5'], ['routeKm', 1697], ['kmPerRep', FlightEngine.DEFAULTS.kmPerRep],
       ['coachEmail', keys.coachEmail || ''], ['appUrl', keys.appUrl || ''],
       ['athleteKey', keys.athleteKey], ['coachKey', keys.coachKey], ['goals', GOALS], ['programVersion', PROGRAM_VERSION]
@@ -407,8 +407,8 @@ var FlightCore = (function () {
     want('herName', s.passengerName || '');
     want('travellerName', 'Elmo');
     want('flightNo', FLIGHT_NO, ['', 'FL 1697']);
-    want('dayAName', 'Day A', ['Push first', 'Heavy']);
-    want('dayBName', 'Day B', ['Pull first', 'Volume']);
+    want('dayAName', 'Workout', ['Push first', 'Heavy', 'Day A']);
+    want('dayBName', 'Workout', ['Pull first', 'Volume', 'Day B']);
     want('introWeeks', 0, ['1']); // no test week since Nov 2026 (Hyde): only an untouched 1 changes
     want('kmPerRep', FlightEngine.DEFAULTS.kmPerRep);
     want('goals', GOALS, OLD_GOALS);
@@ -639,10 +639,12 @@ var FlightCore = (function () {
     data.exercises.forEach(function (e) { names[str(e.id)] = str(e.name); });
     var st = result.settings, who = str(data.settings.travellerName) || 'Elmo';
     var dayName = str(data.settings[c.day === 'A' ? 'dayAName' : 'dayBName']) || 'Day ' + c.day;
+    if (dayName === (str(data.settings[c.day === 'A' ? 'dayBName' : 'dayAName']) || 'Day ' + (c.day === 'A' ? 'B' : 'A'))) dayName = '';
     var left = Math.max(0, Math.round(st.routeKm - c.cumKm));
     var lines = [];
-    lines.push('Workout ' + n + ' (' + dayName + (c.mode === 'deload' ? ', easier week' : c.mode === 'intro' ? ', test week' : c.mode === 'back' ? ', first workout after a break' : '') +
-      (c.minutes ? ', ' + c.minutes + ' min' : '') + '): ' + c.reps + ' reps, +' + c.km + ' km.');
+    var about = [dayName, c.mode === 'deload' ? 'easier week' : c.mode === 'intro' ? 'test week' : c.mode === 'back' ? 'first workout after a break' : '',
+      c.minutes ? c.minutes + ' min' : ''].filter(Boolean).join(', ');
+    lines.push('Workout ' + n + (about ? ' (' + about + ')' : '') + ': ' + c.reps + ' reps, +' + c.km + ' km.');
     lines.push(left > 0 ? left + ' km until ' + who + ' flies to Luxembourg.' : 'Flight unlocked: ' + who + ' to LUX!');
     lines.push(c.done + '/' + c.prescribed + ' working sets.');
     if (c.improvements.length) lines.push('Improvements: ' + c.improvements.map(function (x) { return (names[x.ex] || x.ex) + ': ' + x.text; }).join('; ') + '.');

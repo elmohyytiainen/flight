@@ -313,3 +313,18 @@ test('second workout on a Thursday: it is Day B, and the landing estimate skips 
   res.settings.routeKm = res.cumKm + 1;                       // one workout left
   assert.strictEqual(E.eta(res, '2026-11-26', true).date, '2026-11-30');
 });
+
+test('both workouts are called "Workout": Upgrade renames untouched defaults only, and the email reads cleanly', () => {
+  const d = newData();
+  assert.strictEqual(d.settings.dayAName, 'Workout');
+  assert.strictEqual(d.settings.dayBName, 'Workout');
+  d.settings.dayAName = 'Day A'; d.settings.dayBName = 'Monday';            // an old default, and one Hyde wrote himself
+  const plan = C.upgradePlan(d).settings.map(s => s.key + '=' + s.value);
+  assert.ok(plan.includes('dayAName=Workout') && !plan.some(x => x.startsWith('dayBName')), plan.join(', '));
+  const { data } = simulate({ seed: 1, weeks: 1 });
+  data.settings.coachEmail = 'coach@example.com';
+  const out = C.applyOp(data, { type: 'saveSession', session: { id: 'x', date: '2026-12-01', day: 'A', effort: 3, minutes: 50,
+    sets: [{ slot: 'chest', ex: 'incline-db-press', set: 1, kg: 9, reps: 10, done: true, rir: '1', target: 10 }] } }, 'athlete', '2026-12-01T18:00:00Z');
+  const body = (out && out.notify && out.notify.body) || '';
+  assert.ok(/Workout \d+ \(50 min\):/.test(body), body.split('\n')[0]);
+});
