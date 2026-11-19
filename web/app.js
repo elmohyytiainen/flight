@@ -158,6 +158,7 @@
           { date: yd, role: 'coach', text: 'The pasta place in Kirchberg, no contest.', question: C.questionFor(data, yd), at: nowIso() },
           { date: yd, role: 'athlete', text: 'That tiny pizza place where it rained all evening :)', question: C.questionFor(data, yd), at: nowIso() },
           { date: td, role: 'coach', text: 'Porto. Pastéis de nata for breakfast every day.', question: C.questionFor(data, td), at: nowIso() }];
+        data.answerReactions = [{ date: yd, to: 'athlete', emoji: '🥹', by: 'coach', at: nowIso() }];
       }
       return data;
     }
@@ -251,6 +252,8 @@
       st.postcards.forEach(function (p) { if (p.id === op.id) p.openedAt = p.openedAt || nowIso(); });
     } else if (op.type === 'answer') {
       (st.twoAnswers || []).forEach(function (q) { if (q.date === op.date) { q.mine = op.text; q.canAnswer = false; } });
+    } else if (op.type === 'answerReact') {
+      (st.twoAnswers || []).forEach(function (q) { if (q.date === op.date) q.theirsReaction = op.emoji; });
     } else if (op.type === 'profilePhoto') {
       st.settings[role() === 'coach' ? 'coachPhoto' : 'herPhoto'] = op.dataUrl;
     } else if (op.type === 'postcardReply') {
@@ -494,8 +497,25 @@
     var coach = role() === 'coach';
     return { who: coach ? 'her' : 'coach', name: coach ? (String(S.state.settings.herName || '').trim() || 'She') : who() };
   }
-  function qaRow(whoKey, label, text) {
-    return '<div class="qrow ' + (whoKey === 'her' ? 'her' : 'coach') + '">' + avatarHTML(whoKey, 'av-32') + '<div><b>' + esc(label) + '</b>' + esc(text) + '</div></div>';
+  /**
+   * One answer box. o.bubble = the reaction on it; o.react = a date when it is the other's answer, so you can react
+   * (a 🙂+ button, or tap the bubble to change it); o.open shows the emoji row under it.
+   */
+  function qaRow(whoKey, label, text, o) {
+    o = o || {};
+    var bub = o.bubble ? (o.react ? '<button class="qbub" data-act="qaPick" data-date="' + o.react + '"' + (o.sheet ? ' data-sheet="1"' : '') +
+      ' aria-label="Change your reaction">' + esc(o.bubble) + '</button>' : '<span class="qbub" aria-label="Reaction">' + esc(o.bubble) + '</span>') : '';
+    var add = o.react && !o.bubble ? '<button class="qreact" data-act="qaPick" data-date="' + o.react + '"' + (o.sheet ? ' data-sheet="1"' : '') +
+      ' aria-label="React to this answer">🙂<span class="plus">+</span></button>' : '';
+    var h = '<div class="qrow ' + (whoKey === 'her' ? 'her' : 'coach') + (bub ? ' hasbub' : '') + (add ? ' canreact' : '') + '">' +
+      avatarHTML(whoKey, 'av-32') + '<div><b>' + esc(label) + '</b>' + esc(text) + '</div>' + bub + add + '</div>';
+    if (o.react && o.open) {
+      h += '<div class="qpick">' + ((window.FlightCore && window.FlightCore.QA_EMOJIS) || PC_EMOJIS).map(function (e) {
+        return '<button class="qemo' + (e === o.bubble ? ' on' : '') + '" data-act="qaReact" data-date="' + o.react + '" data-emoji="' + esc(e) + '"' +
+          (o.sheet ? ' data-sheet="1"' : '') + '>' + esc(e) + '</button>';
+      }).join('') + '</div>';
+    }
+    return h;
   }
   /** One day: the question, then a box to answer, or both answers, or a wait for the other. */
   function qaDayHTML(q, inSheet) {
@@ -506,8 +526,8 @@
       h += '<textarea class="qta" id="' + id + '" maxlength="1000" placeholder="Your answer…"></textarea>' +
         '<button class="btn taxi wide" data-act="qaSend" data-date="' + q.date + '" data-ta="' + id + '"' + (inSheet ? ' data-sheet="1"' : '') + '>Answer</button>';
     } else {
-      h += qaRow(me, 'You', q.mine || '…');
-      h += q.theirs ? qaRow(o.who, o.name, q.theirs)
+      h += qaRow(me, 'You', q.mine || '…', { bubble: q.mineReaction });
+      h += q.theirs ? qaRow(o.who, o.name, q.theirs, { bubble: q.theirsReaction, react: q.date, open: S.qaPick === q.date, sheet: inSheet })
         : '<div class="qwait">' + avatarHTML(o.who, 'av-24') + (q.theirsAnswered ? 'Revealing…' : 'Waiting for ' + esc(o.name) + '. You\'ll see both answers once you both have.') + '</div>';
     }
     return h;
@@ -1848,7 +1868,17 @@
       case 'day': daySheet(t.dataset.date); break;
       case 'mapToggle': S.mapOpen = !S.mapOpen; render(); break;
       case 'profile': profileSheet(); break;
-      case 'qaPast': qaPastSheet(); break;
+      case 'qaPast': S.qaPick = null; qaPastSheet(); break;
+      case 'qaPick': S.qaPick = S.qaPick === t.dataset.date ? null : t.dataset.date; if (t.dataset.sheet) qaPastSheet(); else render(); break;
+      case 'qaReact': {
+        var qd = (S.state.twoAnswers || []).filter(function (x) { return x.date === t.dataset.date; })[0];
+        var qe = qd && qd.theirsReaction === t.dataset.emoji ? '' : t.dataset.emoji; // the same one again takes it away
+        S.qaPick = null;
+        enqueue({ type: 'answerReact', date: t.dataset.date, emoji: qe });
+        if (t.dataset.sheet) qaPastSheet();
+        render();
+        break;
+      }
       case 'qaSend': {
         var qta = document.getElementById(t.dataset.ta), qtext = qta ? qta.value.trim() : '';
         if (!qtext) { if (qta) { qta.placeholder = 'Write something first :)'; qta.focus(); } break; }

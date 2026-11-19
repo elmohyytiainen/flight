@@ -27,14 +27,16 @@ var FlightCore = (function () {
     Cheers: ['id', 'createdAt', 'text', 'seenAt'],
     Reactions: ['id', 'at', 'sessionId', 'emoji', 'text', 'seenAt'],
     Questions: ['question', 'date', 'active'],
-    Answers: ['date', 'role', 'text', 'question', 'at']
+    Answers: ['date', 'role', 'text', 'question', 'at'],
+    AnswerReactions: ['date', 'to', 'emoji', 'by', 'at'] // a reaction bubble on the other's answer; the latest row per date+to wins, '' removes it
   };
   var KEY = { Settings: 'settings', Slots: 'slots', Exercises: 'exercises', Choices: 'choices', Sessions: 'sessions',
     Sets: 'sets', Overrides: 'overrides', Stamps: 'stamps', Postcards: 'postcards', Cheers: 'cheers', Reactions: 'reactions',
-    Questions: 'questions', Answers: 'answers' };
+    Questions: 'questions', Answers: 'answers', AnswerReactions: 'answerReactions' };
 
   // ---------- two answers: one question a day, both answer, answers show once both have ----------
   var Q_START = '2026-11-16';
+  var QA_EMOJIS = ['❤️', '🥰', '😂', '🥹', '😘', '🔥', '🌶️']; // reaction bubbles (same set as the postcard replies)
   var QUESTIONS = [
     'What\'s a small thing I do that makes you feel loved?',
     'Best meal we\'ve ever had together?',
@@ -126,12 +128,15 @@ var FlightCore = (function () {
   }
   /** What one side may see: their own answers, and the other's only for days they have answered too. */
   function twoAnswers(data, role, today) {
-    var mine = {}, theirs = {}, asked = {};
+    var mine = {}, theirs = {}, asked = {}, bub = {};
     (data.answers || []).forEach(function (a) {
       var d = str(a.date); if (!d) return;
       (str(a.role) === role ? mine : theirs)[d] = { text: str(a.text), at: str(a.at) };
       if (str(a.question)) asked[d] = str(a.question);
     });
+    // reaction bubbles: the latest per day and answer (to = whose answer)
+    (data.answerReactions || []).forEach(function (r) { var d = str(r.date); if (d) bub[d + '|' + str(r.to)] = str(r.emoji); });
+    var other = role === 'coach' ? 'athlete' : 'coach';
     var days = [];
     for (var i = 0; i < 60; i++) {
       var d = addDaysStr(today, -i);
@@ -139,8 +144,11 @@ var FlightCore = (function () {
       var m = mine[d], t = theirs[d];
       if (i > 0 && !m && !t) continue;
       if (i > 7 && !(m && t)) continue;           // older days only once both answered
+      var both = !!(m && t);
       days.push({ date: d, question: asked[d] || questionFor(data, d), mine: m ? m.text : '',
-        theirs: m && t ? t.text : '', theirsAnswered: !!t, canAnswer: !m && i <= 7 });
+        theirs: both ? t.text : '', theirsAnswered: !!t, canAnswer: !m && i <= 7,
+        mineReaction: both ? bub[d + '|' + role] || '' : '',      // their bubble on my answer
+        theirsReaction: both ? bub[d + '|' + other] || '' : '' }); // my bubble on their answer
     }
     return days;
   }
@@ -500,8 +508,8 @@ var FlightCore = (function () {
   function clip(s, n) { return str(s).slice(0, n); }
 
   var ROLE_OPS = {
-    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer'],
-    coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto', 'answer']
+    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer', 'answerReact'],
+    coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto', 'answer', 'answerReact']
   };
 
   function applyOp(data, op, role, nowIso) {
@@ -602,6 +610,20 @@ var FlightCore = (function () {
           ? { subject: '💬 ' + hn + ' answered: ' + aq, body: 'You: ' + str(other.text) + '\n' + hn + ': ' + atext }
           : { subject: '💬 ' + hn + ' answered today\'s question', body: '"' + aq + '"\n\nAnswer it in the app to see what she wrote ;)' };
       }
+    } else if (op.type === 'answerReact') {
+      // a reaction bubble on the other's answer, once both have answered that day; '' takes it away
+      if (!data.answerReactions) data.answerReactions = [];
+      var rd = str(op.date), remj = str(op.emoji), rto = role === 'coach' ? 'athlete' : 'coach';
+      if (!isDate(rd) || (remj && QA_EMOJIS.indexOf(remj) < 0)) bad('invalid reaction');
+      var ra = (data.answers || []).filter(function (a) { return str(a.date) === rd; });
+      var rmine = ra.filter(function (a) { return str(a.role) === role; })[0], rtheirs = ra.filter(function (a) { return str(a.role) === rto; })[0];
+      if (!rmine || !rtheirs) bad('answer first');
+      append('AnswerReactions', { date: rd, to: rto, emoji: remj, by: role, at: nowIso });
+      if (role === 'athlete' && remj) {
+        var rhn = str(data.settings.herName) || 'She';
+        notify = { subject: '💬 ' + rhn + ' reacted ' + remj + ' to your answer',
+          body: '"' + (str(rtheirs.question) || questionFor(data, rd)) + '"\n\nYou: ' + str(rtheirs.text) + '\n' + rhn + ': ' + str(rmine.text) };
+      }
     } else if (op.type === 'profilePhoto') {
       // a small square JPEG kept in the Settings tab (a Sheet cell holds at most 50,000 characters); '' removes it
       var pu = str(op.dataUrl), pkey = role === 'coach' ? 'coachPhoto' : 'herPhoto';
@@ -672,7 +694,7 @@ var FlightCore = (function () {
   }
 
   return {
-    TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises, programSync: programSync,
+    QA_EMOJIS: QA_EMOJIS, TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises, programSync: programSync,
     PROGRAM_VERSION: PROGRAM_VERSION,
     seedPostcards: seedPostcards, postcardSync: postcardSync, upgradePlan: upgradePlan, exerciseSync: exerciseSync, toEngineInput: toEngineInput, buildState: buildState,
     applyOp: applyOp, photoUrl: photoUrl, teaserUrl: teaserUrl, seedQuestions: seedQuestions, questionFor: questionFor, QUESTIONS: QUESTIONS

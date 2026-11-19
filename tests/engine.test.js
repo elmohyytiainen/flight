@@ -328,3 +328,25 @@ test('both workouts are called "Workout": Upgrade renames untouched defaults onl
   const body = (out && out.notify && out.notify.body) || '';
   assert.ok(/Workout \d+ \(50 min\):/.test(body), body.split('\n')[0]);
 });
+
+// ---------- reaction bubbles on Two answers ----------
+test('reaction bubbles: only once both answered, on the other\'s answer, latest wins, the same one again removes it', () => {
+  const data = newData(), today = '2026-11-20', at = h => today + 'T' + h + ':00:00Z';
+  C.applyOp(data, { type: 'answer', date: today, text: 'Pasta' }, 'coach', at('09'));
+  assert.throws(() => C.applyOp(data, { type: 'answerReact', date: today, emoji: '❤️' }, 'coach', at('09')), /answer first/);
+  C.applyOp(data, { type: 'answer', date: today, text: 'Pizza' }, 'athlete', at('10'));
+  assert.throws(() => C.applyOp(data, { type: 'answerReact', date: today, emoji: '💩' }, 'athlete', at('10')), /invalid reaction/);
+
+  const out = C.applyOp(data, { type: 'answerReact', date: today, emoji: '😂' }, 'athlete', at('11'));
+  assert.ok(out.notify && /reacted 😂 to your answer/.test(out.notify.subject) && /You: Pasta/.test(out.notify.body), 'Hyde gets an email');
+  let her = C.buildState(data, 'athlete', today).twoAnswers[0], him = C.buildState(data, 'coach', today).twoAnswers[0];
+  assert.deepStrictEqual([her.theirsReaction, her.mineReaction, him.mineReaction, him.theirsReaction], ['😂', '', '😂', '']);
+
+  const back = C.applyOp(data, { type: 'answerReact', date: today, emoji: '🥹' }, 'coach', at('12'));
+  assert.ok(!back || !back.notify, 'no email for his own reaction');
+  C.applyOp(data, { type: 'answerReact', date: today, emoji: '❤️' }, 'athlete', at('13'));   // she changes hers
+  her = C.buildState(data, 'athlete', today).twoAnswers[0];
+  assert.deepStrictEqual([her.theirsReaction, her.mineReaction], ['❤️', '🥹']);
+  C.applyOp(data, { type: 'answerReact', date: today, emoji: '' }, 'athlete', at('14'));     // and takes it away
+  assert.strictEqual(C.buildState(data, 'coach', today).twoAnswers[0].mineReaction, '');
+});
