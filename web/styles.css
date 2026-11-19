@@ -409,6 +409,13 @@ section.offer, .flightview > .offer { margin: 12px 18px 0; }
 .btn svg { flex: none; }
 .navrow .btn { gap: 6px; }
 .choicehint { margin: 6px 0 10px; }
+/* the "progress lifts" note in the workout preview: hard to miss */
+.mainnote { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0 12px; padding: 12px 14px; border-radius: 14px;
+  background: color-mix(in srgb, var(--warn) 9%, #fff); box-shadow: inset 4px 0 0 var(--warn); }
+.mainnote .bang { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--warn); color: #fff;
+  font-weight: 700; font-size: 15px; line-height: 24px; text-align: center; margin-top: 1px; }
+.mainnote p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink); }
+.mainnote b { font-weight: 600; }
 .todayh { margin-top: 4px; }
 .screen > .note { margin-top: 12px; background: color-mix(in srgb, var(--taxi) 26%, #fff); border-radius: 12px; padding: 10px 12px; font-size: 15px; }
 .pblock { background: var(--steel); border-radius: 16px; padding: 4px 14px; margin-top: 10px; }
