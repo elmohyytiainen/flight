@@ -13,7 +13,7 @@ var FlightCore = (function () {
   var TABS = {
     Settings: ['key', 'value', 'note'],
     Slots: ['slot', 'muscle', 'orderA', 'orderB', 'pair', 'setsA', 'repMinA', 'repMaxA', 'setsB', 'repMinB', 'repMaxB',
-      'restA', 'restB', 'rirLastA', 'rirLastB', 'lastRirStableOnly', 'failureLast', 'calibrate', 'active'],
+      'restA', 'restB', 'rirLastA', 'rirLastB', 'lastRirStableOnly', 'failureLast', 'calibrate', 'active', 'main'],
     Exercises: ['id', 'slot', 'name', 'rank', 'stepKg', 'loadMult', 'baseKg', 'kgLabel', 'assisted', 'stable', 'rir',
       'startKg', 'cue', 'video', 'active'],
     Choices: ['at', 'slot', 'day', 'exercise'],
@@ -151,10 +151,11 @@ var FlightCore = (function () {
     herName: 'Her name, written on the postcards',
     travellerName: 'Who flies to LUX when the bar fills (shown on the boarding pass and in the app)',
     flightNo: 'Flight number on the boarding pass',
-    dayAName: 'Label for Day A (Monday)',
-    dayBName: 'Label for Day B (Friday)',
+    dayAName: 'Label for Day A (the 1st workout of the week)',
+    dayBName: 'Label for Day B (the 2nd workout of the week)',
     startDate: 'First Monday of the program',
-    introWeeks: 'Intro weeks at the start: one set fewer, 2–3 reps in reserve, no weight increases. 0, 1 or 2',
+    introWeeks: 'Test weeks at the start: one set fewer, 1–2 reps in reserve, the last set is a test set. 0, 1 or 2',
+    programVersion: 'Which built-in program the Slots and Exercises tabs were last reset to by Flight > Upgrade. Leave it alone',
     trainingWeekdays: 'Weekdays for the landing estimate and calendar: 0=Sun, 1=Mon ... 5=Fri',
     routeKm: 'Tampere-Pirkkala (TMP) to Luxembourg (LUX), great circle',
     kmPerRep: 'km earned per rep on a confirmed working set',
@@ -164,44 +165,50 @@ var FlightCore = (function () {
     coachKey: 'Secret key in your coach link',
     coachPhoto: 'Your profile photo (set from the coach console in the app). Small JPEG data, leave it alone',
     herPhoto: 'Her profile photo (she sets it in the app). Small JPEG data, leave it alone',
-    goals: 'Goal milestones: exercise id : kg (assistance for assisted lifts), optional x reps. Example: assisted-chinup:0, incline-db-press:20, hip-thrust:60x5'
+    goals: 'Goal milestones: exercise id : kg (assistance for assisted lifts), optional x reps. Example: incline-db-press:20, lat-pulldown:40, back-squat:60x5'
   };
   var FLIGHT_NO = 'AY 1697';
-  var GOALS = 'assisted-chinup:0, incline-db-press:20';
+  var GOALS = 'incline-db-press:20, lat-pulldown:40, back-squat:60';
+  var OLD_GOALS = ['assisted-chinup:0, incline-db-press:20'];
 
   function seedSettings(keys) {
     return [
       ['herName', keys.herName || ''], ['travellerName', 'Elmo'], ['flightNo', FLIGHT_NO],
-      ['dayAName', 'Heavy'], ['dayBName', 'Volume'], ['startDate', '2026-11-23'], ['introWeeks', 1],
+      ['dayAName', 'Day A'], ['dayBName', 'Day B'], ['startDate', '2026-11-23'], ['introWeeks', 1],
       ['trainingWeekdays', '1,5'], ['routeKm', 1697], ['kmPerRep', FlightEngine.DEFAULTS.kmPerRep],
       ['coachEmail', keys.coachEmail || ''], ['appUrl', keys.appUrl || ''],
-      ['athleteKey', keys.athleteKey], ['coachKey', keys.coachKey], ['goals', GOALS]
+      ['athleteKey', keys.athleteKey], ['coachKey', keys.coachKey], ['goals', GOALS], ['programVersion', PROGRAM_VERSION]
     ].map(function (r) { return { key: r[0], value: r[1], note: SETTING_NOTES[r[0]] || '' }; });
   }
 
   function slot(o) {
-    return { slot: o.slot, muscle: o.muscle, orderA: o.oA, orderB: o.oB, pair: o.pair || '',
-      setsA: o.a[0], repMinA: o.a[1], repMaxA: o.a[2], setsB: o.b[0], repMinB: o.b[1], repMaxB: o.b[2],
-      restA: o.restA, restB: o.restB, rirLastA: o.rirA || '', rirLastB: o.rirB || '',
-      lastRirStableOnly: !!o.stableOnly, failureLast: o.failure || '', calibrate: !!o.calibrate, active: true };
+    var r = o.range;
+    return { slot: o.slot, muscle: o.muscle, orderA: o.order, orderB: o.order, pair: o.pair || '',
+      setsA: o.sets, repMinA: r[0], repMaxA: r[1], setsB: o.sets, repMinB: r[0], repMaxB: r[1],
+      restA: o.rest, restB: o.rest, rirLastA: '', rirLastB: '', lastRirStableOnly: false, failureLast: '', calibrate: false,
+      active: true, main: !!o.main };
   }
 
-  /** Monday Heavy, Friday Volume. Monday starts with the push, Friday with the pull. */
+  /**
+   * The program (v6, Nov 2026): the same workout on both days, kept as simple as possible.
+   * Three main lifts carry the progression and the goals: back squat, incline dumbbell press, lat pulldown.
+   * Everything else is an accessory she can vary per day (Day A one exercise, Day B another).
+   * Both days use the same ranges, so each exercise has ONE working weight that can move every workout.
+   */
+  var PROGRAM_VERSION = 2;
   function seedSlots() {
     return [
-      slot({ slot: 'chest', muscle: 'Chest and front delts', oA: 1, oB: 3, a: [4, 4, 6], b: [4, 8, 12], restA: 210, restB: 150, rirB: '0–1', stableOnly: true }),
-      slot({ slot: 'upper-back', muscle: 'Upper back', oA: 2, oB: 1, a: [3, 5, 8], b: [3, 8, 12], restA: 210, restB: 150, rirB: '0–1', stableOnly: true }),
-      slot({ slot: 'lats', muscle: 'Lats', oA: 3, oB: 2, a: [2, 6, 8], b: [3, 10, 15], restA: 150, restB: 150, rirB: '0–1', stableOnly: true }),
-      slot({ slot: 'glutes', muscle: 'Glutes', oA: 4, oB: 4, a: [2, 6, 10], b: [2, 10, 15], restA: 150, restB: 150 }),
-      slot({ slot: 'side-delts', muscle: 'Side delts', oA: 5, oB: 5, pair: 'delts-abs', a: [2, 12, 20], b: [2, 12, 20], restA: 90, restB: 90,
-        rirA: '0–1', rirB: '0–1', failure: 'AB', calibrate: true }),
-      slot({ slot: 'abs', muscle: 'Abs', oA: 6, oB: 6, pair: 'delts-abs', a: [2, 8, 12], b: [2, 12, 18], restA: 90, restB: 90, calibrate: true }),
-      slot({ slot: 'biceps', muscle: 'Biceps', oA: 7, oB: 7, pair: 'arms', a: [2, 8, 12], b: [2, 10, 15], restA: 90, restB: 90,
-        rirA: '0–1', rirB: '0–1', calibrate: true }),
-      slot({ slot: 'triceps', muscle: 'Triceps', oA: 8, oB: 8, pair: 'arms', a: [2, 8, 12], b: [2, 10, 15], restA: 90, restB: 90,
-        rirA: '0–1', rirB: '0–1', calibrate: true })
+      slot({ slot: 'legs', muscle: 'Legs', main: true, order: 1, sets: 3, range: [8, 12], rest: 180 }),
+      slot({ slot: 'chest', muscle: 'Chest and front delts', main: true, order: 2, sets: 3, range: [8, 12], rest: 150 }),
+      slot({ slot: 'lats', muscle: 'Lats', main: true, order: 3, sets: 3, range: [8, 12], rest: 150 }),
+      slot({ slot: 'upper-back', muscle: 'Upper back', order: 4, sets: 2, range: [10, 15], rest: 90 }),
+      slot({ slot: 'side-delts', muscle: 'Side delts', order: 5, pair: 'delts-abs', sets: 2, range: [12, 20], rest: 90 }),
+      slot({ slot: 'abs', muscle: 'Abs', order: 6, pair: 'delts-abs', sets: 2, range: [10, 15], rest: 90 }),
+      slot({ slot: 'biceps', muscle: 'Biceps', order: 7, pair: 'arms', sets: 2, range: [10, 15], rest: 90 }),
+      slot({ slot: 'triceps', muscle: 'Triceps', order: 8, pair: 'arms', sets: 2, range: [10, 15], rest: 90 })
     ];
   }
+  var OLD_SLOTS = ['glutes']; // switched off by the v2 program (history kept)
 
   function ex(slotKey, rank, id, name, o) {
     o = o || {};
@@ -212,9 +219,26 @@ var FlightCore = (function () {
 
   function seedExercises() {
     return [
-      // Chest is locked to the incline dumbbell press: chest and front delts in one movement.
+      // ---- main lifts: the progression track and the goals ----
+      ex('legs', 1, 'back-squat', 'Back squat', { rir: '1–2',
+        cue: 'Bar on the upper back, feet about shoulder-width, toes slightly out. Sit down between the heels until the hips are ' +
+          'at knee height or a bit lower, knees follow the toes, chest up. Drive up through the whole foot. ' +
+          'Weight = the whole bar (the empty bar is 20 kg). Never grind these.' }),
+      ex('legs', 2, 'leg-press', 'Leg press', { stable: true, step: 5, label: 'kg (plates)',
+        cue: 'Feet hip-width in the middle of the plate. Lower until the knees are at about 90 degrees without the lower back ' +
+          'lifting off the pad, then push through the whole foot. Don\'t lock the knees hard at the top.' }),
+      ex('legs', 3, 'hack-squat', 'Hack squat', { stable: true, step: 5, label: 'kg (plates)',
+        cue: 'Back flat on the pad, feet in the middle of the plate. Sit down as deep as you can keep the hips on the pad, push up through the whole foot.' }),
       ex('chest', 1, 'incline-db-press', 'Incline dumbbell press', { step: 1, mult: 2, label: 'kg / hand',
         cue: 'Bench at about 30 degrees. Lower to the upper chest, elbows about 45 degrees out. Hits chest and front delts.' }),
+      ex('chest', 2, 'incline-bb-press', 'Incline barbell press', {
+        cue: 'Bench at about 30 degrees, grip a bit wider than the shoulders. Lower to the upper chest, press up and slightly back. ' +
+          'Weight = the whole bar. Use a spotter or the safety arms.' }),
+      ex('lats', 1, 'lat-pulldown', 'Lat pulldown', { stable: true,
+        cue: 'Grip a bit wider than the shoulders (or the neutral handle). Lean back a little and pull to the upper chest, leading with the elbows. Ribs down.' }),
+      ex('lats', 2, 'assisted-chinup', 'Assisted chin-up', { assisted: true, base: 60, label: 'kg assistance', step: 2.5,
+        cue: 'Underhand grip. Chin over the bar, all the way down each rep. Less assistance = progress.' }),
+      // ---- accessories: pick a different one for Day A and Day B if you like some variety ----
       ex('upper-back', 1, 'cable-row', 'Seated cable row', { stable: true,
         cue: 'Chest up, slight lean forward at the start. Pull to the lower ribs and squeeze the shoulder blades together.' }),
       ex('upper-back', 2, 'one-arm-db-row', 'One-arm dumbbell row', { step: 1, label: 'kg',
@@ -223,24 +247,6 @@ var FlightCore = (function () {
         cue: 'Wide grip, chest up. Pull to the lower chest with the elbows flared slightly.' }),
       ex('upper-back', 4, 'machine-row', 'Chest-supported machine row', { stable: true,
         cue: 'Only if your gym has one. Chest on the pad, pull the elbows back and squeeze for a moment.' }),
-      ex('lats', 1, 'neutral-pulldown', 'Neutral-grip lat pulldown', { stable: true,
-        cue: 'Lean back a little and pull the handle to the upper chest, leading with the elbows.' }),
-      ex('lats', 2, 'overhand-pulldown', 'Overhand pulldown', { stable: true,
-        cue: 'Grip just outside the shoulders. Pull to the upper chest, keep the ribs down.' }),
-      ex('lats', 3, 'assisted-chinup', 'Assisted chin-up', { assisted: true, base: 60, label: 'kg assistance', step: 2.5,
-        cue: 'Underhand grip. Chin over the bar, all the way down each rep. Less assistance = progress.' }),
-      ex('glutes', 1, 'hip-thrust-machine', 'Machine hip thrust', { stable: true,
-        cue: 'Pad low on the hips, chin tucked. Drive through the heels and pause 1 s at the top.' }),
-      ex('glutes', 2, 'hip-thrust', 'Barbell hip thrust', {
-        cue: 'Chin tucked, ribs down. Drive through the heels and pause 1 s at the top.' }),
-      ex('glutes', 3, 'bulgarian-split-squat', 'Bulgarian split squat', { step: 2, mult: 2, label: 'kg / hand', rir: '1–2',
-        cue: 'Back foot on a bench, front foot far enough forward that you sink straight down. Lean the chest forward a little ' +
-          'and go down until the back knee is just above the floor. Push up through the front heel. All reps on one leg, ' +
-          'then the other; count reps per leg.' }),
-      ex('glutes', 4, 'back-extension', 'Glute-biased 45° back extension', { base: 35, label: 'kg added', start: 0,
-        cue: 'Toes turned out, upper back slightly rounded. Squeeze the glutes to come up.' }),
-      ex('glutes', 5, 'rdl', 'Romanian deadlift', { rir: '1–2',
-        cue: 'Soft knees, hips back, bar close to the legs. Stop when the hamstrings stretch. Never grind these.' }),
       ex('side-delts', 1, 'lateral-raise', 'Dumbbell lateral raise', { step: 1, mult: 2, label: 'kg / hand',
         cue: 'Lead with the elbows, stop at shoulder height, lower slowly.' }),
       ex('side-delts', 2, 'machine-lateral-raise', 'Machine lateral raise', { stable: true,
@@ -334,7 +340,9 @@ var FlightCore = (function () {
   }
 
   var RETIRED = ['machine-chest-press', 'low-incline-db-press', 'flat-db-press', 'weighted-dip', 'db-row',
-    'incline-smith-press', 'incline-bb-press', 'incline-machine-press']; // chest locked to the incline DB press (Nov 2026)
+    'incline-smith-press', 'incline-machine-press',                     // chest: incline DB press, or the incline barbell press
+    'neutral-pulldown', 'overhand-pulldown',                             // lats: one lat pulldown, or the assisted chin-up (v2)
+    'hip-thrust-machine', 'hip-thrust', 'bulgarian-split-squat', 'back-extension', 'rdl']; // glutes slot became legs (v2)
 
   /**
    * Keeps an existing Exercises tab in step with the seed: adds new exercises, retires old ones
@@ -357,6 +365,36 @@ var FlightCore = (function () {
     return writes;
   }
 
+  /**
+   * One-time reset of the Slots and Exercises tabs to the built-in program, when Settings programVersion is older.
+   * Slots are rewritten (sets, ranges, rest, order), old slots switched off; exercises get their new name, rank, cue and
+   * effort rule and are switched back on. Gym-specific columns (stepKg, loadMult, baseKg, kgLabel, startKg) are kept.
+   * New exercises are appended by exerciseSync. History is never touched. Returns writes.
+   */
+  function programSync(data) {
+    var writes = [];
+    if (Number(data.settings.programVersion || 1) >= PROGRAM_VERSION) return writes;
+    var haveSlot = {}, haveEx = {};
+    data.slots.forEach(function (r) { haveSlot[str(r.slot)] = r; });
+    data.exercises.forEach(function (r) { haveEx[str(r.id)] = r; });
+    seedSlots().forEach(function (s) {
+      if (!haveSlot[s.slot]) { writes.push({ tab: 'Slots', kind: 'append', row: s }); return; }
+      var patch = {};
+      TABS.Slots.forEach(function (k) { if (k !== 'slot') patch[k] = s[k]; });
+      writes.push({ tab: 'Slots', kind: 'patch', by: 'slot', value: s.slot, patch: patch });
+    });
+    OLD_SLOTS.forEach(function (k) {
+      if (haveSlot[k] && str(haveSlot[k].active).toUpperCase() !== 'FALSE') writes.push({ tab: 'Slots', kind: 'patch', by: 'slot', value: k, patch: { active: false } });
+    });
+    seedExercises().forEach(function (e) {
+      if (!haveEx[e.id]) return;
+      writes.push({ tab: 'Exercises', kind: 'patch', by: 'id', value: e.id,
+        patch: { slot: e.slot, name: e.name, rank: e.rank, cue: e.cue, rir: e.rir, stable: e.stable, assisted: e.assisted, active: true } });
+    });
+    writes.push({ tab: 'Settings', kind: 'setting', key: 'programVersion', value: PROGRAM_VERSION });
+    return writes;
+  }
+
   /** What upgrade() changes in a Sheet made with an older version. Only untouched defaults change. */
   function upgradePlan(data) {
     var s = data.settings, out = { settings: [], postcards: [], unused: [] };
@@ -368,11 +406,11 @@ var FlightCore = (function () {
     want('herName', s.passengerName || '');
     want('travellerName', 'Elmo');
     want('flightNo', FLIGHT_NO, ['', 'FL 1697']);
-    want('dayAName', 'Heavy', ['Push first']);
-    want('dayBName', 'Volume', ['Pull first']);
+    want('dayAName', 'Day A', ['Push first', 'Heavy']);
+    want('dayBName', 'Day B', ['Pull first', 'Volume']);
     want('introWeeks', 1);
     want('kmPerRep', FlightEngine.DEFAULTS.kmPerRep);
-    want('goals', GOALS);
+    want('goals', GOALS, OLD_GOALS);
     ['passengerName', 'layoverWeek', 'kmCruise', 'kmTailwind', 'jetPerUpgrade', 'jetCap', 'vBaseA', 'vBaseB'].forEach(function (k) {
       if (s[k] !== undefined) out.unused.push(k);
     });
@@ -631,7 +669,8 @@ var FlightCore = (function () {
   }
 
   return {
-    TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises,
+    TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises, programSync: programSync,
+    PROGRAM_VERSION: PROGRAM_VERSION,
     seedPostcards: seedPostcards, postcardSync: postcardSync, upgradePlan: upgradePlan, exerciseSync: exerciseSync, toEngineInput: toEngineInput, buildState: buildState,
     applyOp: applyOp, photoUrl: photoUrl, teaserUrl: teaserUrl, seedQuestions: seedQuestions, questionFor: questionFor, QUESTIONS: QUESTIONS
   };

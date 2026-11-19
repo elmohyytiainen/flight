@@ -62,7 +62,8 @@ function prepareTabs_(ss) {
 }
 
 /**
- * Upgrades a Sheet made with an earlier version to the Heavy/Volume program. Safe to run twice.
+ * Upgrades a Sheet made with an earlier version: new tabs and columns, new exercises, and (once per program version)
+ * resets the Slots and Exercises tabs to the built-in program. Safe to run twice.
  * Keeps sessions, postcards, keys and everything you wrote. The old Program tab is renamed, not deleted.
  */
 function upgrade() {
@@ -75,7 +76,8 @@ function upgrade() {
   seedIfEmpty_(ss, 'Questions', FlightCore.seedQuestions());
   var data = readAll_(ss);
   var plan = FlightCore.upgradePlan(data);
-  var writes = FlightCore.exerciseSync(data).concat(FlightCore.postcardSync(data));
+  var program = FlightCore.programSync(data);
+  var writes = FlightCore.exerciseSync(data).concat(program, FlightCore.postcardSync(data));
   plan.settings.forEach(function (s) {
     writes.push({ tab: 'Settings', kind: 'setting', key: s.key, value: s.value });
   });
@@ -88,6 +90,7 @@ function upgrade() {
     var key = String(row[0]).trim();
     var add = plan.settings.filter(function (s) { return s.key === key; })[0];
     if (add && add.note) sh.getRange(i + 2, 3).setValue(add.note);
+    if (key === 'programVersion' && program.length) sh.getRange(i + 2, 3).setValue('Which built-in program the Slots and Exercises tabs were last reset to. Leave it alone');
     if (plan.unused.indexOf(key) >= 0) sh.getRange(i + 2, 3).setValue('No longer used (safe to delete)');
   });
   recalculate_(ss);
@@ -98,8 +101,9 @@ function upgrade() {
     if (kmCol > 0) pc.getRange(2, 1, pc.getLastRow() - 1, pc.getLastColumn()).sort(kmCol);
   }
   var pcs = writes.filter(function (w) { return w.tab === 'Postcards'; }).length + plan.postcards.length;
-  Logger.log('Upgrade done: ' + plan.settings.length + ' settings, ' + pcs + ' postcards changed.');
-  try { ss.toast('Upgrade done, ' + pcs + ' postcards moved or added. Deploy a new version of the web app next.'); } catch (e) { /* run from the editor */ }
+  var prog = program.length ? ' Program reset to version ' + FlightCore.PROGRAM_VERSION + '.' : '';
+  Logger.log('Upgrade done: ' + plan.settings.length + ' settings, ' + pcs + ' postcards changed.' + prog);
+  try { ss.toast('Upgrade done, ' + pcs + ' postcards moved or added.' + prog); } catch (e) { /* run from the editor */ }
 }
 
 function seedIfEmpty_(ss, name, rows) {
@@ -117,7 +121,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Flight')
     .addItem('Show app links', 'showLinks')
     .addItem('Recalculate flight columns', 'recalculate')
-    .addItem('Upgrade to the Heavy/Volume program', 'upgrade')
+    .addItem('Upgrade (new columns, exercises and program)', 'upgrade')
     .addItem('Send a test landing email', 'testEmail')
     .addToUi();
 }

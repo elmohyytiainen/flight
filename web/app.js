@@ -104,8 +104,8 @@
 
   var Demo = (function () {
     var START = { 'incline-db-press': 8, 'incline-smith-press': 20, 'incline-bb-press': 20, 'incline-machine-press': 25,
-      'cable-row': 30, 'one-arm-db-row': 10, 'wide-cable-row': 27.5, 'machine-row': 30, 'neutral-pulldown': 32.5,
-      'overhand-pulldown': 30, 'assisted-chinup': 30, 'hip-thrust-machine': 50, 'hip-thrust': 50, 'bulgarian-split-squat': 8, 'back-extension': 0, 'rdl': 35,
+      'cable-row': 30, 'one-arm-db-row': 10, 'wide-cable-row': 27.5, 'machine-row': 30, 'lat-pulldown': 30, 'assisted-chinup': 30,
+      'back-squat': 30, 'leg-press': 60, 'hack-squat': 40,
       'lateral-raise': 4, 'machine-lateral-raise': 10, 'cable-lateral-raise': 2.5, 'cable-crunch': 20, 'machine-crunch': 20,
       'decline-crunch': 0, 'incline-curl': 5, 'preacher-curl': 10, 'cable-curl': 10, 'rope-pressdown': 12.5, 'bar-pressdown': 15,
       'overhead-extension': 10 };
@@ -150,8 +150,8 @@
           effort: 2 + Math.round(r() * 2), note: n === 2 ? 'Machine row was taken, so I waited a bit.' : '', sets: sets } },
         'athlete', d + 'T18:00:00Z');
       }
-      if (!empty) data.cheers.push({ id: 'c1', createdAt: nowIso(), text: 'Great week! Friday is Volume day. Go get it.', seenAt: '' });
-      if (n) data.reactions.push({ id: 'r1', at: nowIso(), sessionId: 'demo' + n, emoji: '🔥', text: 'Look at that hip thrust >:)', seenAt: '' });
+      if (!empty) data.cheers.push({ id: 'c1', createdAt: nowIso(), text: 'Great week! One more rep than last time, you got this.', seenAt: '' });
+      if (n) data.reactions.push({ id: 'r1', at: nowIso(), sessionId: 'demo' + n, emoji: '🔥', text: 'Look at that squat >:)', seenAt: '' });
       if (!empty) {
         var td = todayStr(), yd = E.addDays(td, -1);
         data.answers = [
@@ -433,12 +433,17 @@
   function dayName(day) { return S.state.settings[day === 'A' ? 'dayAName' : 'dayBName'] || ('Day ' + day); }
   function exName(id) { var e = S.state.exercises.filter(function (x) { return String(x.id) === id; })[0]; return e ? e.name : id; }
   function completedOn(res, ds) { return res.sessions.filter(function (s) { return s.date === ds && s.completed; }); }
+  /** True once the Mon–Sun week of ds has all its workouts done (e.g. Mon + Thu instead of Mon + Fri). */
+  function weekFull(res, ds) {
+    var m = mondayOf(ds), n = res.sessions.filter(function (s) { return s.completed && mondayOf(s.date) === m; }).length;
+    return n >= res.settings.trainingWeekdays.length;
+  }
   function nextSessionDate(res) {
     var st = res.settings, t = todayStr(), d = t;
     if (completedOn(res, t).length) d = E.addDays(t, 1);
     if (d < st.startDate) d = st.startDate;
-    for (var i = 0; i < 14; i++) {
-      if (st.trainingWeekdays.indexOf(E.weekday(d)) >= 0) return d;
+    for (var i = 0; i < 21; i++) {
+      if (st.trainingWeekdays.indexOf(E.weekday(d)) >= 0 && !weekFull(res, d)) return d;
       d = E.addDays(d, 1);
     }
     return d;
@@ -601,14 +606,15 @@
     var h = '<section class="panel"><div class="weekhead"><h3>This week</h3><button class="streakchip" data-act="tab" data-v="log">' + esc(streakText(weekStreak(res))) + '</button></div><div class="week">';
     for (var i = 0; i < 7; i++) {
       var d = E.addDays(monday, i), wd = E.weekday(d), ti = st.trainingWeekdays.indexOf(wd);
-      var done = completedOn(res, d).length > 0, marks = '';
+      var doneS = completedOn(res, d), done = doneS.length > 0, marks = '';
+      var planned = ti >= 0 && !done && !weekFull(res, d);
       if (S.state.stamps.some(function (s) { return s.date === d && s.type === 'ballet'; })) marks += '<i class="mk ballet">' + IC.ballet + '</i>';
       if (S.state.stamps.some(function (s) { return s.date === d && s.type === 'run'; })) marks += '<i class="mk run">' + IC.run + '</i>';
-      var label = ti === 0 ? dayName('A') : ti === 1 ? dayName('B') : '';
-      h += '<button class="day' + (ti >= 0 ? ' plan' : '') + (done ? ' done' : '') + (d === t ? ' today' : '') + '" data-act="day" data-date="' + d +
+      var label = done ? dayName(doneS[0].day) : planned ? (ti === 0 ? dayName('A') : ti === 1 ? dayName('B') : '') : '';
+      h += '<button class="day' + (planned ? ' plan' : '') + (done ? ' done' : '') + (d === t ? ' today' : '') + '" data-act="day" data-date="' + d +
         '" aria-label="' + esc(fmtLong(d) + (label ? ', ' + label : '')) + '"><span class="d">' +
         dateObj(d).toLocaleDateString('en-GB', { weekday: 'short' }).slice(0, 2) + '</span><span class="n">' + dateObj(d).getDate() + '</span>' +
-        (ti >= 0 || done ? '<i class="mk db">' + IC.dumbbell + '</i>' : '') + (label ? '<span class="lbl">' + esc(label) + '</span>' : '') +
+        (planned || done ? '<i class="mk db">' + IC.dumbbell + '</i>' : '') + (label ? '<span class="lbl">' + esc(label) + '</span>' : '') +
         '<span class="marks">' + marks + '</span></button>';
     }
     h += '</div><div class="legend"><span><i class="mk db">' + IC.dumbbell + '</i>Gym</span><span><i class="mk ballet">' + IC.ballet +
@@ -627,7 +633,8 @@
     'upper-back': { back: true, parts: ['<rect x="7.8" y="8.8" width="8.4" height="4.8" rx="1.6"/>'] },
     'lats': { back: true, parts: ['<path d="M7.4 10.5 L10.6 12 L10.2 17.5 L7.6 16.4 Z"/><path d="M16.6 10.5 L13.4 12 L13.8 17.5 L16.4 16.4 Z"/>'] },
     'triceps': { back: true, parts: ['<rect x="3.8" y="10" width="2.8" height="4.6" rx="1.3"/><rect x="17.4" y="10" width="2.8" height="4.6" rx="1.3"/>'] },
-    'glutes': { back: true, parts: ['<rect x="7.6" y="18.2" width="4.2" height="4.4" rx="1.8"/><rect x="12.2" y="18.2" width="4.2" height="4.4" rx="1.8"/>'] }
+    'glutes': { back: true, parts: ['<rect x="7.6" y="18.2" width="4.2" height="4.4" rx="1.8"/><rect x="12.2" y="18.2" width="4.2" height="4.4" rx="1.8"/>'] },
+    'legs': { back: false, parts: ['<rect x="7.8" y="19.4" width="3.5" height="6.6" rx="1.6"/><rect x="12.7" y="19.4" width="3.5" height="6.6" rx="1.6"/>'] }
   };
   function muscleSVG(slotKey, label) {
     var m = MUSCLES[slotKey];
@@ -680,7 +687,7 @@
     for (var d = 1; d <= days; d++) {
       var ds = base + '-' + pad(d), g = gym[ds], stp = stamps[ds] || {};
       var ti = st0.trainingWeekdays.indexOf(E.weekday(ds));
-      var planned = !g && ti >= 0 && ds >= t && ds >= st0.startDate;
+      var planned = !g && ti >= 0 && ds >= t && ds >= st0.startDate && !weekFull(res, ds);
       if (planned) n.planned++;
       var state = g ? IC.goldCheck : planned ? IC.dbOutline : '';
       h += '<button class="cd' + (g ? ' gym' : planned ? ' planned' : '') + (ds === t ? ' today' : '') + (ds > t ? ' future' : '') + '" data-act="day" data-date="' + ds + '" aria-label="' +
@@ -719,7 +726,7 @@
         '<button class="btn taxi wide" data-act="resume">Resume workout</button><button class="linkbtn discard" data-act="discard">Discard it</button></section>';
     }
     var nd = nextSessionDate(res), day = E.nextDay(res), p = E.plan(res, nd, day);
-    var mode = p.mode === 'intro' ? 'Intro week' : p.mode === 'back' ? 'Welcome back' : p.mode === 'deload' ? 'Easier week' : '';
+    var mode = p.mode === 'intro' ? 'Test week' : p.mode === 'back' ? 'Welcome back' : p.mode === 'deload' ? 'Easier week' : '';
     var h = '<section class="hero"><div class="kicker">' + (nd === t ? 'Today' : 'Next workout, ' + esc(fmtLong(nd))) + (mode ? '<span class="pill">' + mode + '</span>' : '') + '</div>' +
       '<h2>' + esc(dayName(day)) + '</h2><div class="meta">' + plural(p.items.length, 'exercise', 'exercises') + ' · ' + p.setsTotal + ' sets · about ' + estMinutes(res, day, p) + ' min</div>' +
       '<div class="muscles">' + p.items.map(function (it) { return '<span title="' + esc(it.muscle) + '">' + muscleSVG(it.slot, it.muscle) + '</span>'; }).join('') + '</div>' +
@@ -803,10 +810,11 @@
     var p = E.plan(res, t, day);
     var h = '<div class="screen"><header class="top"><button class="linkbtn backlink" data-act="home">' + IC.back + 'Home</button>' + syncHTML() + '</header>';
     h += '<h1 class="todayh">Today: ' + esc(dayName(day)) + '</h1><div class="small muted">' + plural(p.items.length, 'exercise', 'exercises') + ', ' + p.setsTotal + ' sets</div>';
-    if (p.mode === 'intro') h += '<div class="note">Intro week: one set fewer and 2–3 reps in reserve while you learn the movements :)</div>';
+    if (p.mode === 'intro') h += '<div class="note">Test week :) Pick weights where the goal reps leave 1–2 in the tank. One set fewer, and on the last set keep going while you still have 1–2 left. The app sets your weights from next week.</div>';
     if (p.mode === 'back') h += '<div class="note">Welcome back :) First workout after a break: one set fewer and 2–3 reps in reserve. Back to normal next time.</div>';
     if (p.mode === 'deload') h += '<div class="note">Easier week: half the sets, 3–4 reps in reserve, same weights. Recovery is part of the flight ;)</div>';
-    h += '<p class="small muted choicehint">Pick one exercise per muscle. Stick with the same choice for at least a few weeks so your progress shows.</p>';
+    h += '<p class="small muted choicehint">Legs, chest and lats are your progress lifts: keep them the same for a few weeks. The rest you can change, a different one for ' +
+      esc(dayName('A')) + ' and ' + esc(dayName('B')) + ' if you like :)</p>';
     var sn = 0;
     p.blocks.forEach(function (b) {
       var paired = b.items.length > 1;
@@ -974,7 +982,8 @@
       if (s.skip) notes.push('Skipped');
       else notes.push(esc(rirText(s.rir)));
       if (i === next && s.rir === '0') notes.push('Finish the last rep you can do with your usual form and range');
-      if (i === next && s.calib) notes.push('Last set: if it moves well, keep going past the goal and log every clean rep');
+      if (i === next && s.calib) notes.push(d.mode === 'intro' ? 'Test set: keep going past the goal while you still have 1–2 reps left, and log every rep'
+        : 'Last set: if it moves well, keep going past the goal and log every clean rep');
       h += '<div class="rirline">' + notes.join('. ') + '</div>';
       if (d.fbFor === i) {
         h += '<div class="fb"><span class="small muted">How was that set?</span>' + [['easy', 'Too easy'], ['ok', 'Just right'], ['hard', 'Too hard']].map(function (f) {
@@ -1076,17 +1085,17 @@
     return it ? it.exercise : null;
   }
   function lastTwo(res, exId, day) {
-    var h = (res.hist[exId] || []).filter(function (x) { return x.day === day && x.mode !== 'deload'; });
+    var h = (res.hist[exId] || []).filter(function (x) { return (!day || x.day === day) && x.mode !== 'deload'; });
     return [h[h.length - 1] || null, h[h.length - 2] || null];
   }
   function progressCard(res, label, slot) {
-    var e = chosenFor(res, slot, 'A');
-    if (!e) return '';
+    var e = chosenFor(res, slot, 'A'), sl = res.prog.byKey[slot];
+    if (!e || !sl) return '';
     var h = '<div class="pcard"><div class="small muted">' + esc(label) + '</div><h3>' + esc(e.name) + '</h3>';
-    ['A', 'B'].forEach(function (day) {
+    (sl.shared ? [null] : ['A', 'B']).forEach(function (day) {
       var two = lastTwo(res, e.id, day), cur = two[0], prev = two[1];
-      h += '<div class="pline"><span class="dtag">' + esc(dayName(day)) + '</span>';
-      if (!cur) h += '<span class="muted small">No ' + esc(dayName(day)) + ' result yet</span></div>';
+      h += '<div class="pline">' + (day ? '<span class="dtag">' + esc(dayName(day)) + '</span>' : '<span class="dtag">Latest</span>');
+      if (!cur) h += '<span class="muted small">No result yet</span></div>';
       else {
         var imp = prev ? E.compare(e, prev, cur) : null;
         h += '<span><b>' + esc(setsText(cur, e.kgLabel === 'kg' ? 'kg' : e.kgLabel)) + '</b><span class="small muted"> ' + esc(fmtDate(cur.date)) + '</span>' +
@@ -1101,7 +1110,7 @@
     var h = '<div class="screen">' + topHTML('Progress', plural(res.completedCount, 'workout', 'workouts') + ' so far');
     h += streakHTML(res) + calendarHTML(res);
     h += strengthSummary(res);
-    h += '<div class="pcards">' + progressCard(res, 'Push', 'chest') + progressCard(res, 'Pull', 'upper-back') + '</div>';
+    h += '<div class="pcards">' + progressCard(res, 'Legs', 'legs') + progressCard(res, 'Push', 'chest') + progressCard(res, 'Pull', 'lats') + '</div>';
     var ms = res.milestones.slice().reverse();
     h += '<div class="section-h"><h2>Personal bests</h2><span class="small muted">' + plural(ms.length, 'milestone', 'milestones') + '</span></div>';
     if (!ms.length) h += '<p class="empty">Your first personal best shows up here as soon as you lift heavier than ever before >:)</p>';
@@ -1143,7 +1152,8 @@
         any = true;
         var a = res.states[e.id + '|A'], b = res.states[e.id + '|B'];
         h += '<button class="exprog" data-act="exDetail" data-ex="' + esc(e.id) + '"><div class="nm">' + esc(e.name) + '<small>' +
-          [a && a.kg !== null ? dayName('A') + ' ' + kgFmt(a.kg) : '', b && b.kg !== null ? dayName('B') + ' ' + kgFmt(b.kg) : ''].filter(Boolean).join(', ') + ' ' + esc(e.kgLabel) +
+          (a && a === b ? (a.kg !== null ? kgFmt(a.kg) : '') :
+            [a && a.kg !== null ? dayName('A') + ' ' + kgFmt(a.kg) : '', b && b.kg !== null ? dayName('B') + ' ' + kgFmt(b.kg) : ''].filter(Boolean).join(', ')) + ' ' + esc(e.kgLabel) +
           '</small></div>' + (function () {
             var sh = strengthHist(res, e.id), ch = E.strengthChange(res, e.id);
             return (sh.length ? spark(sh.map(function (x) { return x.est; })) : '<span></span>') +
@@ -1190,7 +1200,7 @@
   function shortDate(ds) { return dateObj(ds).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); }
   function strengthHist(res, id) { return (res.hist[id] || []).filter(function (x) { return x.est > 0 && x.mode !== 'deload'; }); }
 
-  // Estimated strength over time: one line, Heavy days as filled dots and Volume days as open dots.
+  // Estimated strength over time: one line, Day A as filled dots and Day B as open dots.
   function strengthChart(pts, w, hgt) {
     var vals = pts.map(function (x) { return x.est; });
     var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals), span = max - min || 1, pad = 6;
@@ -1204,7 +1214,7 @@
   }
 
   function strengthSummary(res) {
-    var groups = [['Upper body', ['chest', 'upper-back', 'lats', 'side-delts', 'biceps', 'triceps']], ['Glutes', ['glutes']]], out = [], from = null;
+    var groups = [['Upper body', ['chest', 'upper-back', 'lats', 'side-delts', 'biceps', 'triceps']], ['Lower body', ['legs', 'glutes']]], out = [], from = null;
     groups.forEach(function (g) {
       var ch = [];
       res.prog.slots.forEach(function (sl) {
@@ -1294,10 +1304,10 @@
     }
     h += '</section>';
     h += '<section class="panel"><h3>Send a cheer</h3><p class="small muted" style="margin:4px 0 10px">It shows on her home screen until she taps it.</p>' +
-      '<textarea id="cheerText" maxlength="280" placeholder="Friday is Volume day. Go get it."></textarea>' +
+      '<textarea id="cheerText" maxlength="280" placeholder="One more rep than last time. Go get it."></textarea>' +
       '<div style="margin-top:10px"><button class="btn wide" data-act="sendCheer">Send cheer</button></div></section>';
     var nd = nextSessionDate(res), day = E.nextDay(res), p = E.plan(res, nd, day);
-    h += '<div class="section-h"><h2>Next: ' + esc(dayName(day)) + '</h2><span class="small muted">' + esc(fmtDate(nd)) + (p.mode !== 'normal' ? ', ' + (p.mode === 'intro' ? 'intro week' : p.mode === 'back' ? 'welcome back' : 'easier week') : '') + '</span></div>';
+    h += '<div class="section-h"><h2>Next: ' + esc(dayName(day)) + '</h2><span class="small muted">' + esc(fmtDate(nd)) + (p.mode !== 'normal' ? ', ' + (p.mode === 'intro' ? 'test week' : p.mode === 'back' ? 'welcome back' : 'easier week') : '') + '</span></div>';
     h += '<section class="panel" style="margin-top:0"><table class="plantable">';
     p.items.forEach(function (it) {
       var tag = it.upSteps ? ' <span class="status ok">increase</span>' : it.overridden ? ' <span class="status">you set</span>' : it.held ? ' <span class="status">holding</span>' : it.estimated ? ' <span class="status">estimated</span>' : '';
@@ -1460,7 +1470,7 @@
     w.forEach(function (f) { h += dayWorkoutHTML(res, f); });
     if (!w.length) {
       var ti = res.settings.trainingWeekdays.indexOf(E.weekday(ds));
-      if (ti >= 0 && ds >= todayStr() && ds >= res.settings.startDate) h += '<p class="muted">' + esc(dayName(ti === 0 ? 'A' : 'B')) + ' workout planned :)</p>';
+      if (ti >= 0 && ds >= todayStr() && ds >= res.settings.startDate && !weekFull(res, ds)) h += '<p class="muted">' + esc(dayName(ti === 0 ? 'A' : 'B')) + ' workout planned :)</p>';
       h += '<p class="muted small">Ballet and runs don\'t move the plane, but your coach sees them ;)</p>';
     }
     h += '<div class="toggles">';
@@ -1476,7 +1486,8 @@
   /** Exercise chooser for one slot. ctx 'pass' (before the workout) or 'flight' (during it). */
   function chooser(slot, ctx, day) {
     S.chooseCtx = { slot: slot, ctx: ctx, day: day || (S.draft ? S.draft.day : 'A') };
-    if (!S.chooseScope || (ctx === 'pass' && S.chooseScope === 'today')) S.chooseScope = ctx === 'flight' ? 'today' : 'both';
+    var sl = calc().prog.byKey[slot], main = !!(sl && sl.main);
+    S.chooseScope = ctx === 'flight' ? 'today' : main ? 'both' : 'only';
     renderChooser();
   }
   function renderChooser() {
@@ -1485,8 +1496,11 @@
     var it = E.plan(res, date, cc.day).items.filter(function (x) { return x.slot === cc.slot; })[0];
     if (!it) return;
     var current = cc.ctx === 'flight' ? S.draft.items[cc.slot].ex : it.exercise.id;
-    var h = '<h2>' + esc(it.muscle) + '</h2><p class="muted small">Pick one exercise. Stick with the same choice for at least a few weeks so your progress shows :)</p>';
-    var scopes = (cc.ctx === 'flight' ? [['today', 'Just today']] : []).concat([['both', 'Both days'], ['only', 'Only on ' + dayName(cc.day) + ' days']]);
+    var h = '<h2>' + esc(it.muscle) + '</h2><p class="muted small">' + (it.main
+      ? 'This is one of your progress lifts: keep the same one on both days for a few weeks so your progress shows :)'
+      : 'Pick one for ' + esc(dayName(cc.day)) + ' and another for ' + esc(dayName(cc.day === 'A' ? 'B' : 'A')) + ' if you like some variety :)') + '</p>';
+    var scopes = (cc.ctx === 'flight' ? [['today', 'Just today']] : []).concat(it.main ? [['both', 'Both days']]
+      : [['only', 'Only ' + dayName(cc.day)], ['both', 'Both days']]);
     h += '<div class="scopes">' + scopes.map(function (s) {
       return '<button class="chip' + (S.chooseScope === s[0] ? ' on' : '') + '" data-act="scope" data-v="' + s[0] + '">' + esc(s[1]) + '</button>';
     }).join('') + '</div><div class="toggles">';

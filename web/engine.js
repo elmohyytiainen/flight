@@ -1,32 +1,25 @@
 /*
- * FlightEngine v5 — progression + flight calculations.
+ * FlightEngine v6 — progression + flight calculations.
  *
  * Pure functions: reads settings, slots, exercises, choices, sessions, overrides and stamps
  * and returns results. Nothing is stored, so history can be replayed any time.
  * Runs in the web app (engine.js) and in Apps Script (pasted as Engine.gs). Plain ES5.
  *
  * Program model
- *   Slot     = a target muscle (Chest, Upper back, ...) with Day A (Heavy) and Day B (Volume)
- *              sets, rep ranges, rest and effort rules. Slots sharing `pair` run as a superset.
- *   Exercise = one variation inside a slot (rank 1 = recommended). She picks one per slot.
+ *   Slot     = a target muscle (Legs, Chest, Lats, ...) with Day A and Day B sets, rep ranges and rest.
+ *              Slots sharing `pair` run as a superset. `main` marks the progression lifts.
+ *   Exercise = one variation inside a slot (rank 1 = recommended). She picks one per slot, per day if she likes.
  *
- * Progression (v5)
- *   - One history and ONE strength estimate per exercise, fed by every set on both days
- *     (Epley, using the reps in reserve each set was prescribed and her Too easy / Too hard taps).
- *   - Each day keeps its own working weight, but the weight is chosen from the shared estimate:
- *     it goes up as soon as the estimate says she can still do the bottom of that day's range
- *     plus one rep of margin, at the next increment. A good Friday lifts Monday too, but the
- *     margin keeps a high-rep Friday from pushing Monday up before she is ready.
- *   - At the same weight, every set that isn't at the top yet gets one more rep.
- *   - All sets at the top always earns at least one increment. "Too hard" holds the weight.
- *   - Small lifts (one step is more than 8% of the load: raises, curls, light dumbbells) move on
- *     a top set: the first set at the top of the range and the average within one rep. Reaching it
- *     on either day lifts the other day too, if that day's range doesn't go higher.
- *     After a jump on a small lift she may land up to 3 reps under the range (and never under
- *     3/4 of its bottom) without the weight dropping back. She builds the reps up at the new weight.
- *   - An increase is not taken straight back: the first miss at a new weight holds it once
- *     (aiming for the bottom of the range) unless she was far off. The next miss drops it.
- *   - Otherwise the weight only drops through her performance, a coach override or an easier week.
+ * Progression (v6: as simple as possible)
+ *   - Test week (introWeeks): one set fewer, 1–2 reps in reserve, goal = the bottom of the range, and the last set
+ *     is a test set (keep going while 1–2 reps are left). No increases.
+ *   - Then every workout: one more rep on every set than last time, up to the top of the range.
+ *   - Every set at the top -> next time one step heavier (more if a test set or "Too easy" showed she is clearly
+ *     stronger, up to three steps). Right after a step up, landing up to about 2–3 reps under the range is fine.
+ *   - Missed (most sets under the range): the first miss at a new weight holds it once, otherwise one step back.
+ *   - "Too hard" = same goal next time (once; if she keeps making the reps anyway, it moves on).
+ *   - A slot with the same range on both days has ONE working weight per exercise, so it can move every workout.
+ *     Different ranges per day (Heavy/Volume) still work: then each day keeps its own weight.
  *   - Several lifts declining over two weeks -> an easier week is offered.
  *
  * Flight: every rep on a completed working set earns kmPerRep.
@@ -103,10 +96,12 @@ var FlightEngine = (function () {
       return { sets: Math.max(0, num(r['sets' + d], 0)), min: num(r['repMin' + d], 8), max: num(r['repMax' + d], 12),
         rest: num(r['rest' + d], 150), rirLast: str(r['rirLast' + d]) };
     }
+    var A = side('A'), B = side('B');
     return {
       key: str(r.slot), muscle: str(r.muscle) || str(r.slot), idx: idx,
       order: { A: num(r.orderA, idx + 1), B: num(r.orderB, num(r.orderA, idx + 1)) },
-      pair: str(r.pair), A: side('A'), B: side('B'),
+      pair: str(r.pair), A: A, B: B, main: isTrue(r.main),
+      shared: A.min === B.min && A.max === B.max, // one working weight for both days
       stableOnly: isTrue(r.lastRirStableOnly), failureLast: str(r.failureLast).toUpperCase(),
       calibrate: isTrue(r.calibrate), active: !isFalse(r.active), variants: []
     };
@@ -223,12 +218,10 @@ var FlightEngine = (function () {
 
   function newState() {
     return { kg: null, lastKg: null, lastReps: null, hard: false, topAll: false, overridden: false,
-      grace: 0, held: false, floor: null, crossTop: null };
+      grace: 0, held: false, floor: null };
   }
 
-  /** A small lift: one step is a big share of the load (raises, curls, light dumbbells). */
-  function isSmall(e, kg) { var a = loadOf(e, kg); return !e.assisted && a > 0 && e.stepKg / a > 0.08; }
-  /** How far under the range a small lift may land right after a jump. */
+  /** How far under the range she may land right after a step up (a dumbbell step can be 10–25% of the load). */
   function jumpFloor(side) { return Math.max(1, side.min - 3, Math.ceil(side.min * 0.75)); }
 
   /**
@@ -281,7 +274,16 @@ var FlightEngine = (function () {
     var goals = parseGoals(st.goals, prog).map(function (g) { return { id: g.id, ex: g.ex, kg: g.kg, reps: g.reps, label: g.label,
       reached: null, best: null, start: null }; });
 
-    function stOf(ex, day) { var k = ex + '|' + day; if (!states[k]) states[k] = newState(); return states[k]; }
+    /** The working-weight state of an exercise on a day. Shared slots: Day A and Day B are the same object. */
+    function stOf(ex, day) {
+      var k = ex + '|' + day;
+      if (!states[k]) {
+        var e0 = prog.exById[ex], sl = e0 && prog.byKey[e0.slot];
+        if (sl && sl.shared) { var o0 = states[ex + '|A'] || states[ex + '|B'] || newState(); states[ex + '|A'] = states[ex + '|B'] = o0; }
+        else states[k] = newState();
+      }
+      return states[k];
+    }
     function applyOverridesBefore(ds) {
       while (oi < overrides.length && String(overrides[oi].date).slice(0, 10) < ds) {
         var o = overrides[oi++];
@@ -291,7 +293,7 @@ var FlightEngine = (function () {
         days.forEach(function (d) {
           var s = stOf(o.ex, d);
           s.kg = num(o.kg, s.kg); s.lastReps = null; s.lastKg = null; s.topAll = false; s.hard = false; s.overridden = true;
-          s.grace = 0; s.held = false; s.floor = null; s.crossTop = null;
+          s.grace = 0; s.held = false; s.floor = null;
         });
       }
     }
@@ -395,18 +397,20 @@ var FlightEngine = (function () {
       }
 
       var h = hasOwn(hist, e.id) ? hist[e.id] : (hist[e.id] = []);
-      var prev = null, prev2 = null;
-      for (var j = h.length - 1; j >= 0; j--) {
-        if (h[j].day !== day || h[j].mode === 'deload') continue;
-        if (!prev) prev = h[j]; else { prev2 = h[j]; break; }
+      // earlier results on the same track (both days for a shared slot), newest first
+      var back = [], need = slot.shared ? 3 : 2;
+      for (var j = h.length - 1; j >= 0 && back.length < need; j--) {
+        if ((!slot.shared && h[j].day !== day) || h[j].mode === 'deload') continue;
+        back.push(h[j]);
       }
+      var prev = back[0] || null;
       var entry = { date: date, day: day, mode: mode, kg: workKg, reps: reps, kgs: kgs, fbs: fbs, total: sum(at), sets: at.length };
       // a lower weight the app itself prescribed after missed reps is not a decline
       var plannedDown = s.missed && s.lastKg !== null && (e.assisted ? workKg > s.lastKg : workKg < s.lastKg);
       if (prev && mode !== 'deload') {
         out.improvement = compare(e, prev, entry);
-        // sustained: worse than last time AND worse than the time before (two weeks for a weekly lift)
-        out.decline = !plannedDown && !!prev2 && declined(e, prev, entry) && declined(e, prev2, entry);
+        // sustained: worse than each of the earlier results in about a week and a half (3 workouts, or 2 weeks for a weekly lift)
+        out.decline = !plannedDown && back.length === need && back.every(function (x) { return declined(e, x, entry); });
       }
       h.push(entry);
 
@@ -433,34 +437,27 @@ var FlightEngine = (function () {
       s.hardMet = hardMet;
       var easy = atIdx.filter(function (j5) { return fbs[j5] === 'easy'; }).length;
       s.easy = mode === 'normal' && easy * 2 >= atIdx.length && easy > 0;
-      var small = isSmall(e, workKg);
-      // a new, heavier weight: its first miss is held instead of dropped, and small lifts may land under the range
+      // a new, heavier weight: she may land a little under the range
       var heavier = s.lastKg !== null && (e.assisted ? workKg < s.lastKg - 1e-9 : workKg > s.lastKg + 1e-9);
-      if (heavier) { s.grace = 1; s.floor = small ? jumpFloor(side) : null; }
-      else if (s.lastKg === null || Math.abs(workKg - s.lastKg) > 1e-9) { s.grace = 0; s.floor = null; }
+      var changed = s.lastKg === null || Math.abs(workKg - s.lastKg) > 1e-9;
+      if (heavier) s.floor = jumpFloor(side);
+      else if (changed) s.floor = null;
+      if (changed) s.grace = 1;
       var lo = s.floor || side.min;
       function most(f) { return at.filter(f).length * 2 > at.length; }
-      // below the bottom of the range on most sets: the weight comes down next time
+      // under the range on most sets: one bad workout is forgiven (same weight again), two in a row
+      // (or far under once) and the weight comes down next time
       var below = most(function (r) { return r < lo; });
       var farOff = most(function (r) { return r < lo - 2; });
       s.held = below && s.grace > 0 && !farOff;
       s.missed = below && !s.held;
-      if (below) s.grace = 0; // the one forgiven miss at this weight is used up
+      s.grace = below ? 0 : 1;
       if (s.floor && at.every(function (r) { return r >= side.min; })) s.floor = null; // back in the range
       s.overridden = false;
       s.kg = workKg; s.lastKg = workKg; s.hard = hard;
       s.lastReps = complete ? reps.slice() : fill(prescribed, Math.min.apply(null, at));
-      s.topAll = mode === 'normal' && complete && !hard && (small
-        ? at[0] >= side.max && sum(at) >= at.length * (side.max - 1)
-        : at.every(function (r) { return r >= side.max; }));
-      if (s.topAll && small) {
-        // a top set lifts the other day too, unless that day's range goes higher
-        var other = day === 'A' ? 'B' : 'A', os = slot[other];
-        if (os && os.sets > 0 && os.max <= side.max) {
-          var o = stOf(e.id, other);
-          o.crossTop = o.crossTop === null ? workKg : Math.max(o.crossTop, workKg);
-        }
-      }
+      // every set at the top of the range: next time a step heavier
+      s.topAll = mode === 'normal' && complete && !hard && at.every(function (r) { return r >= side.max; });
       var nx = decide(e, side, s, est[e.id], 'normal', side.sets);
       if (nx.up) out.up = nx.up;
       return out;
@@ -471,7 +468,8 @@ var FlightEngine = (function () {
     if (out.length) {
       var lastDate = out[out.length - 1].date, from = addDays(lastDate, -13), seen = {};
       declines.forEach(function (d) {
-        if (d.date >= from && !seen[d.ex + '|' + d.day]) { seen[d.ex + '|' + d.day] = 1; fatigue.lifts.push(d); }
+        var e1 = prog.exById[d.ex], k1 = d.ex + (e1 && prog.byKey[e1.slot] && prog.byKey[e1.slot].shared ? '' : '|' + d.day);
+        if (d.date >= from && !seen[k1]) { seen[k1] = 1; fatigue.lifts.push(d); }
       });
       var recentDeload = lastDeload && lastDeload >= addDays(lastDate, -14);
       fatigue.offer = fatigue.lifts.length >= st.fatigueLifts && !recentDeload && deloadLeft === 0;
@@ -524,14 +522,14 @@ var FlightEngine = (function () {
       if (est) { r.kg = kgFor(e, est, mid); r.estimated = true; }
       else if (e.startKg !== null) r.kg = e.startKg;
       else r.taxi = true;
-      r.targets = fill(sets, mid);
+      r.targets = fill(sets, mode === 'intro' ? side.min : mid);
       return r;
     }
     var kg = s.kg;
     if (mode === 'deload') { r.targets = fill(sets, side.min); return r; }
     var dir0 = e.assisted ? -1 : 1;
     if (s.missed && est && s.lastKg === kg) {
-      var down = kgFor(e, est, mid);
+      var down = kgFor(e, est, side.min + 1); // the weight for one rep over the bottom of the range, at least one step lighter
       if (dir0 * (down - kg) >= 0) down = Math.max(0, roundToStep(kg - dir0 * e.stepKg, e.stepKg));
       r.kg = down; r.down = true; r.targets = fill(sets, side.min);
       return r;
@@ -541,9 +539,9 @@ var FlightEngine = (function () {
       r.held = true; r.targets = fill(sets, lo);
       return r;
     }
-    if (mode !== 'intro' && mode !== 'back' && !s.hard) {
+    if (mode === 'intro') { r.targets = fill(sets, side.min); return r; } // test week: same weight, goal = bottom of the range
+    if (mode !== 'back' && !s.hard) {
       var dir = e.assisted ? -1 : 1;
-      var small = isSmall(e, kg);
       var need = side.min + 1, steps = 0;
       if (est) {
         for (var k = 1; k <= 3; k++) {
@@ -552,7 +550,7 @@ var FlightEngine = (function () {
           steps = k;
         }
       }
-      if (!steps && (s.topAll || (small && s.crossTop !== null && s.crossTop >= kg - 1e-9))) steps = 1;
+      if (!steps && s.topAll) steps = 1;
       if (steps === 3 && est) {
         // still far too light after three increments: go straight to the weight her strength points to (at most +50% load)
         var jump = kgFor(e, est, mid), cap = e.assisted ? e.baseKg - loadOf(e, kg) * 1.5 : loadOf(e, kg) * 1.5 - e.baseKg;
@@ -565,7 +563,7 @@ var FlightEngine = (function () {
         r.kg = Math.max(0, roundToStep(kg + dir * steps * e.stepKg, e.stepKg));
         r.up = steps;
         var p = est ? predReps(e, est, r.kg, 1) : side.min;
-        r.targets = fill(sets, Math.max(isSmall(e, r.kg) ? jumpFloor(side) : side.min, Math.min(mid, p)));
+        r.targets = fill(sets, Math.max(jumpFloor(side), Math.min(mid, p)));
         return r;
       }
     }
@@ -606,7 +604,8 @@ var FlightEngine = (function () {
     var rir = [], failureSet = -1;
     for (var i = 0; i < sets; i++) {
       var r = e.rir || '1';
-      if (mode === 'intro' || mode === 'back') r = '2–3';
+      if (mode === 'intro') r = '1–2';
+      else if (mode === 'back') r = '2–3';
       else if (mode === 'deload') r = '3–4';
       else if (i === sets - 1 && !e.rir) {
         if (slot.failureLast.indexOf(day) >= 0 || slot.failureLast === 'AB') { r = '0'; failureSet = i; }
@@ -614,11 +613,10 @@ var FlightEngine = (function () {
       }
       rir.push(r);
     }
-    var calibrate = !taxi && !estimated && mode === 'normal' && !dc.down && (
-      ((slot.calibrate || e.stable) && !e.assisted && targets.every(function (t) { return t >= side.max; })) ||
-      !!(s && s.easy));
+    // a test set (last set: keep going while 1–2 reps are left): the test week, and the workout after a "Too easy"
+    var calibrate = mode === 'intro' || (!taxi && !estimated && mode === 'normal' && !dc.down && !!(s && s.easy));
     return {
-      slot: slot.key, muscle: slot.muscle, pair: slot.pair, exercise: e, sets: sets, kg: taxi ? null : kg,
+      slot: slot.key, muscle: slot.muscle, pair: slot.pair, main: slot.main, exercise: e, sets: sets, kg: taxi ? null : kg,
       taxi: taxi, estimated: estimated, targets: targets, rir: rir, failureSet: failureSet, calibrate: calibrate,
       min: side.min, max: side.max, rest: side.rest,
       lastKg: s ? s.lastKg : null, lastReps: s ? s.lastReps : null,
@@ -664,9 +662,14 @@ var FlightEngine = (function () {
     var left = Math.ceil(remaining / avg - 1e-9);
     var d = hasSessionToday ? addDays(todayStr, 1) : todayStr;
     if (d < st.startDate) d = st.startDate;
+    // this week's workouts already done (e.g. Mon + Thu): the rest of this week has none left
+    var monday = addDays(todayStr, -((weekday(todayStr) + 6) % 7)), sunday = addDays(monday, 6);
+    var leftThisWeek = Math.max(0, st.trainingWeekdays.length - result.sessions.filter(function (s) {
+      return s.completed && s.date >= monday && s.date <= sunday; }).length);
     var count = 0, guard = 0;
     while (guard++ < 800) {
-      if (st.trainingWeekdays.indexOf(weekday(d)) >= 0 && ++count >= left) break;
+      var thisWeek = d <= sunday;
+      if (st.trainingWeekdays.indexOf(weekday(d)) >= 0 && (!thisWeek || leftThisWeek-- > 0) && ++count >= left) break;
       d = addDays(d, 1);
     }
     return { landed: false, date: d, sessionsLeft: left, avgKm: round1(avg) };
