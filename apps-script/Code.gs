@@ -12,7 +12,7 @@
 
 var DATE_COLS = { Sessions: ['id', 'date', 'savedAt'], Sets: ['sessionId', 'date'], Overrides: ['date'], Stamps: ['date'],
   Postcards: ['id', 'openedAt'], Cheers: ['id', 'createdAt', 'seenAt'], Settings: ['value'], Choices: ['at'],
-  Reactions: ['id', 'at', 'sessionId', 'seenAt'], Questions: ['date'], Answers: ['date', 'at'], AnswerReactions: ['date', 'at'] };
+  Reactions: ['id', 'at', 'sessionId', 'seenAt'], Questions: ['date'], Answers: ['date', 'at'], AnswerReactions: ['date', 'at'], Love: ['id', 'date', 'at'] };
 
 // ---------- one-time setup ----------
 
@@ -208,12 +208,38 @@ function handle_(params, ops) {
     Object.keys(photos).forEach(function (id) {
       sendMail_(data, { subject: '📷 Photo from her workout', body: 'She added a photo to the workout of ' + id.slice(0, 10) + '.', attachments: [photos[id]] });
     });
+    // the daily love email, if it hasn't gone out yet today (the first request of the day sends it)
+    sendLoveDigest_(ss, data);
     return json_({ ok: true, state: state, skipped: skipped });
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message || err) });
   } finally {
     try { lock.releaseLock(); } catch (e) { /* not held */ }
   }
+}
+
+// ---------- the daily love email ----------
+
+/**
+ * Emails yesterday's hearts as one total. Safe to run any number of times: each day is sent once.
+ * Runs on the first app request of a day. For a fixed time, add a time-driven trigger in the Apps Script editor:
+ * Triggers > Add trigger > function loveDigest > Time-driven > Day timer > e.g. 8am to 9am.
+ */
+function loveDigest() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try { var ss = SpreadsheetApp.getActive(); sendLoveDigest_(ss, readAll_(ss)); } finally { lock.releaseLock(); }
+}
+
+function sendLoveDigest_(ss, data) {
+  try {
+    var today = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+    var d = FlightCore.loveDigest(data, today);
+    if (!d) return;
+    applyWrites_(ss, [d.write]);
+    data.settings[d.write.key] = d.write.value;
+    sendMail_(data, d.note);
+  } catch (e) { console.warn('love email failed: ' + e.message); }
 }
 
 function json_(obj) {

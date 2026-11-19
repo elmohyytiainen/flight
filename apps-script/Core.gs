@@ -28,11 +28,12 @@ var FlightCore = (function () {
     Reactions: ['id', 'at', 'sessionId', 'emoji', 'text', 'seenAt'],
     Questions: ['question', 'date', 'active'],
     Answers: ['date', 'role', 'text', 'question', 'at'],
-    AnswerReactions: ['date', 'to', 'emoji', 'by', 'at'] // a reaction bubble on the other's answer; the latest row per date+to wins, '' removes it
+    AnswerReactions: ['date', 'to', 'emoji', 'by', 'at'], // a reaction bubble on the other's answer; the latest row per date+to wins, '' removes it
+    Love: ['id', 'date', 'at', 'size'] // hearts she sends Elmo from the top bar: size 1 tap, 2 big, 3 huge (held); emailed as a daily total
   };
   var KEY = { Settings: 'settings', Slots: 'slots', Exercises: 'exercises', Choices: 'choices', Sessions: 'sessions',
     Sets: 'sets', Overrides: 'overrides', Stamps: 'stamps', Postcards: 'postcards', Cheers: 'cheers', Reactions: 'reactions',
-    Questions: 'questions', Answers: 'answers', AnswerReactions: 'answerReactions' };
+    Questions: 'questions', Answers: 'answers', AnswerReactions: 'answerReactions', Love: 'love' };
 
   // ---------- two answers: one question a day, both answer, answers show once both have ----------
   var Q_START = '2026-11-16';
@@ -174,6 +175,7 @@ var FlightCore = (function () {
     coachKey: 'Secret key in your coach link',
     coachPhoto: 'Your profile photo (set from the coach console in the app). Small JPEG data, leave it alone',
     herPhoto: 'Her profile photo (she sets it in the app). Small JPEG data, leave it alone',
+    loveReportedDay: 'The last day whose hearts were in the daily love email. Set by the app, leave it alone',
     goals: 'Goal milestones: exercise id : kg (assistance for assisted lifts), optional x reps. Example: incline-db-press:20, lat-pulldown:40, back-squat:60x5'
   };
   var FLIGHT_NO = 'AY 1697';
@@ -461,6 +463,55 @@ var FlightCore = (function () {
     return m ? 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w24' : p;
   }
 
+  // ---------- love: hearts she sends Elmo ----------
+  function loveSize(r) { var n = Math.round(Number(r.size) || 1); return n < 1 ? 1 : n > 3 ? 3 : n; }
+  /** For the coach console: the running total, today's hearts and when the last one came. */
+  function loveSummary(data, today) {
+    var rows = data.love || [], t = rows.filter(function (r) { return str(r.date) === today; });
+    var last = rows.length ? str(rows[rows.length - 1].at) : '';
+    return { total: rows.length, today: t.length, todayBig: t.filter(function (r) { return loveSize(r) > 1; }).length, lastAt: last };
+  }
+  function loveCount(n) { return n + (n === 1 ? ' heart' : ' hearts'); }
+  function shortDay(ds) {
+    var d = new Date(ds + 'T12:00:00Z');
+    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' +
+      ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()];
+  }
+  /**
+   * The daily love email: every heart dated after the last reported day and before today, as one total.
+   * Returns null when there is nothing new, else { note, write } (write moves loveReportedDay to yesterday).
+   * Sent by the first request of a new day, or by a daily time trigger on loveDigest() in Code.gs, whichever comes first.
+   */
+  function loveDigest(data, today) {
+    var rows = data.love || [], from = str(data.settings.loveReportedDay), yd = FlightEngine.addDays(today, -1);
+    var pending = rows.filter(function (r) { var d = str(r.date); return d < today && (!from || d > from); });
+    if (!pending.length) return null;
+    var hn = str(data.settings.herName) || 'She', byDay = {}, days = [];
+    pending.forEach(function (r) {
+      var d = str(r.date);
+      if (!byDay[d]) { byDay[d] = { n: 0, big: 0, huge: 0 }; days.push(d); }
+      byDay[d].n++;
+      if (loveSize(r) === 2) byDay[d].big++;
+      if (loveSize(r) === 3) byDay[d].huge++;
+    });
+    days.sort();
+    function extra(b) {
+      var x = [];
+      if (b.big) x.push(b.big + ' big');
+      if (b.huge) x.push(b.huge + ' huge');
+      return x.length ? ' (' + x.join(', ') + ')' : '';
+    }
+    var when = days.length === 1 ? (days[0] === yd ? 'yesterday' : 'on ' + shortDay(days[0])) : 'since ' + shortDay(days[0]);
+    var total = rows.filter(function (r) { return str(r.date) < today; }).length;
+    var lines = days.length === 1 ? [loveCount(byDay[days[0]].n) + ' 💗 ' + when + extra(byDay[days[0]]) + '.']
+      : days.map(function (d) { return shortDay(d) + ': ' + loveCount(byDay[d].n) + extra(byDay[d]); });
+    lines.push('', 'Total so far: ' + total + ' 💗');
+    return {
+      note: { subject: '💗 ' + hn + ' sent you ' + loveCount(pending.length) + ' ' + when, body: lines.join('\n') },
+      write: { tab: 'Settings', kind: 'setting', key: 'loveReportedDay', value: yd }
+    };
+  }
+
   var PUBLIC_SETTINGS = ['herName', 'travellerName', 'flightNo', 'dayAName', 'dayBName', 'startDate', 'introWeeks',
     'trainingWeekdays', 'routeKm', 'kmPerRep', 'goals', 'coachPhoto', 'herPhoto'];
 
@@ -498,6 +549,7 @@ var FlightCore = (function () {
       }),
       twoAnswers: twoAnswers(data, role, today),
       qaStreak: qaStreak(data, today),
+      love: role === 'coach' ? loveSummary(data, today) : null,
       summary: { cumKm: cum, completed: result.completedCount, reps: result.totalReps, landedOn: result.landedOn }
     };
   }
@@ -508,12 +560,13 @@ var FlightCore = (function () {
   function clip(s, n) { return str(s).slice(0, n); }
 
   var ROLE_OPS = {
-    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer', 'answerReact'],
+    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer', 'answerReact', 'love'],
     coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto', 'answer', 'answerReact']
   };
 
   function applyOp(data, op, role, nowIso) {
     if (!data.reactions) data.reactions = [];
+    if (!data.love) data.love = [];
     if (!op || !op.type) bad('missing op');
     if ((ROLE_OPS[role] || []).indexOf(op.type) < 0) bad('not allowed: ' + op.type);
     var writes = [], notify = null, photo = null;
@@ -625,6 +678,12 @@ var FlightCore = (function () {
         notify = { subject: '💬 ' + rhn + ' reacted ' + remj + ' to your answer',
           body: '"' + (str(rtheirs.question) || questionFor(data, rd)) + '"\n\nYou: ' + str(rtheirs.text) + '\n' + rhn + ': ' + str(rmine.text) };
       }
+    } else if (op.type === 'love') {
+      // a heart for Elmo from the top bar; no email now, they go out as a daily total (loveDigest)
+      var lid = clip(op.id, 40), ld = str(op.date), lsz = Math.round(Number(op.size) || 1);
+      if (!lid || !isDate(ld) || lsz < 1 || lsz > 3) bad('invalid love');
+      if (ld > FlightEngine.addDays(str(nowIso).slice(0, 10), 1)) bad('love can\'t be from the future');
+      if (!data.love.some(function (r) { return str(r.id) === lid; })) append('Love', { id: lid, date: ld, at: nowIso, size: lsz }); // sent twice: once
     } else if (op.type === 'profilePhoto') {
       // a small square JPEG kept in the Settings tab (a Sheet cell holds at most 50,000 characters); '' removes it
       var pu = str(op.dataUrl), pkey = role === 'coach' ? 'coachPhoto' : 'herPhoto';
@@ -705,7 +764,7 @@ var FlightCore = (function () {
     QA_EMOJIS: QA_EMOJIS, TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises, programSync: programSync,
     PROGRAM_VERSION: PROGRAM_VERSION,
     seedPostcards: seedPostcards, postcardSync: postcardSync, upgradePlan: upgradePlan, exerciseSync: exerciseSync, toEngineInput: toEngineInput, buildState: buildState,
-    applyOp: applyOp, photoUrl: photoUrl, teaserUrl: teaserUrl, seedQuestions: seedQuestions, questionFor: questionFor, QUESTIONS: QUESTIONS
+    applyOp: applyOp, loveDigest: loveDigest, loveSummary: loveSummary, photoUrl: photoUrl, teaserUrl: teaserUrl, seedQuestions: seedQuestions, questionFor: questionFor, QUESTIONS: QUESTIONS
   };
 })();
 
