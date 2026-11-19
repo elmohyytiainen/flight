@@ -495,7 +495,7 @@
     return { who: coach ? 'her' : 'coach', name: coach ? (String(S.state.settings.herName || '').trim() || 'She') : who() };
   }
   function qaRow(whoKey, label, text) {
-    return '<div class="qrow' + (whoKey === 'her' ? ' her' : '') + '">' + avatarHTML(whoKey, 'av-32') + '<div><b>' + esc(label) + '</b>' + esc(text) + '</div></div>';
+    return '<div class="qrow ' + (whoKey === 'her' ? 'her' : 'coach') + '">' + avatarHTML(whoKey, 'av-32') + '<div><b>' + esc(label) + '</b>' + esc(text) + '</div></div>';
   }
   /** One day: the question, then a box to answer, or both answers, or a wait for the other. */
   function qaDayHTML(q, inSheet) {
