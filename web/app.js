@@ -63,6 +63,8 @@
     tabHome: '<svg viewBox="-12 -12 24 24" aria-hidden="true"><path class="accent" d="' + PLANE + '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" transform="rotate(-35)"/></svg>',
     tabLog: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="accent" x="4" y="3" width="16" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     goldCheck: '<svg viewBox="0 0 24 24" class="gc" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="var(--gold)"/><path d="M6.8 12.4l3.4 3.4 7-7.4" fill="none" stroke="var(--ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    // a done workout in the calendar: the gold check's coin with a dumbbell instead of the tick
+    goldDb: '<svg viewBox="0 0 24 24" class="gc" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="var(--gold)"/><path transform="translate(12 12) scale(.68) translate(-12 -12)" d="M3.5 9.5v5M6.5 7v10M17.5 7v10M20.5 9.5v5M6.5 12h11" fill="none" stroke="var(--ink)" stroke-width="3.4" stroke-linecap="round"/></svg>',
     dbOutline: '<svg viewBox="0 0 24 24" class="dbo" aria-hidden="true"><rect x="4.2" y="6.5" width="3.6" height="11" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
       '<rect x="16.2" y="6.5" width="3.6" height="11" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.8 10v4M22.2 10v4M7.8 12h8.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
     tabTrain: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="accent" x="4.6" y="6" width="3.4" height="12" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/>' +
@@ -336,7 +338,7 @@
 
   window.addEventListener('online', function () { flush(); });
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible') { flush(); if (S.draft) keepAwake(); }
+    if (document.visibilityState === 'visible') { flush(); if (S.draft && !S.draft.retro) keepAwake(); }
   });
   setInterval(function () { if (S.queue.length && document.visibilityState === 'visible') flush(); }, 30000);
 
@@ -720,13 +722,13 @@
       var ti = st0.trainingWeekdays.indexOf(E.weekday(ds));
       var planned = !g && ti >= 0 && ds >= t && ds >= st0.startDate && !weekFull(res, ds);
       if (planned) n.planned++;
-      var state = g ? IC.goldCheck : planned ? IC.dbOutline : '';
+      var state = g ? IC.goldDb : planned ? IC.dbOutline : '';
       h += '<button class="cd' + (g ? ' gym' : planned ? ' planned' : '') + (ds === t ? ' today' : '') + (ds > t ? ' future' : '') + '" data-act="day" data-date="' + ds + '" aria-label="' +
         esc(fmtLong(ds) + (g ? ', ' + workoutOf(g) + ' done' : planned ? ', ' + workoutOf(ti === 0 ? 'A' : 'B') + ' planned' : '') + (stp.ballet ? ', ballet' : '') + (stp.run ? ', run' : '')) +
-        '"><span class="dn">' + d + '</span><span class="st">' + state + '</span><span class="marks">' +
+        '"><span class="dn">' + d + '</span><span class="st">' + state +
         (stp.ballet ? '<i class="mk ballet">' + IC.ballet + '</i>' : '') + (stp.run ? '<i class="mk run">' + IC.run + '</i>' : '') + '</span></button>';
     }
-    h += '</div><div class="legend"><span>' + IC.goldCheck + plural(n.gym, 'workout', 'workouts') + '</span>' +
+    h += '</div><div class="legend"><span>' + IC.goldDb + plural(n.gym, 'workout', 'workouts') + '</span>' +
       (n.planned ? '<span>' + IC.dbOutline + n.planned + ' planned</span>' : '') +
       '<span><i class="mk ballet">' + IC.ballet + '</i>' + n.ballet + ' ballet</span><span><i class="mk run">' + IC.run + '</i>' + plural(n.run, 'run', 'runs') + '</span></div>' +
       '<p class="small muted calhint">Tap a day to see its workout and reactions.</p></section>';
@@ -752,9 +754,9 @@
   function heroHTML(res) {
     var t = todayStr();
     if (S.draft) {
-      return '<section class="hero"><div class="kicker">Workout in progress</div><h2>' + esc(dayName(S.draft.day)) + '</h2><div class="meta">Started ' +
-        new Date(S.draft.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + '</div>' +
-        '<button class="btn taxi wide" data-act="resume">Resume workout</button><button class="linkbtn discard" data-act="discard">Discard it</button></section>';
+      return '<section class="hero"><div class="kicker">' + (S.draft.retro ? 'Logging a past workout' : 'Workout in progress') + '</div><h2>' + esc(dayName(S.draft.day)) + '</h2><div class="meta">' +
+        (S.draft.retro ? 'For ' + esc(fmtLong(S.draft.date)) : 'Started ' + new Date(S.draft.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })) + '</div>' +
+        '<button class="btn taxi wide" data-act="resume">' + (S.draft.retro ? 'Continue logging' : 'Resume workout') + '</button><button class="linkbtn discard" data-act="discard">Discard it</button></section>';
     }
     var nd = nextSessionDate(res), day = E.nextDay(res), p = E.plan(res, nd, day);
     var mode = p.mode === 'intro' ? 'Test week' : p.mode === 'back' ? 'Welcome back' : p.mode === 'deload' ? 'Easier week' : '';
@@ -887,16 +889,25 @@
     return out;
   }
 
-  function startFlight(day) {
-    var res = calc(), t = todayStr(), p = E.plan(res, t, day);
+  /**
+   * Starts a workout draft. With a past date it logs a workout afterwards: the plan is the one she had that day
+   * (only earlier workouts count), the A/B is the one that was due then, and there is no rest timer or clock.
+   */
+  function startFlight(day, date) {
+    var retro = !!date && date < todayStr(), t = retro ? date : todayStr(), inp = input();
+    if (retro) inp.sessions = inp.sessions.filter(function (s) { return s.date < t; });
+    var res = E.replay(inp);
+    if (retro) day = E.nextDay(res);
+    var p = E.plan(res, t, day);
     var d = { id: t + '-' + uid(), date: t, day: day, mode: p.mode, startedAt: Date.now(), items: {}, sets: [], undo: [],
-      fbFor: null, lower: null, view: null, timeOffer: false,
+      fbFor: null, lower: null, view: null, timeOffer: false, retro: retro,
       blocks: p.blocks.map(function (b, i) { return { id: 'b' + i, slots: b.items.map(function (x) { return x.slot; }), paired: b.items.length > 1, separated: false }; }) };
     p.items.forEach(function (it) { d.items[it.slot] = itemFromPlan(it); d.sets = d.sets.concat(setsFromPlan(it)); });
     S.draft = d;
     store.set('draft', d);
     S.view = 'flight';
-    keepAwake(); unlockAudio(); render(); window.scrollTo(0, 0);
+    if (!retro) { keepAwake(); unlockAudio(); }
+    render(); window.scrollTo(0, 0);
   }
 
   function blockIndexOfSlot(d, slot) { for (var i = 0; i < d.blocks.length; i++) if (d.blocks[i].slots.indexOf(slot) >= 0) return i; return -1; }
@@ -921,7 +932,7 @@
   function accessoryOpen(d) {
     return d.blocks.some(function (b) { return b.paired && b.slots.some(function (k) { return d.sets.some(function (s) { return s.slot === k && open(s); }); }); });
   }
-  function elapsedMin() { return S.draft ? (Date.now() - S.draft.startedAt) / 60000 : 0; }
+  function elapsedMin() { return S.draft && !S.draft.retro ? (Date.now() - S.draft.startedAt) / 60000 : 0; }
   function elapsed() {
     if (!S.draft) return '';
     var s = Math.floor((Date.now() - S.draft.startedAt) / 1000);
@@ -931,7 +942,8 @@
   function draftSession() {
     var d = S.draft;
     var end = d.finishedAt || Date.now();
-    return { id: d.id, date: d.date, day: d.day, minutes: Math.max(1, Math.round((end - d.startedAt) / 60000)), effort: d.effort || null, note: d.note || '',
+    return { id: d.id, date: d.date, day: d.day, minutes: d.retro ? '' : Math.max(1, Math.round((end - d.startedAt) / 60000)), effort: d.effort || null, note: d.note || '',
+      retro: !!d.retro,
       sets: d.sets.map(function (s) { return { slot: s.slot, ex: s.ex, set: s.set, kg: Number(s.kg) || 0, reps: Number(s.reps) || 0, done: !!s.done, fb: s.fb || '', skip: !!s.skip,
         rir: s.rir || '', target: Number(s.target) || 0 }; }) };
   }
@@ -976,9 +988,10 @@
       var all = sets.every(function (s) { return !open(s); });
       h += '<i class="' + (j === bi ? 'cur' : all ? 'done' : '') + '"></i>';
     });
-    h += '</div><span class="clock" id="clock">' + elapsed() + '</span></div>';
+    h += '</div>' + (d.retro ? '<span class="clock retro">' + esc(fmtDate(d.date)) + '</span>' : '<span class="clock" id="clock">' + elapsed() + '</span>') + '</div>';
+    if (d.retro) h += '<div class="retronote">Logging a workout for <b>' + esc(fmtLong(d.date)) + '</b>. Just fill in what you did, no rest timer :)</div>';
 
-    h += '<div class="strip">' + routeBar(c.cumKm, st.routeKm) + '<div class="striptext"><span><b>+' + kgFmt(c.km) + ' km</b> this workout, ' + (c.reps - (c.extraReps || 0)) + ' reps' +
+    h += '<div class="strip">' + routeBar(d.retro ? pv.result.cumKm : c.cumKm, st.routeKm) + '<div class="striptext"><span><b>+' + kgFmt(c.km) + ' km</b> this workout, ' + (c.reps - (c.extraReps || 0)) + ' reps' +
       (c.extraReps ? ' + ' + c.extraReps + ' extra' : '') + '</span></div></div>';
 
     if (elapsedMin() >= 68 && !d.timeOffer && accessoryOpen(d)) {
@@ -1052,7 +1065,7 @@
       d.lower = { slot: s.slot, kg: Math.round(lk * 100) / 100, after: i };
     }
     var n = nextStep(d);
-    if (n === undefined) stopRest();
+    if (n === undefined || d.retro) stopRest();
     else {
       var cb = d.blocks[blockIndexOfSlot(d, s.slot)], ns = d.sets[n];
       if (cb.paired && !cb.separated && cb.slots.indexOf(ns.slot) >= 0 && ns.set === s.set) startRest(30, 'Switch', d.items[ns.slot].name);
@@ -1064,9 +1077,10 @@
   // ---------- after the workout ----------
   function viewLanding() {
     var pv = preview(), c = pv.session, d = S.draft, st = pv.result.settings;
-    var n = pv.result.sessions.length, left = Math.max(0, st.routeKm - c.cumKm);
+    var n = pv.result.sessions.map(function (s) { return s.id; }).indexOf(d.id) + 1 || pv.result.sessions.length;
+    var cum = d.retro ? pv.result.cumKm : c.cumKm, left = Math.max(0, st.routeKm - cum);
     var h = '<div class="screen"><header class="top"><div class="who"><h1>Nice work love :)</h1><div class="small muted">Workout ' + n + (sameNames() ? '' : ', ' + esc(dayName(d.day))) +
-      ', ' + Math.max(1, Math.round(((d.finishedAt || Date.now()) - d.startedAt) / 60000)) + ' min</div></div>' + syncHTML() + '</header>' + mapSVG(c.cumKm);
+      (d.retro ? ', ' + esc(fmtLong(d.date)) : ', ' + Math.max(1, Math.round(((d.finishedAt || Date.now()) - d.startedAt) / 60000)) + ' min') + '</div></div>' + syncHTML() + '</header>' + mapSVG(cum);
     h += '<div class="kmbig">+' + kgFmt(c.km) + '<small>km</small></div>';
     if (c.extraReps) h += '<p class="small muted xkm">Extras: ' + c.extraReps + ' reps, +' + kgFmt(c.extraKm) + ' km. They give half km per rep, up to a quarter on top of the workout\'s own km.</p>';
     h += '<p class="kmsplit">' + (c.reps - (c.extraReps || 0)) + ' reps toward ' + esc(who()) + '\'s flight. ' +
@@ -1508,6 +1522,10 @@
     if (!w.length) {
       var ti = res.settings.trainingWeekdays.indexOf(E.weekday(ds));
       if (ti >= 0 && ds >= todayStr() && ds >= res.settings.startDate && !weekFull(res, ds)) h += '<p class="muted">' + esc(workoutOf(ti === 0 ? 'A' : 'B')) + ' planned :)</p>';
+      if (role() === 'athlete' && ds < todayStr() && ds >= res.settings.startDate) {
+        h += S.draft ? '<p class="small muted">Finish or discard the workout you have open first, then you can log this day.</p>'
+          : '<button class="btn ghost wide retrobtn" data-act="retroLog" data-date="' + ds + '">' + IC.dumbbell + 'Log a workout for this day</button>';
+      }
       h += '<p class="muted small">Ballet and runs don\'t move the plane, but your coach sees them ;)</p>';
     }
     h += '<div class="toggles">';
@@ -1879,7 +1897,8 @@
       case 'board': S.boardDay = null; S.view = 'board'; render(); window.scrollTo(0, 0); break;
       case 'boardDay': S.boardDay = t.dataset.day; render(); break;
       case 'start': startFlight(t.dataset.day); break;
-      case 'resume': if (d) { d.finishedAt = null; store.set('draft', d); } S.view = 'flight'; keepAwake(); unlockAudio(); render(); break;
+      case 'resume': if (d) { d.finishedAt = null; store.set('draft', d); } S.view = 'flight'; if (!d || !d.retro) { keepAwake(); unlockAudio(); } render(); break;
+      case 'retroLog': closeModal(); startFlight(null, t.dataset.date); break;
       case 'inc': {
         var s = d.sets[+t.dataset.i], it = d.items[s.slot], f = t.dataset.f, step = f === 'kg' ? it.step : 1;
         s[f] = Math.max(0, Math.round((Number(s[f]) + step * Number(t.dataset.d)) * 100) / 100);
