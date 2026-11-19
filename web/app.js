@@ -279,6 +279,10 @@
       (st.reactions || []).forEach(function (r) { if (r.id === op.id) r.seenAt = r.seenAt || nowIso(); });
     } else if (op.type === 'cheer') {
       st.cheers.push({ id: 'local' + uid(), createdAt: nowIso(), text: op.text, seenAt: '' });
+    } else if (op.type === 'love') {
+      var L = st.love || (st.love = { total: 0, today: 0, todayBig: 0, lastAt: '' });
+      L.total++; L.lastAt = nowIso();
+      if (op.date === todayStr()) { L.today++; if (op.size > 1) L.todayBig++; }
     }
   }
 
@@ -1184,7 +1188,7 @@
     h += '<div class="stats"><div class="stat"><b>' + res.completedCount + '</b><span>Workouts</span></div>' +
       '<div class="stat"><b>' + ws.thisWeek + ' of ' + ws.perWeek + '</b><span>This week' + (ws.total ? ', ' + ws.good + ' of ' + ws.total + ' full weeks' : '') + '</span></div>' +
       '<div class="stat"><b>' + (mins.length ? Math.round(mins.reduce(function (a, b) { return a + b; }, 0) / mins.length) + ' min' : '—') + '</b><span>Average workout</span></div>' +
-      '<div class="stat"><b>' + km(res.cumKm) + ' km</b><span>' + res.totalReps.toLocaleString('en-GB') + ' reps so far</span></div></div>';
+      '<div class="stat"><b>' + km(res.cumKm) + ' km</b><span>' + res.totalReps.toLocaleString('en-GB') + ' reps so far</span></div>' + loveStatHTML() + '</div>';
 
     // working sets this week by muscle
     var t = todayStr(), monday = E.addDays(t, -((dateObj(t).getDay() + 6) % 7)), count = {};
@@ -1359,6 +1363,14 @@
       (L.todayBig ? ' <span class="muted">(' + L.todayBig + ' big)</span>' : '') + ' · <b>' + L.total + '</b> so far' +
       (lastTxt ? '<span class="small muted">' + esc(lastTxt) + '</span>' : '') + '</p></section>';
   }
+  /** Progress: the hearts she has sent (for the coach: from her). */
+  function loveStatHTML() {
+    var L = S.state.love;
+    if (!L) return '';
+    var coach = role() === 'coach', her = S.state.settings.herName || 'her';
+    return '<div class="stat lovestat"><span class="lvh">' + IC.heart + '</span><div><b>' + L.total.toLocaleString('en-GB') + '</b><span>' +
+      (coach ? 'Hearts from ' + esc(her) : 'Hearts sent to ' + esc(who())) + (L.today ? ', ' + L.today + ' today' : '') + '</span></div></div>';
+  }
   /** New hearts since the coach last looked: let a few float up from the card, once. */
   function loveArrived() {
     var L = S.state && S.state.love;
@@ -1386,20 +1398,30 @@
       setTimeout(function (x) { return function () { x.remove(); }; }(h), 2200 + i * 60);
     }
   }
-  function loveToast(text) {
+  function loveToast(text, big) {
     var old = document.querySelector('.lovetoast');
     if (old) old.remove();
     var t = document.createElement('div');
-    t.className = 'lovetoast';
+    t.className = 'lovetoast' + (big ? ' big' : '');
     t.textContent = text;
     document.body.appendChild(t);
-    setTimeout(function () { t.classList.add('out'); }, 1600);
-    setTimeout(function () { t.remove(); }, 2100);
+    setTimeout(function () { t.classList.add('out'); }, big ? 3600 : 1600);
+    setTimeout(function () { t.remove(); }, big ? 4100 : 2100);
   }
   function sendLove(el, size) {
     enqueue({ type: 'love', id: 'l' + Date.now().toString(36) + uid(), date: todayStr(), size: size });
+    var total = S.state && S.state.love ? S.state.love.total : 0;
+    var isMs = window.FlightCore && window.FlightCore.isLoveMilestone ? window.FlightCore.isLoveMilestone : function () { return false; };
+    if (total && isMs(total)) {
+      // a milestone: a big burst, confetti and a toast that stays a little longer
+      if (el) floatHearts(el, 24);
+      confetti();
+      loveToast(total + ' hearts sent to ' + who() + '! ✨', true);
+      return;
+    }
     if (el) floatHearts(el, size === 3 ? 14 : size === 2 ? 8 : 4);
-    loveToast(size === 3 ? 'Huge love sent to ' + who() + ' 💗' : size === 2 ? 'Big love sent to ' + who() + ' 💗' : 'Sent to ' + who() + ' 💗');
+    loveToast((size === 3 ? 'Huge love sent to ' + who() + ' 💗' : size === 2 ? 'Big love sent to ' + who() + ' 💗' : 'Sent to ' + who() + ' 💗') +
+      (total ? ' · ' + total + ' so far' : ''));
   }
   /** Her floating heart, bottom right above the tabs on Train, Flight and Progress. Lives outside #app. */
   function syncFab(v) {

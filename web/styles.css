@@ -797,3 +797,9 @@ body.hasfab #app { padding-bottom: calc(150px + var(--safe-b)); }
 .lovecard p .small { display: block; font-size: 12px; margin-top: 1px; }
 .lovecard.empty p { font-size: 13px; color: var(--ink-2); }
 @media (prefers-reduced-motion: reduce) { .floatheart { display: none; } .lovebtn.holding { animation: none; } }
+
+/* her count: a pink tile across the Progress stats, a longer pink toast at milestones */
+.stat.lovestat { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; background: color-mix(in srgb, var(--pink) 9%, #fff); }
+.stat.lovestat .lvh { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--pink-soft); color: var(--pink); display: grid; place-items: center; }
+.stat.lovestat .lvh svg { width: 22px; height: 22px; }
+.lovetoast.big { background: var(--pink); color: #fff; font-size: 16px; padding: 10px 18px; }

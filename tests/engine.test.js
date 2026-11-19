@@ -501,7 +501,7 @@ test('love: only she can send hearts; resending the same heart counts once; the 
   assert.throws(() => love('f', '2026-11-25', 1, '2026-11-21T20:00:00Z'), /future/);
   const coach = C.buildState(data, 'coach', '2026-11-21').love;
   assert.deepStrictEqual([coach.total, coach.today, coach.todayBig], [4, 2, 1]);
-  assert.strictEqual(C.buildState(data, 'athlete', '2026-11-21').love, null, 'her state carries no love count');
+  assert.strictEqual(C.buildState(data, 'athlete', '2026-11-21').love.total, 4, 'she sees her running total too');
 });
 
 test('love: one email a day with yesterday\'s total, sent once', () => {
@@ -521,4 +521,16 @@ test('love: one email a day with yesterday\'s total, sent once', () => {
   const d2 = C.loveDigest(data, '2026-11-24');
   assert.strictEqual(d2.note.subject, '💗 Pinja sent you 3 hearts since Sat 21 Nov');
   assert.ok(/Sat 21 Nov: 1 heart\nSun 22 Nov: 1 heart\nMon 23 Nov: 1 heart/.test(d2.note.body) && /Total so far: 6 💗/.test(d2.note.body), d2.note.body);
+});
+
+test('love milestones: 50, 100, 250 … and the daily email says when she passed one', () => {
+  assert.deepStrictEqual([1, 49, 50, 100, 250, 500, 750, 1000, 1250, 1500, 2000].filter(C.isLoveMilestone), [50, 100, 250, 500, 750, 1000, 1500, 2000]);
+  const data = newData();
+  data.settings.herName = 'Pinja';
+  for (let i = 0; i < 48; i++) C.applyOp(data, { type: 'love', id: 'a' + i, date: '2026-11-20', size: 1 }, 'athlete', '2026-11-20T20:00:00Z');
+  data.settings.loveReportedDay = '2026-11-20';
+  for (let i = 0; i < 3; i++) C.applyOp(data, { type: 'love', id: 'b' + i, date: '2026-11-21', size: 1 }, 'athlete', '2026-11-21T20:00:00Z');
+  const d = C.loveDigest(data, '2026-11-22');
+  assert.strictEqual(d.note.subject, '🎉 💗 Pinja sent you 3 hearts yesterday');
+  assert.ok(d.note.body.startsWith('🎉 Pinja passed 50 hearts!\n\n3 hearts 💗 yesterday.'), d.note.body);
 });

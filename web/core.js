@@ -471,6 +471,8 @@ var FlightCore = (function () {
     return { total: rows.length, today: t.length, todayBig: t.filter(function (r) { return loveSize(r) > 1; }).length, lastAt: last };
   }
   function loveCount(n) { return n + (n === 1 ? ' heart' : ' hearts'); }
+  /** Love milestones: 50, 100, 250, 500, 750, 1000, then every 500. */
+  function isLoveMilestone(n) { return [50, 100, 250, 500, 750, 1000].indexOf(n) >= 0 || (n > 1000 && n % 500 === 0); }
   function shortDay(ds) {
     var d = new Date(ds + 'T12:00:00Z');
     return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' +
@@ -501,12 +503,14 @@ var FlightCore = (function () {
       return x.length ? ' (' + x.join(', ') + ')' : '';
     }
     var when = days.length === 1 ? (days[0] === yd ? 'yesterday' : 'on ' + shortDay(days[0])) : 'since ' + shortDay(days[0]);
-    var total = rows.filter(function (r) { return str(r.date) < today; }).length;
+    var total = rows.filter(function (r) { return str(r.date) < today; }).length, passed = 0;
+    for (var m = total - pending.length + 1; m <= total; m++) if (isLoveMilestone(m)) passed = m;
     var lines = days.length === 1 ? [loveCount(byDay[days[0]].n) + ' 💗 ' + when + extra(byDay[days[0]]) + '.']
       : days.map(function (d) { return shortDay(d) + ': ' + loveCount(byDay[d].n) + extra(byDay[d]); });
     lines.push('', 'Total so far: ' + total + ' 💗');
+    if (passed) lines.unshift('🎉 ' + hn + ' passed ' + passed + ' hearts!', '');
     return {
-      note: { subject: '💗 ' + hn + ' sent you ' + loveCount(pending.length) + ' ' + when, body: lines.join('\n') },
+      note: { subject: (passed ? '🎉 ' : '') + '💗 ' + hn + ' sent you ' + loveCount(pending.length) + ' ' + when, body: lines.join('\n') },
       write: { tab: 'Settings', kind: 'setting', key: 'loveReportedDay', value: yd }
     };
   }
@@ -548,7 +552,7 @@ var FlightCore = (function () {
       }),
       twoAnswers: twoAnswers(data, role, today),
       qaStreak: qaStreak(data, today),
-      love: role === 'coach' ? loveSummary(data, today) : null,
+      love: loveSummary(data, today), // both see the running total (she sees hers on Progress and in the toast)
       summary: { cumKm: cum, completed: result.completedCount, reps: result.totalReps, landedOn: result.landedOn }
     };
   }
@@ -763,7 +767,7 @@ var FlightCore = (function () {
     QA_EMOJIS: QA_EMOJIS, TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises, programSync: programSync,
     PROGRAM_VERSION: PROGRAM_VERSION,
     seedPostcards: seedPostcards, postcardSync: postcardSync, upgradePlan: upgradePlan, exerciseSync: exerciseSync, toEngineInput: toEngineInput, buildState: buildState,
-    applyOp: applyOp, loveDigest: loveDigest, loveSummary: loveSummary, photoUrl: photoUrl, teaserUrl: teaserUrl, seedQuestions: seedQuestions, questionFor: questionFor, QUESTIONS: QUESTIONS
+    applyOp: applyOp, loveDigest: loveDigest, loveSummary: loveSummary, isLoveMilestone: isLoveMilestone, photoUrl: photoUrl, teaserUrl: teaserUrl, seedQuestions: seedQuestions, questionFor: questionFor, QUESTIONS: QUESTIONS
   };
 })();
 
