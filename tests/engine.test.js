@@ -17,6 +17,7 @@ test('first plan: test week, Day A, no weights until she picks them', () => {
   assert.ok(p.items.length >= 6);
   p.items.forEach(it => {
     assert.ok(it.targets.length === it.sets && it.targets.every(t => t === it.min), it.slot);   // goal = bottom of the range
+    assert.strictEqual(it.sets, it.main ? 3 : 2, it.slot);                                      // every set, not one fewer
     assert.ok(it.rir.every(r => r === '1–2'), it.slot);                                         // 1–2 in reserve
     assert.strictEqual(it.calibrate, true, it.slot);                                             // last set is a test set
   });
@@ -183,7 +184,7 @@ test('test week sets the weights: a strong test set means a heavier week 2, othe
     return { intro: E.plan(res, '2026-11-26', 'B').items.find(it => it.slot === 'chest'), wk2: E.plan(res, '2026-11-30', 'A').items.find(it => it.slot === 'chest') };
   };
   const easy = run([8, 14]);
-  assert.deepStrictEqual([easy.intro.kg, easy.intro.targets], [10, [8, 8]]);     // still the test week: same weight, same goal
+  assert.deepStrictEqual([easy.intro.kg, easy.intro.targets], [10, [8, 8, 8]]);  // still the test week: same weight, same goal
   assert.ok(easy.wk2.kg > 10, 'week 2 after a strong test: ' + easy.wk2.kg);
   const ok = run([8, 9]);
   assert.deepStrictEqual([ok.wk2.kg, ok.wk2.targets], [10, [9, 9, 9]]);

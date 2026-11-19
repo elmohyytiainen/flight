@@ -11,7 +11,7 @@
  *   Exercise = one variation inside a slot (rank 1 = recommended). She picks one per slot, per day if she likes.
  *
  * Progression (v6: as simple as possible)
- *   - Test week (introWeeks): one set fewer, 1–2 reps in reserve, goal = the bottom of the range, and the last set
+ *   - Test week (introWeeks): all sets, 1–2 reps in reserve, goal = the bottom of the range, and the last set
  *     is a test set (keep going while 1–2 reps are left). No increases.
  *   - Then every workout: one more rep on every set than last time, up to the top of the range.
  *   - Every set at the top -> next time one step heavier (more if a test set or "Too easy" showed she is clearly
@@ -138,7 +138,7 @@ var FlightEngine = (function () {
 
   function setsFor(n, mode) {
     if (mode === 'deload') return Math.max(1, Math.ceil(n / 2));
-    if (mode === 'intro' || mode === 'back') return Math.max(1, n - 1);
+    if (mode === 'back') return Math.max(1, n - 1); // first workout after a break; the test week keeps every set
     return n;
   }
 

@@ -810,7 +810,7 @@
     var p = E.plan(res, t, day);
     var h = '<div class="screen"><header class="top"><button class="linkbtn backlink" data-act="home">' + IC.back + 'Home</button>' + syncHTML() + '</header>';
     h += '<h1 class="todayh">Today: ' + esc(dayName(day)) + '</h1><div class="small muted">' + plural(p.items.length, 'exercise', 'exercises') + ', ' + p.setsTotal + ' sets</div>';
-    if (p.mode === 'intro') h += '<div class="note">Test week :) Pick weights where the goal reps leave 1–2 in the tank. One set fewer, and on the last set keep going while you still have 1–2 left. The app sets your weights from next week.</div>';
+    if (p.mode === 'intro') h += '<div class="note">Test week :) Pick weights where the goal reps leave 1–2 in the tank. On the last set keep going while you still have 1–2 left. The app sets your weights from next week.</div>';
     if (p.mode === 'back') h += '<div class="note">Welcome back :) First workout after a break: one set fewer and 2–3 reps in reserve. Back to normal next time.</div>';
     if (p.mode === 'deload') h += '<div class="note">Easier week: half the sets, 3–4 reps in reserve, same weights. Recovery is part of the flight ;)</div>';
     h += '<p class="small muted choicehint">Legs, chest and lats are your progress lifts: keep them the same for a few weeks. The rest you can change, a different one for ' +
@@ -1171,7 +1171,7 @@
     list.forEach(function (s, i) {
       h += '<div class="mini"><div class="seat">' + (n - i) + '<small>' + esc(dayName(s.day)) + '</small></div>' +
         '<div><b>' + esc(fmtDate(s.date)) + '</b><div class="small muted">' + s.reps + ' reps' + (s.minutes ? ', ' + s.minutes + ' min' : '') +
-        (s.mode === 'deload' ? ', easier week' : s.mode === 'intro' ? ', intro' : s.mode === 'back' ? ', welcome back' : '') + (s.prs.length ? ', 🏅 ' + plural(s.prs.length, 'PB', 'PBs') : '') + (s.goals.length ? ', 🎯 goal' : '') + '</div>' +
+        (s.mode === 'deload' ? ', easier week' : s.mode === 'intro' ? ', test week' : s.mode === 'back' ? ', welcome back' : '') + (s.prs.length ? ', 🏅 ' + plural(s.prs.length, 'PB', 'PBs') : '') + (s.goals.length ? ', 🎯 goal' : '') + '</div>' +
         reactionsFor(s.id).map(function (r) { return '<div class="rx">' + esc(reactionText(r)) + '</div>'; }).join('') + '</div>' +
         '<div class="km">+' + Math.round(s.km) + '<small>km</small></div></div>';
     });
@@ -1336,7 +1336,7 @@
     list.forEach(function (x, i) {
       h += '<div class="item"><div class="l1"><span class="withav">' + avatarHTML('her', 'av-32') + '<b>Workout ' + (n - i) + ', ' + esc(dayName(x.day)) + '</b></span><span class="num">+' + kgFmt(x.km) + ' km</span></div>' +
         '<div class="l2">' + esc(fmtDate(x.date)) + (x.minutes ? ', ' + x.minutes + ' min' : '') + ', ' + x.done + '/' + x.prescribed + ' sets, ' + x.reps + ' reps' +
-        (x.effort ? ', effort ' + x.effort + '/5' : '') + (x.mode !== 'normal' ? ', ' + (x.mode === 'intro' ? 'intro' : x.mode === 'back' ? 'welcome back' : 'easier week') : '') + '</div>' +
+        (x.effort ? ', effort ' + x.effort + '/5' : '') + (x.mode !== 'normal' ? ', ' + (x.mode === 'intro' ? 'test week' : x.mode === 'back' ? 'welcome back' : 'easier week') : '') + '</div>' +
         (x.improvements.length ? '<div class="l2">Better: ' + esc(x.improvements.map(function (m) { return exName(m.ex) + ' ' + m.text; }).join('; ')) + '</div>' : '') +
         (x.upgrades.length ? '<div class="l2">Heavier next time: ' + esc(x.upgrades.map(exName).join(', ')) + '</div>' : '') +
         (x.note ? '<q>' + esc(x.note) + '</q>' : '') +

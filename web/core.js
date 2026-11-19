@@ -154,7 +154,7 @@ var FlightCore = (function () {
     dayAName: 'Label for Day A (the 1st workout of the week)',
     dayBName: 'Label for Day B (the 2nd workout of the week)',
     startDate: 'First Monday of the program',
-    introWeeks: 'Test weeks at the start: one set fewer, 1–2 reps in reserve, the last set is a test set. 0, 1 or 2',
+    introWeeks: 'Test weeks at the start: 1–2 reps in reserve, goal = bottom of the range, the last set is a test set. 0, 1 or 2',
     programVersion: 'Which built-in program the Slots and Exercises tabs were last reset to by Flight > Upgrade. Leave it alone',
     trainingWeekdays: 'Weekdays for the landing estimate and calendar: 0=Sun, 1=Mon ... 5=Fri',
     routeKm: 'Tampere-Pirkkala (TMP) to Luxembourg (LUX), great circle',
@@ -640,7 +640,7 @@ var FlightCore = (function () {
     var dayName = str(data.settings[c.day === 'A' ? 'dayAName' : 'dayBName']) || 'Day ' + c.day;
     var left = Math.max(0, Math.round(st.routeKm - c.cumKm));
     var lines = [];
-    lines.push('Workout ' + n + ' (' + dayName + (c.mode === 'deload' ? ', easier week' : c.mode === 'intro' ? ', intro week' : c.mode === 'back' ? ', first workout after a break' : '') +
+    lines.push('Workout ' + n + ' (' + dayName + (c.mode === 'deload' ? ', easier week' : c.mode === 'intro' ? ', test week' : c.mode === 'back' ? ', first workout after a break' : '') +
       (c.minutes ? ', ' + c.minutes + ' min' : '') + '): ' + c.reps + ' reps, +' + c.km + ' km.');
     lines.push(left > 0 ? left + ' km until ' + who + ' flies to Luxembourg.' : 'Flight unlocked: ' + who + ' to LUX!');
     lines.push(c.done + '/' + c.prescribed + ' working sets.');
