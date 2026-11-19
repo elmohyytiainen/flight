@@ -442,7 +442,10 @@
   function workoutOf(day) { var n = dayName(day); return /workout$/i.test(n) ? n : n + ' workout'; }
   /** "Day A, " before a date, or nothing when both days share the name. */
   function dayPrefix(day) { return sameNames() ? '' : dayName(day) + ', '; }
-  function exName(id) { var e = S.state.exercises.filter(function (x) { return String(x.id) === id; })[0]; return e ? e.name : id; }
+  function exName(id) {
+    var e = S.state.exercises.filter(function (x) { return String(x.id) === id; })[0];
+    return e ? e.name : E.EXTRA_BY_ID[id] ? E.EXTRA_BY_ID[id].name : id;
+  }
   function completedOn(res, ds) { return res.sessions.filter(function (s) { return s.date === ds && s.completed; }); }
   /** True once the Mon–Sun week of ds has all its workouts done (e.g. Mon + Thu instead of Mon + Fri). */
   function weekFull(res, ds) {
@@ -945,6 +948,7 @@
     var h = single ? '<h1>' + esc(it.name) + '</h1>' : '<h2 class="exname">' + esc(it.name) + '</h2>';
     h += '<div class="tags">';
     if (it.oneOff) h += '<span class="tag">Just for today</span>';
+    if (it.extra) h += '<span class="tag">Extra: half km per rep, tops up your workout\'s km</span>';
     if (it.upSteps && !it.oneOff) h += '<span class="tag up">Heavier today >:)</span>';
     if (it.down && !it.oneOff) h += '<span class="tag">Lighter today, so you hit the reps</span>';
     if (it.held && !it.oneOff) h += '<span class="tag">Same weight again, it gets easier</span>';
@@ -954,7 +958,8 @@
     h += '</div>';
     if (it.cue) h += '<p class="cue">' + esc(it.cue) + '</p>';
     h += '<div class="exlinks">' + (it.video ? '<a class="linkbtn" href="' + esc(it.video) + '" target="_blank" rel="noopener">Watch the form</a>' : '') +
-      (it.options > 1 && !anyDone ? '<button class="linkbtn" data-act="choose" data-slot="' + esc(it.slot) + '" data-ctx="flight">Change exercise</button>' : '') + '</div>';
+      (it.options > 1 && !anyDone ? '<button class="linkbtn" data-act="choose" data-slot="' + esc(it.slot) + '" data-ctx="flight">Change exercise</button>' : '') +
+      (it.extra && !anyDone ? '<button class="linkbtn" data-act="xRemove" data-slot="' + esc(it.slot) + '">Remove from workout</button>' : '') + '</div>';
     return h;
   }
 
@@ -972,7 +977,8 @@
     });
     h += '</div><span class="clock" id="clock">' + elapsed() + '</span></div>';
 
-    h += '<div class="strip">' + routeBar(c.cumKm, st.routeKm) + '<div class="striptext"><span><b>+' + kgFmt(c.km) + ' km</b> this workout, ' + c.reps + ' reps</span></div></div>';
+    h += '<div class="strip">' + routeBar(c.cumKm, st.routeKm) + '<div class="striptext"><span><b>+' + kgFmt(c.km) + ' km</b> this workout, ' + (c.reps - (c.extraReps || 0)) + ' reps' +
+      (c.extraReps ? ' + ' + c.extraReps + ' extra' : '') + '</span></div></div>';
 
     if (elapsedMin() >= 68 && !d.timeOffer && accessoryOpen(d)) {
       h += '<section class="offer inline"><b>' + Math.round(elapsedMin()) + ' minutes in :)</b> Finish with one last accessory round, or skip the rest?' +
@@ -1027,6 +1033,7 @@
 
     h += '<div class="navrow"><button class="btn ghost" data-act="undo"' + (d.undo.length ? '' : ' disabled') + '>' + IC.undo + 'Undo last set</button>' +
       '<button class="btn ghost" data-act="overview">' + IC.list + 'Overview</button></div>';
+    h += '<div class="finishrow"><button class="btn ghost wide addx" data-act="addExtra">+ Add an exercise</button></div>';
     h += '<div class="finishrow"><button class="btn ' + (next === undefined ? 'taxi wide' : 'ghost wide') + '" data-act="finish">Finish workout</button>' +
       '<button class="linkbtn discard" data-act="discard">Discard this workout</button></div></div>';
     return h;
@@ -1060,7 +1067,8 @@
     var h = '<div class="screen"><header class="top"><div class="who"><h1>Nice work love :)</h1><div class="small muted">Workout ' + n + (sameNames() ? '' : ', ' + esc(dayName(d.day))) +
       ', ' + Math.max(1, Math.round(((d.finishedAt || Date.now()) - d.startedAt) / 60000)) + ' min</div></div>' + syncHTML() + '</header>' + mapSVG(c.cumKm);
     h += '<div class="kmbig">+' + kgFmt(c.km) + '<small>km</small></div>';
-    h += '<p class="kmsplit">' + c.reps + ' reps toward ' + esc(who()) + '\'s flight. ' +
+    if (c.extraReps) h += '<p class="small muted xkm">Extras: ' + c.extraReps + ' reps, +' + kgFmt(c.extraKm) + ' km. They give half km per rep, up to a quarter on top of the workout\'s own km.</p>';
+    h += '<p class="kmsplit">' + (c.reps - (c.extraReps || 0)) + ' reps toward ' + esc(who()) + '\'s flight. ' +
       (left > 0 ? km(left) + ' km until flying to Luxembourg.' : '<b>Flight unlocked ✈ ' + esc(who()) + ' to LUX</b>') + '</p>';
     if (c.goals && c.goals.length) {
       h += '<section class="panel pbpanel goalpanel"><h3>🎯 Goal reached!</h3><ul class="uplist">';
@@ -1478,11 +1486,11 @@
     if (byEx.length) {
       h += '<table class="dayex">';
       byEx.forEach(function (g) {
-        var e = res.prog.exById[g.ex], unit = e ? e.kgLabel : 'kg';
+        var e = res.prog.exById[g.ex], xe = E.EXTRA_BY_ID[g.ex], unit = e ? e.kgLabel : xe ? xe.kgLabel : 'kg';
         var kgs = g.sets.map(function (x) { return Number(x.kg) || 0; }), same = kgs.every(function (k) { return k === kgs[0]; });
         var line = same ? g.sets.map(function (x) { return x.reps; }).join(', ') + ' at ' + kgFmt(kgs[0]) + ' ' + unit
           : g.sets.map(function (x) { return x.reps + ' × ' + kgFmt(Number(x.kg) || 0); }).join(', ') + ' ' + unit;
-        h += '<tr><td>' + esc(exName(g.ex)) + '</td><td class="r">' + esc(line) + '</td></tr>';
+        h += '<tr><td>' + esc(exName(g.ex)) + (xe && !e ? ' <span class="small muted">extra</span>' : '') + '</td><td class="r">' + esc(line) + '</td></tr>';
       });
       h += '</table>';
     }
@@ -1579,8 +1587,76 @@
         (opened && cur >= 0 && i !== cur ? '<button class="linkbtn" data-act="doNow" data-i="' + i + '"><b>Do now</b></button>' : '') +
         '<button class="linkbtn" data-act="viewBlock" data-i="' + i + '">View</button></div></div>';
     });
-    h += '</div><div class="row"><button class="btn ghost" data-act="closeModal">Close</button><button class="btn" data-act="finish">Finish workout</button></div>';
+    h += '</div><button class="linkbtn addxlink" data-act="addExtra">+ Add an exercise</button>' +
+      '<div class="row"><button class="btn ghost" data-act="closeModal">Close</button><button class="btn" data-act="finish">Finish workout</button></div>';
     showModal(h);
+  }
+
+  // ---------- extra exercises: any common exercise, her own sets and reps ----------
+  /** The last time she did this extra: { sets, reps, kg }, or null. */
+  function lastExtra(id) {
+    var ss = (S.state.sessions || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    for (var i = ss.length - 1; i >= 0; i--) {
+      var xs = (ss[i].sets || []).filter(function (x) { return x.ex === id && x.done && !x.skip; });
+      if (xs.length) return { sets: xs.length, reps: Number(xs[0].reps) || 10, kg: Number(xs[xs.length - 1].kg) || 0 };
+    }
+    return null;
+  }
+  function extraListHTML() {
+    var q = String(S.xQuery || '').trim().toLowerCase(), h = '', any = false;
+    E.EXTRA_GROUPS.forEach(function (g) {
+      var xs = E.EXTRAS.filter(function (x) { return x.group === g && (!q || x.name.toLowerCase().indexOf(q) >= 0 || g.toLowerCase().indexOf(q) >= 0); });
+      if (!xs.length) return;
+      any = true;
+      h += '<div class="xgroup"><h4>' + esc(g) + '</h4><div class="xitems">' + xs.map(function (x) {
+        return '<button class="chip xitem" data-act="xPick" data-id="' + esc(x.id) + '">' + esc(x.name) + '</button>';
+      }).join('') + '</div></div>';
+    });
+    return any ? h : '<p class="muted small">Nothing found. Try another word, like "curl" or "glute".</p>';
+  }
+  function extraSheet() {
+    var x = S.xPick, h;
+    if (x) {
+      var e = E.EXTRA_BY_ID[x.id];
+      h = '<h2>' + esc(e.name) + '</h2><p class="small muted">' + esc(e.group) + '. You set the weight on each set, like the rest of the workout.</p>' +
+        '<div class="xform">' + ['sets', 'reps'].map(function (f) {
+          return '<div class="xrow"><span>' + (f === 'sets' ? 'Sets' : 'Reps per set') + '</span><div class="stepper"><button data-act="xInc" data-f="' + f + '" data-d="-1" aria-label="Less ' + f + '">−</button>' +
+            '<label><b class="xval">' + x[f] + '</b></label><button data-act="xInc" data-f="' + f + '" data-d="1" aria-label="More ' + f + '">+</button></div></div>';
+        }).join('') + '</div>' +
+        '<p class="small muted">Extras give half the km per rep, up to a quarter on top of the workout\'s own km. They don\'t change your program.</p>' +
+        '<div class="row"><button class="btn ghost" data-act="xBack">Back</button><button class="btn" data-act="xAdd">Add to workout</button></div>';
+    } else {
+      h = '<h2>Add an exercise</h2><input class="field xsearch" id="xq" type="search" placeholder="Search, e.g. hip thrust" autocomplete="off" value="' + esc(S.xQuery || '') + '">' +
+        '<div id="xlist">' + extraListHTML() + '</div><div class="row"><button class="btn ghost" data-act="closeModal">Cancel</button></div>';
+    }
+    showModal(h);
+  }
+  function addExtra() {
+    var d = S.draft, x = S.xPick, e = x && E.EXTRA_BY_ID[x.id];
+    if (!d || !e) return;
+    var n = (d.xn || 0) + 1, slot = 'x:' + e.id + ':' + n, last = lastExtra(e.id), kg = last ? last.kg : 0;
+    d.xn = n;
+    d.items[slot] = { slot: slot, muscle: 'Extra · ' + e.group, ex: e.id, name: e.name, kgLabel: e.kgLabel, step: e.stepKg, assisted: false,
+      cue: '', video: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(e.name + ' form'), min: 0, max: x.reps, rest: 90, pair: '',
+      calibrate: false, taxi: false, options: 1, oneOff: false, extra: true };
+    for (var i = 0; i < x.sets; i++) d.sets.push({ slot: slot, ex: e.id, set: i + 1, kg: kg, reps: x.reps, target: x.reps, rir: '1', calib: false, done: false, fb: '', skip: false });
+    d.blocks.push({ id: 'bx' + n, slots: [slot], paired: false, separated: false, extra: true });
+    d.view = d.blocks.length - 1;
+    S.xPick = null; S.xQuery = '';
+    store.set('draft', d);
+  }
+  /** Takes an extra (with no sets done yet) out of the workout again. */
+  function removeExtra(slot) {
+    var d = S.draft;
+    if (!d || !d.items[slot] || !d.items[slot].extra || d.sets.some(function (s) { return s.slot === slot && s.done; })) return;
+    var keep = [], map = {};
+    d.sets.forEach(function (s, i) { if (s.slot !== slot) { map[i] = keep.length; keep.push(s); } });
+    d.sets = keep;
+    d.undo = d.undo.filter(function (i) { return i in map; }).map(function (i) { return map[i]; });
+    d.fbFor = null; d.lower = null; d.view = null;
+    d.blocks = d.blocks.filter(function (b) { return b.slots.indexOf(slot) < 0; });
+    delete d.items[slot];
+    store.set('draft', d);
   }
   function moveBlock(i, dir) {
     var d = S.draft, j = i + dir;
@@ -1819,6 +1895,20 @@
         store.set('draft', d); render(); break;
       }
       case 'overview': overview(); break;
+      case 'addExtra': S.xPick = null; S.xQuery = ''; extraSheet(); break;
+      case 'xPick': {
+        var lx = lastExtra(t.dataset.id);
+        S.xPick = { id: t.dataset.id, sets: lx ? Math.min(6, lx.sets) : 3, reps: lx ? lx.reps : 10 };
+        extraSheet(); break;
+      }
+      case 'xBack': S.xPick = null; extraSheet(); break;
+      case 'xInc': {
+        var xf = t.dataset.f, xv = S.xPick[xf] + Number(t.dataset.d);
+        S.xPick[xf] = Math.max(1, Math.min(xf === 'sets' ? 6 : 50, xv));
+        extraSheet(); break;
+      }
+      case 'xAdd': addExtra(); closeModal(); render(); window.scrollTo(0, 0); break;
+      case 'xRemove': removeExtra(t.dataset.slot); render(); window.scrollTo(0, 0); break;
       case 'moveBlock': moveBlock(+t.dataset.i, +t.dataset.d); overview(); render(); break;
       case 'splitBlock': d.blocks[+t.dataset.i].separated = !d.blocks[+t.dataset.i].separated; store.set('draft', d); overview(); render(); break;
       case 'skipBlock': d.sets.forEach(function (o) { if (d.blocks[+t.dataset.i].slots.indexOf(o.slot) >= 0 && open(o)) o.skip = true; }); stopRest(); store.set('draft', d); overview(); render(); break;
@@ -1982,6 +2072,12 @@
       enqueue({ type: 'profilePhoto', dataUrl: url });
       profileSheet(); render();
     }, function () { S.avatarBusy = false; profileSheet(); });
+  });
+  document.addEventListener('input', function (ev) {
+    if (ev.target.id !== 'xq') return;
+    S.xQuery = ev.target.value;
+    var l = document.getElementById('xlist');
+    if (l) l.innerHTML = extraListHTML();
   });
   app.addEventListener('input', function (ev) {
     if (ev.target.id === 'note' && S.draft) { S.draft.note = ev.target.value; store.set('draft', S.draft); }

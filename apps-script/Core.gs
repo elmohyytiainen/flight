@@ -549,7 +549,7 @@ var FlightCore = (function () {
       writes.push({ tab: 'Sets', kind: 'deleteWhere', col: 'sessionId', value: row.id });
       sets.filter(function (x) { return x.done; }).forEach(function (x) {
         append('Sets', { sessionId: row.id, date: row.date, day: row.day, slot: x.slot, exercise: x.ex,
-          exerciseName: exById[x.ex] ? exById[x.ex].name : x.ex, set: x.set, kg: x.kg, reps: x.reps, done: x.done,
+          exerciseName: exById[x.ex] ? exById[x.ex].name : FlightEngine.EXTRA_BY_ID[x.ex] ? 'Extra: ' + FlightEngine.EXTRA_BY_ID[x.ex].name : x.ex, set: x.set, kg: x.kg, reps: x.reps, done: x.done,
           feedback: x.fb === 'easy' ? 'Too easy' : x.fb === 'ok' ? 'Just right' : x.fb === 'hard' ? 'Too hard' : '' });
       });
       var result = FlightEngine.replay(toEngineInput(data));
@@ -669,6 +669,9 @@ var FlightCore = (function () {
     lines.push('Workout ' + n + (about ? ' (' + about + ')' : '') + ': ' + c.reps + ' reps, +' + c.km + ' km.');
     lines.push(left > 0 ? left + ' km until ' + who + ' flies to Luxembourg.' : 'Flight unlocked: ' + who + ' to LUX!');
     lines.push(c.done + '/' + c.prescribed + ' working sets.');
+    if (c.extras && c.extras.length) lines.push('Extras: ' + c.extras.map(function (x) {
+      var xe = FlightEngine.EXTRA_BY_ID[x.ex]; return (xe ? xe.name : x.ex) + ' ' + x.sets + (x.sets === 1 ? ' set' : ' sets'); }).join(', ') +
+      ' (' + c.extraReps + ' reps, +' + c.extraKm + ' km).');
     if (c.improvements.length) lines.push('Improvements: ' + c.improvements.map(function (x) { return (names[x.ex] || x.ex) + ': ' + x.text; }).join('; ') + '.');
     if (c.goals && c.goals.length) lines.push('🎯 GOAL REACHED: ' + c.goals.map(function (g) { return g.label; }).join(', ') + '!');
     if (c.prs.length) lines.push('New personal best: ' + c.prs.map(function (p) { return (names[p.ex] || p.ex) + ' ' + p.kg + ' kg × ' + p.reps; }).join(', ') + ' >:)');

@@ -350,3 +350,42 @@ test('reaction bubbles: only once both answered, on the other\'s answer, latest 
   C.applyOp(data, { type: 'answerReact', date: today, emoji: '' }, 'athlete', at('14'));     // and takes it away
   assert.strictEqual(C.buildState(data, 'coach', today).twoAnswers[0].mineReaction, '');
 });
+
+// ---------- extra exercises ----------
+test('extras: half km per rep, capped at a quarter of the workout, and they never touch progression or completion', () => {
+  const data = newData();
+  const plan = E.plan(result(data), '2026-11-23');
+  const base = [];
+  plan.items.forEach(it => it.targets.forEach((t, i) => base.push({ slot: it.slot, ex: it.exercise.id, set: i + 1, kg: 10, reps: t, done: true, rir: '1', target: t })));
+  const extra = (n, reps) => Array.from({ length: n }, (_, i) => ({ slot: 'x:x-hip-thrust:1', ex: 'x-hip-thrust', set: i + 1, kg: 40, reps, done: true, rir: '1', target: reps }));
+  const run = sets => {
+    const d = newData();
+    C.applyOp(d, { type: 'saveSession', session: { id: 's', date: '2026-11-23', day: 'A', effort: 3, sets } }, 'athlete', '2026-11-23T18:00:00Z');
+    return { d, s: result(d).sessions[0], res: result(d) };
+  };
+  const plain = run(base).s;
+  const small = run(base.concat(extra(3, 10))).s;                  // 30 extra reps
+  assert.strictEqual(small.extraReps, 30);
+  assert.ok(Math.abs(small.km - plain.km - 30 * E.DEFAULTS.kmPerRep * 0.5) < 0.11, small.km + ' vs ' + plain.km);
+  const big = run(base.concat(extra(6, 50))).s;                    // 300 extra reps: capped
+  assert.ok(Math.abs(big.extraKm - plain.km * 0.25) < 0.11 && big.km <= plain.km * 1.25 + 0.1, big.km + ' vs ' + plain.km);
+  assert.strictEqual(small.completed, plain.completed);
+  assert.strictEqual(small.prescribed, plain.prescribed);
+  assert.deepStrictEqual(small.extras, [{ ex: 'x-hip-thrust', sets: 3 }]);
+
+  const onlyExtras = run(extra(3, 10));                            // no program sets: no km, not a workout
+  assert.strictEqual(onlyExtras.s.km, 0);
+  assert.strictEqual(onlyExtras.s.completed, false);
+  assert.ok(!onlyExtras.res.hist['x-hip-thrust'], 'extras have no progression history');
+  const withX = run(base.concat(extra(3, 10)));
+  assert.ok(withX.d.sets.some(r => r.exerciseName === 'Extra: Barbell hip thrust'), 'the Sets log names it');
+  assert.ok(!E.plan(withX.res, '2026-11-26').items.some(it => it.exercise.id.indexOf('x-') === 0), 'extras never join the plan');
+});
+
+test('extras catalogue: common exercises, unique ids, no clash with the program', () => {
+  const ids = E.EXTRAS.map(x => x.id);
+  assert.ok(E.EXTRAS.length >= 40);
+  assert.strictEqual(new Set(ids).size, ids.length);
+  assert.ok(ids.every(id => id.indexOf('x-') === 0));
+  E.EXTRAS.forEach(x => assert.ok(E.EXTRA_GROUPS.includes(x.group) && x.stepKg > 0 && x.kgLabel, x.id));
+});

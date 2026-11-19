@@ -731,3 +731,16 @@ h3.withav { display: flex; }
 .pcr-sent .linkbtn { color: var(--ink-2); }
 .pcr-none, .pcr-ok { color: var(--ink-2); }
 .pc-back::before { border-image: repeating-linear-gradient(-45deg, var(--pink) 0 12px, #FFFFFF 12px 18px, var(--taxi) 18px 30px, #FFFFFF 30px 36px) 7; }
+
+/* ---------- extra exercises ---------- */
+.addx { margin-top: 4px; }
+.addxlink { display: block; margin: 12px auto 4px; font-weight: 600; }
+.xsearch { margin: 4px 0 12px; font-size: 16px; }
+.xgroup h4 { margin: 12px 0 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); }
+.xitems { display: flex; flex-wrap: wrap; gap: 6px; }
+.xitem { font-size: 14px; padding: 8px 12px; }
+#xlist { max-height: 52vh; overflow-y: auto; margin-bottom: 8px; }
+.xform { display: grid; gap: 10px; margin: 10px 0 12px; }
+.xrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--steel); border-radius: 14px; padding: 8px 10px 8px 14px; font-weight: 600; }
+.xrow .xval { font-family: var(--num); font-size: 24px; min-width: 2ch; display: inline-block; text-align: center; }
+.xkm { text-align: center; margin: -4px 0 6px; }
