@@ -757,3 +757,7 @@ h3.withav { display: flex; }
 .retronote b { color: var(--ink); font-weight: 600; }
 .retrobtn { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 10px 0 4px; }
 .retrobtn svg { width: 18px; height: 18px; }
+
+/* week plan: train on another day of the week */
+.hero .linkbtn.heroalt { display: block; margin: 10px auto 0; color: rgba(255,255,255,.85); font-size: 14px; }
+.mainnote.soft { padding-right: 10px; }

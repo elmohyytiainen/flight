@@ -449,21 +449,13 @@
     return e ? e.name : E.EXTRA_BY_ID[id] ? E.EXTRA_BY_ID[id].name : id;
   }
   function completedOn(res, ds) { return res.sessions.filter(function (s) { return s.date === ds && s.completed; }); }
-  /** True once the Mon–Sun week of ds has all its workouts done (e.g. Mon + Thu instead of Mon + Fri). */
-  function weekFull(res, ds) {
-    var m = mondayOf(ds), n = res.sessions.filter(function (s) { return s.completed && mondayOf(s.date) === m; }).length;
-    return n >= res.settings.trainingWeekdays.length;
+  /** Planned workout days up to `until` (the engine's week plan: N a week, any days): date -> 'A' / 'B'. */
+  function plannedMap(res, until) {
+    var m = {};
+    E.plannedDays(res, todayStr(), until).forEach(function (p) { m[p.date] = p.day; });
+    return m;
   }
-  function nextSessionDate(res) {
-    var st = res.settings, t = todayStr(), d = t;
-    if (completedOn(res, t).length) d = E.addDays(t, 1);
-    if (d < st.startDate) d = st.startDate;
-    for (var i = 0; i < 21; i++) {
-      if (st.trainingWeekdays.indexOf(E.weekday(d)) >= 0 && !weekFull(res, d)) return d;
-      d = E.addDays(d, 1);
-    }
-    return d;
-  }
+  function nextSessionDate(res) { return E.nextPlanned(res, todayStr()); }
   function sealedAhead(res) { return S.state.postcards.filter(function (c) { return !c.delivered && c.km > res.cumKm; }); }
   function unopenedMail() { return S.state.postcards.filter(function (c) { return c.delivered && !c.openedAt && !S.seen['pc:' + c.id]; }); }
   function reactionsFor(id) { return (S.state.reactions || []).filter(function (r) { return r.sessionId === id; }); }
@@ -615,7 +607,7 @@
 
   function flightlineHTML(res) {
     var st = res.settings;
-    var eta = E.eta(res, todayStr(), completedOn(res, todayStr()).length > 0);
+    var eta = E.eta(res, todayStr());
     var left = Math.max(0, st.routeKm - res.cumKm);
     var h = '<div class="flightline"><div><div class="big">' + km(res.cumKm) + '<small>of ' + km(st.routeKm) + ' km</small></div></div>';
     if (eta.landed) h += '<div class="eta muted small">Unlocked<b>' + fmtDate(eta.date) + '</b></div>';
@@ -634,16 +626,17 @@
   }
 
   function weekStrip(res) {
-    var st = res.settings, t = todayStr();
+    var t = todayStr();
     var dow = (dateObj(t).getDay() + 6) % 7, monday = E.addDays(t, -dow);
+    var plan = plannedMap(res, E.addDays(monday, 6));
     var h = '<section class="panel"><div class="weekhead"><h3>This week</h3><button class="streakchip" data-act="tab" data-v="log">' + esc(streakText(weekStreak(res))) + '</button></div><div class="week">';
     for (var i = 0; i < 7; i++) {
-      var d = E.addDays(monday, i), wd = E.weekday(d), ti = st.trainingWeekdays.indexOf(wd);
+      var d = E.addDays(monday, i);
       var doneS = completedOn(res, d), done = doneS.length > 0, marks = '';
-      var planned = ti >= 0 && !done && !weekFull(res, d);
+      var planned = !done && !!plan[d];
       if (S.state.stamps.some(function (s) { return s.date === d && s.type === 'ballet'; })) marks += '<i class="mk ballet">' + IC.ballet + '</i>';
       if (S.state.stamps.some(function (s) { return s.date === d && s.type === 'run'; })) marks += '<i class="mk run">' + IC.run + '</i>';
-      var label = sameNames() ? '' : done ? dayName(doneS[0].day) : planned ? (ti === 0 ? dayName('A') : ti === 1 ? dayName('B') : '') : '';
+      var label = sameNames() ? '' : done ? dayName(doneS[0].day) : planned ? dayName(plan[d]) : '';
       h += '<button class="day' + (planned ? ' plan' : '') + (done ? ' done' : '') + (d === t ? ' today' : '') + '" data-act="day" data-date="' + d +
         '" aria-label="' + esc(fmtLong(d) + (label ? ', ' + label : '')) + '"><span class="d">' +
         dateObj(d).toLocaleDateString('en-GB', { weekday: 'short' }).slice(0, 2) + '</span><span class="n">' + dateObj(d).getDate() + '</span>' +
@@ -702,10 +695,10 @@
     return sk.thisWeek > 0 ? '🔥 ' + sk.thisWeek + ' of ' + sk.per + ' this week' : '🔥 Start streak this week';
   }
   function calendarHTML(res) {
-    var t = todayStr(), st0 = res.settings, base = S.calMonth || t.slice(0, 7);
+    var t = todayStr(), base = S.calMonth || t.slice(0, 7);
     var y = +base.slice(0, 4), mo = +base.slice(5, 7);
     var first = base + '-01', days = new Date(y, mo, 0).getDate(), lead = (dateObj(first).getDay() + 6) % 7;
-    var gym = {}, n = { gym: 0, planned: 0, ballet: 0, run: 0 };
+    var gym = {}, n = { gym: 0, planned: 0, ballet: 0, run: 0 }, plan = plannedMap(res, base + '-' + pad(days));
     res.sessions.forEach(function (s) { if (s.completed && s.date.slice(0, 7) === base) { if (!gym[s.date]) n.gym++; gym[s.date] = s.day; } });
     var stamps = {};
     S.state.stamps.forEach(function (s) {
@@ -719,12 +712,11 @@
     for (var i = 0; i < lead; i++) h += '<span></span>';
     for (var d = 1; d <= days; d++) {
       var ds = base + '-' + pad(d), g = gym[ds], stp = stamps[ds] || {};
-      var ti = st0.trainingWeekdays.indexOf(E.weekday(ds));
-      var planned = !g && ti >= 0 && ds >= t && ds >= st0.startDate && !weekFull(res, ds);
+      var planned = !g && !!plan[ds];
       if (planned) n.planned++;
       var state = g ? IC.goldDb : planned ? IC.dbOutline : '';
       h += '<button class="cd' + (g ? ' gym' : planned ? ' planned' : '') + (ds === t ? ' today' : '') + (ds > t ? ' future' : '') + '" data-act="day" data-date="' + ds + '" aria-label="' +
-        esc(fmtLong(ds) + (g ? ', ' + workoutOf(g) + ' done' : planned ? ', ' + workoutOf(ti === 0 ? 'A' : 'B') + ' planned' : '') + (stp.ballet ? ', ballet' : '') + (stp.run ? ', run' : '')) +
+        esc(fmtLong(ds) + (g ? ', ' + workoutOf(g) + ' done' : planned ? ', ' + workoutOf(plan[ds]) + ' planned' : '') + (stp.ballet ? ', ballet' : '') + (stp.run ? ', run' : '')) +
         '"><span class="dn">' + d + '</span><span class="st">' + state +
         (stp.ballet ? '<i class="mk ballet">' + IC.ballet + '</i>' : '') + (stp.run ? '<i class="mk run">' + IC.run + '</i>' : '') + '</span></button>';
     }
@@ -763,11 +755,13 @@
     var h = '<section class="hero"><div class="kicker">' + (nd === t ? 'Today' : 'Next workout, ' + esc(fmtLong(nd))) + (mode ? '<span class="pill">' + mode + '</span>' : '') + '</div>' +
       '<h2>' + esc(dayName(day)) + '</h2><div class="meta">' + plural(p.items.length, 'exercise', 'exercises') + ' · ' + p.setsTotal + ' sets · about ' + estMinutes(res, day, p) + ' min</div>' +
       '<div class="muscles">' + p.items.map(function (it) { return '<span title="' + esc(it.muscle) + '">' + muscleSVG(it.slot, it.muscle) + '</span>'; }).join('') + '</div>' +
-      '<button class="btn taxi wide" data-act="board">' + (nd === t ? 'Let\'s go' : 'See workout') + '</button></section>';
+      '<button class="btn taxi wide" data-act="board">' + (nd === t ? 'Let\'s go' : 'See workout') + '</button>' +
+      (nd !== t && t >= res.settings.startDate && E.mondayOf(nd) === E.mondayOf(t) && !completedOn(res, t).length
+        ? '<button class="linkbtn heroalt" data-act="board">Train today instead</button>' : '') + '</section>';
     return h;
   }
   function miniFlight(res) {
-    var st = res.settings, eta = E.eta(res, todayStr(), completedOn(res, todayStr()).length > 0);
+    var st = res.settings, eta = E.eta(res, todayStr());
     var h = '<section class="miniflight"><button class="fline" data-act="tab" data-v="trip"><span><b>' + km(res.cumKm) + '</b> of ' + km(st.routeKm) + ' km</span><span class="muted">' +
       (eta.landed ? 'Landed ✈' : 'Landing ' + esc(fmtDate(eta.date)) + '<small class="est">(Estimated completion)</small>') + '</span></button>' +
       '<div class="progress"><span style="width:' + Math.min(100, res.cumKm / st.routeKm * 100).toFixed(1) + '%"></span></div>';
@@ -846,6 +840,8 @@
     if (p.mode === 'intro') h += '<div class="note">Test week :) Pick weights where the goal reps leave 1–2 in the tank. On the last set keep going while you still have 1–2 left. The app sets your weights from next week.</div>';
     if (p.mode === 'back') h += '<div class="note">Welcome back :) First workout after a break: one set fewer and 2–3 reps in reserve. Back to normal next time.</div>';
     if (p.mode === 'deload') h += '<div class="note">Easier week: half the sets, 3–4 reps in reserve, same weights. Recovery is part of the flight ;)</div>';
+    if (E.backToBack(res, t)) h += '<div class="mainnote soft"><span class="bang" aria-hidden="true">!</span><p><b>Back to back</b> with your last workout, may feel heavy. ' +
+      'Missed reps won\'t count against you :)</p></div>';
     if (!S.seen.mainnote) h += '<div class="mainnote"><span class="bang" aria-hidden="true">!</span><p><b>Legs, chest and lats</b> are your progress lifts, keep them the same. ' +
       'Rest you can change if want :)</p>' +
       '<button class="mnx" data-act="mainnoteHide" aria-label="Hide this note">' + IC.close + '</button></div>';
@@ -1368,7 +1364,7 @@
     });
     h += '</table></section>';
     h += '<div class="section-h"><h2>Postcards</h2></div><section class="panel" style="margin-top:0">';
-    var avg = E.eta(res, todayStr(), false).avgKm || 70;
+    var avg = E.eta(res, todayStr()).avgKm || 70;
     S.state.postcards.forEach(function (c) {
       var status, cls = '';
       if (c.replyEmoji || c.replyText) { status = 'Replied ' + (c.replyEmoji || '💬'); cls = 'ok'; }
@@ -1520,8 +1516,8 @@
     var h = '<h2>' + esc(fmtLong(ds)) + '</h2>';
     w.forEach(function (f) { h += dayWorkoutHTML(res, f); });
     if (!w.length) {
-      var ti = res.settings.trainingWeekdays.indexOf(E.weekday(ds));
-      if (ti >= 0 && ds >= todayStr() && ds >= res.settings.startDate && !weekFull(res, ds)) h += '<p class="muted">' + esc(workoutOf(ti === 0 ? 'A' : 'B')) + ' planned :)</p>';
+      var pl = plannedMap(res, ds)[ds];
+      if (pl) h += '<p class="muted">' + esc(workoutOf(pl)) + ' planned :)</p>';
       if (role() === 'athlete' && ds < todayStr() && ds >= res.settings.startDate) {
         h += S.draft ? '<p class="small muted">Finish or discard the workout you have open first, then you can log this day.</p>'
           : '<button class="btn ghost wide retrobtn" data-act="retroLog" data-date="' + ds + '">' + IC.dumbbell + 'Log a workout for this day</button>';
