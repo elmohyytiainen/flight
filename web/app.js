@@ -1599,9 +1599,10 @@
       else status = 'Written, sealed';
       h += '<div class="cardrow"><div><b>' + esc(c.place) + '</b>, ' + esc(c.from) + '<div class="small muted">Delivered over ' + esc(c.over) + ' at ' + km(c.km) + ' km</div>' +
         (c.replyEmoji || c.replyText ? '<div class="small withav">' + avatarHTML('her', 'av-24') + (c.replyEmoji ? esc(c.replyEmoji) + ' ' : '') + (c.replyText ? '“' + esc(c.replyText) + '”' : '') + '</div>' : '') +
-        (c.delivered ? '<button class="linkbtn" data-act="postcard" data-id="' + esc(c.id) + '">Open the card</button>' : '') + '</div><span class="status ' + cls + '">' + esc(status) + '</span></div>';
+        '<div class="pvlinks"><button class="linkbtn" data-act="pvCard" data-id="' + esc(c.id) + '">Preview as her</button>' +
+        (c.delivered ? '<button class="linkbtn" data-act="postcard" data-id="' + esc(c.id) + '">Open the card</button>' : '') + '</div></div><span class="status ' + cls + '">' + esc(status) + '</span></div>';
     });
-    h += '<p class="small muted" style="margin:10px 0 0">Write notes and add photo links in the Postcards tab of the Sheet.</p></section>';
+    h += '<p class="small muted" style="margin:10px 0 0">Write notes and add photo links in the Postcards tab of the Sheet. <b>Preview as her</b> shows a card the way she gets it; nothing is sent or marked as opened.</p></section>';
     h += '<div class="section-h"><h2>Her workouts</h2></div><div class="feed">';
     var list = res.sessions.slice().reverse(), n = res.sessions.length;
     if (!list.length) h += '<p class="empty">Her workouts appear here as soon as she saves them.</p>';
@@ -1663,9 +1664,9 @@
   }
   var PC_EMOJIS = ['❤️', '🥰', '😂', '🥹', '😘', '🔥', '🌶️'];
   /** Her reply to a postcard: the form, or what she sent with a Change link. The coach only reads it. */
-  function pcReplyHTML(c, editing) {
+  function pcReplyHTML(c, editing, asHer) {
     var replied = !!(c.replyEmoji || c.replyText);
-    if (role() === 'coach') {
+    if (role() === 'coach' && !asHer) {
       return replied ? '<div class="pcr-sent"><span class="avwrap">' + avatarHTML('her', 'av-44') + '<i class="avbadge">' + esc(c.replyEmoji || '💬') + '</i></span><div><b>Her reply</b>' + (c.replyText ? '“' + esc(c.replyText) + '”' : '') + '</div></div>'
         : '<p class="pcr-none">No reply yet.</p>';
     }
@@ -1679,11 +1680,31 @@
       '<button class="btn taxi wide" data-act="pcSend">Send to ' + esc(who()) + '</button>';
   }
 
-  function openPostcard(id) {
+  // ---------- coach: preview a card the way she gets it (nothing is sent, opened or marked as seen) ----------
+  function pvBar(c) {
+    var all = S.state.postcards, i = all.indexOf(c);
+    var st = c.delivered ? 'Delivered ' + fmtDate(c.deliveredOn) : 'Sealed until ' + km(c.km) + ' km' + (c.message ? '' : ', still empty');
+    return '<div class="pvbar"><b>Preview</b><span>' + esc(st) + '</span></div>' +
+      '<div class="pvnav"><button class="linkbtn" data-act="pvCard" data-id="' + esc(all[(i - 1 + all.length) % all.length].id) + '">‹ Previous</button>' +
+      '<span>' + (i + 1) + ' / ' + all.length + '</span><button class="linkbtn" data-act="pvCard" data-id="' + esc(all[(i + 1) % all.length].id) + '">Next ›</button></div>';
+  }
+  /** Step 1: the mail banner as it shows on her Train tab. Tapping it opens the card (step 2). */
+  function previewPostcard(id) {
     var c = S.state.postcards.filter(function (x) { return x.id === id; })[0];
     if (!c) return;
+    S.pcPreview = id;
+    showModal('<div class="postcard-modal pvmail">' + pvBar(c) +
+      '<button class="banner mail" data-act="pvOpen" data-id="' + esc(c.id) + '">' + IC.envelope + '<p><b>You have mail from ' + esc(c.from) + ' ;)</b>Tap to open.</p></button>' +
+      '<p class="pc-hint">This is how it arrives on her Train and Flight tabs. After the workout that delivers it, the card also opens by itself.</p>' +
+      '<button class="btn ghost wide pc-close" data-act="closeModal">Close</button></div>', true);
+  }
+
+  function openPostcard(id, preview) {
+    var c = S.state.postcards.filter(function (x) { return x.id === id; })[0];
+    if (!c) return;
+    S.pcPreview = preview ? id : null;
     var name = S.state.settings.herName || 'you';
-    var dev = c.photo && !S.seen['dev:' + c.id] ? ' undev' : '';
+    var dev = c.photo && (preview || !S.seen['dev:' + c.id]) ? ' undev' : ''; // a preview develops every time
     var pol = c.photo ? '<span class="pol-spacer" aria-hidden="true"></span><button class="pol' + dev + '" data-act="polaroid" aria-label="See the photo' + (c.caption ? ': ' + esc(c.caption) : '') + '">' +
       '<i class="tape" aria-hidden="true"></i><span class="pol-ph"><img src="' + esc(c.photo) + '" alt=""></span><span class="pol-cap">' + esc(c.caption || '') + '</span></button>' : '';
     var h = '<div class="postcard-modal"><div class="pc-wrap"><div class="pc" id="pc" data-act="flip" role="button" tabindex="0" aria-label="Postcard, tap to turn over">' +
@@ -1691,11 +1712,16 @@
       (c.cover ? '<div class="greet">Greetings from ' + esc(c.from) + '</div><div class="cap">' + esc(c.place) + '</div>'
         : '<div class="cap"><small>Greetings from ' + esc(c.from) + '</small>' + esc(c.place) + '</div>') +
       (c.no ? '<span class="cvno">No. ' + c.no + ' / ' + c.of + '</span>' : '') + '</div>' +
-      '<div class="pc-face pc-back"><div class="inner' + (c.photo ? ' haspol' : '') + '"><div class="msg">' + pol + esc(c.message || '') + '</div><div class="side">' + stampSVG() + postmarkSVG(c.from, c.deliveredOn) +
+      '<div class="pc-face pc-back"><div class="inner' + (c.photo ? ' haspol' : '') + '"><div class="msg">' + pol +
+      (c.message ? esc(c.message) : preview ? '<i class="pvempty">No message yet. Write it in the Postcards tab of the Sheet.</i>' : '') +
+      '</div><div class="side">' + stampSVG() + postmarkSVG(c.from, c.deliveredOn || (preview ? todayStr() : '')) +
       '<div class="addr">To ' + esc(name) + ',<br>from ' + esc(c.over) + '</div></div></div></div></div></div>' +
-      '<p class="pc-hint" id="pcHint">' + (c.photo ? 'Turn it over, something\'s inside ;)' : 'Tap the card to turn it over') + '</p>' + (c.delivered ? '<div class="pcreply" id="pcReply">' + pcReplyHTML(c, false) + '</div>' : '') +
+      '<p class="pc-hint" id="pcHint">' + (c.photo ? 'Turn it over, something\'s inside ;)' : 'Tap the card to turn it over') + '</p>' +
+      (preview ? '<div class="pcreply pvreply" inert aria-hidden="true">' + pcReplyHTML({ id: c.id }, false, true) + '</div><p class="pc-hint">Here she can reply with an emoji or a note.</p>'
+        : c.delivered ? '<div class="pcreply" id="pcReply">' + pcReplyHTML(c, false) + '</div>' : '') +
       '<button class="btn ghost wide pc-close" data-act="closeModal">Close</button></div>';
-    S.pcId = c.id; S.pcEmoji = c.replyEmoji || '';
+    if (preview) h = h.replace('<div class="postcard-modal">', '<div class="postcard-modal">' + pvBar(c));
+    S.pcId = c.id; S.pcEmoji = preview ? '' : c.replyEmoji || '';
     showModal(h, true);
     if (role() === 'athlete' && !c.openedAt && !S.seen['pc:' + c.id]) {
       markSeen('pc:' + c.id);
@@ -1712,7 +1738,7 @@
     var undev = t.querySelector('.pol.undev');
     if (undev && t.classList.contains('flipped') && !undev.classList.contains('dev')) {
       setTimeout(function () { undev.classList.add('dev'); }, 650); // once the card has turned
-      markSeen('dev:' + S.pcId);
+      if (!S.pcPreview) markSeen('dev:' + S.pcId);
     }
   }
 
@@ -2291,6 +2317,8 @@
       case 'restAdd': restEnd = Math.max(restEnd, Date.now()) + 15000; break;
       case 'restSkip': stopRest(); break;
       case 'postcard': openPostcard(t.dataset.id); break;
+      case 'pvCard': previewPostcard(t.dataset.id); break;
+      case 'pvOpen': openPostcard(t.dataset.id, true); break;
       case 'flip': flipCard(t); break;
       case 'polaroid': {
         var card = document.getElementById('pc');
