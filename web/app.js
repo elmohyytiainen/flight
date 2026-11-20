@@ -582,7 +582,7 @@
     } else {
       h += qaRow(me, 'You', q.mine || '…', { bubble: q.mineReaction });
       h += q.theirs ? qaRow(o.who, o.name, q.theirs, { bubble: q.theirsReaction, react: q.date, open: S.qaPick === q.date, sheet: inSheet }) +
-          (!inSheet && !q.theirsReaction ? hintHTML('qahint', 'Tap <b>🙂+</b> on ' + esc(o.name) + '\'s answer to react ;)') : '')
+          (!inSheet && !q.theirsReaction ? hintHTML('qahint', 'Tap <b>🙂+</b> to react ;)') : '')
         : '<div class="qwait">' + avatarHTML(o.who, 'av-24') + (q.theirsAnswered ? 'Revealing…' : 'Waiting for ' + esc(o.name) + '. You\'ll see both answers once you both have.') + '</div>';
     }
     return h;
@@ -1517,7 +1517,7 @@
       b.id = 'lovefab'; b.className = 'lovebtn lovefab'; b.setAttribute('data-act', 'love');
       b.setAttribute('role', 'button'); b.tabIndex = 0;
       b.setAttribute('aria-label', 'Send ' + who() + ' love. Hold for a bigger one');
-      b.innerHTML = '<span class="lh">' + IC.heart + '</span><span class="ll">Send coach love</span>' +
+      b.innerHTML = '<span class="lh">' + IC.heart + '</span><span class="ll">Send the coach 🤍</span>' +
         '<input type="checkbox" switch class="haptic" tabindex="-1" aria-hidden="true">';
       if (!S.seen.lovelabel) b.classList.add('lbl'); // a pill with a label until her first heart, then just the heart
       document.body.appendChild(b);
