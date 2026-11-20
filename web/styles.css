@@ -897,3 +897,8 @@ body.hasfab #app { padding-bottom: calc(150px + var(--safe-b)); }
 .mainnote.hint { margin: 10px 0; }
 .top { position: relative; z-index: 6; } /* the photo tag sits over the hero card */
 .flightview > .mainnote.hint { margin: 2px 18px 10px; }
+/* love tile on Progress: the text sits after the number, on one line */
+.stat.lovestat > div { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+.stat.lovestat b { display: inline; flex: none; }
+.stat.lovestat > div > span { flex: 1; min-width: 0; line-height: 1.3; }
+.stat.lovestat span small { display: inline; font-size: 12px; white-space: nowrap; }
