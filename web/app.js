@@ -1408,15 +1408,17 @@
       setTimeout(function (x) { return function () { x.remove(); }; }(h), 2200 + i * 60);
     }
   }
-  function loveToast(text, big) {
+  function loveToast(text, big, sub) {
     var old = document.querySelector('.lovetoast');
     if (old) old.remove();
     var t = document.createElement('div');
-    t.className = 'lovetoast' + (big ? ' big' : '');
+    t.className = 'lovetoast' + (big ? ' big' : '') + (sub ? ' two' : '');
     t.textContent = text;
+    if (sub) { var sm = document.createElement('small'); sm.textContent = sub; t.appendChild(sm); }
     document.body.appendChild(t);
-    setTimeout(function () { t.classList.add('out'); }, big ? 3600 : 1600);
-    setTimeout(function () { t.remove(); }, big ? 4100 : 2100);
+    var stay = big ? 3600 : sub ? 2800 : 1600; // a hint stays a bit longer so it can be read
+    setTimeout(function () { t.classList.add('out'); }, stay);
+    setTimeout(function () { t.remove(); }, stay + 500);
   }
   /** A short buzz where the browser allows it (Android). iPhones get their tick from the switch in the heart instead. */
   function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* not allowed yet */ } }
@@ -1433,7 +1435,21 @@
     document.body.appendChild(c);
     setTimeout(function () { c.remove(); }, 1800);
   }
+  /** The first heart from the labelled pill folds it into the round heart, for good on this phone. */
+  function foldLoveLabel(el) {
+    if (S.seen.lovelabel) return;
+    S.seen.lovelabel = 1; store.set('seen', S.seen);
+    if (!el || !el.classList.contains('lbl')) return;
+    el.style.width = el.offsetWidth + 'px';
+    el.classList.remove('lbl'); el.classList.add('folding');
+    void el.offsetWidth; // start the transition from the pill's width
+    el.style.width = '';
+    setTimeout(function () { el.classList.remove('folding'); }, 450);
+  }
   function sendLove(el, size) {
+    if (el && el.id === 'lovefab') foldLoveLabel(el);
+    var tips = Number(S.seen.loveTips) || 0, tip = size === 1 && tips < 3; // her first few taps: tell her about holding
+    if (size > 1 || tip) { S.seen.loveTips = size > 1 ? 3 : tips + 1; store.set('seen', S.seen); }
     enqueue({ type: 'love', id: 'l' + Date.now().toString(36) + uid(), date: todayStr(), size: size });
     var total = S.state && S.state.love ? S.state.love.total : 0;
     buzz(size > 1 ? 18 : 10);
@@ -1447,6 +1463,7 @@
       return;
     }
     if (el) floatHearts(el, size === 3 ? 14 : size === 2 ? 8 : 4);
+    if (tip) return loveToast('Sent to ' + who() + ' 💗 He sees every heart', false, 'Hold for a bigger one ;)');
     loveToast((size === 3 ? 'Huge love sent to ' + who() + ' 💗' : size === 2 ? 'Big love sent to ' + who() + ' 💗' : 'Sent to ' + who() + ' 💗') +
       (total ? ' · ' + total + ' so far' : ''));
   }
@@ -1461,7 +1478,9 @@
       b.id = 'lovefab'; b.className = 'lovebtn lovefab'; b.setAttribute('data-act', 'love');
       b.setAttribute('role', 'button'); b.tabIndex = 0;
       b.setAttribute('aria-label', 'Send ' + who() + ' love. Hold for a bigger one');
-      b.innerHTML = '<span class="lh">' + IC.heart + '</span><input type="checkbox" switch class="haptic" tabindex="-1" aria-hidden="true">';
+      b.innerHTML = '<span class="lh">' + IC.heart + '</span><span class="ll">Send coach love</span>' +
+        '<input type="checkbox" switch class="haptic" tabindex="-1" aria-hidden="true">';
+      if (!S.seen.lovelabel) b.classList.add('lbl'); // a pill with a label until her first heart, then just the heart
       document.body.appendChild(b);
     }
     if (b) b.hidden = !show;
