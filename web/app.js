@@ -1679,7 +1679,7 @@
     var h = '<h2>' + esc(fmtLong(ds)) + '</h2>';
     w.forEach(function (f) {
       h += dayWorkoutHTML(res, f);
-      if (role() === 'coach') h += '<button class="btn ghost wide editwbtn" data-act="editW" data-id="' + esc(f.id) + '">' + IC.edit + 'Edit or delete this workout</button>';
+      h += '<button class="btn ghost wide editwbtn" data-act="editW" data-id="' + esc(f.id) + '">' + IC.edit + 'Edit or delete this workout</button>';
     });
     if (!w.length) {
       var pl = plannedMap(res, ds)[ds];
@@ -1935,7 +1935,8 @@
       groups[idx[x.ex]].sets.push(i);
     });
     var h = '<h2>Edit workout ' + e.n + '</h2><p class="small muted">Fix a weight or reps, take a set out, or move it to another day. ' +
-      'Her weights, goals, km and streak after it recalculate. She isn\'t emailed.</p>' +
+      (role() === 'coach' ? 'Her weights, goals, km and streak after it recalculate. She isn\'t emailed.'
+        : 'Your weights, goals and km after it update to match. ' + esc(who()) + ' gets a short note :)') + '</p>' +
       '<label class="ewdate"><span>Date</span><input class="field" id="ewDate" type="date" value="' + esc(e.date) + '" min="' + esc(res.settings.startDate) +
       '" max="' + todayStr() + '"></label>';
     groups.forEach(function (g) {
@@ -1972,7 +1973,8 @@
     editSync();
     var e = S.edit, done = e.show.length;
     showModal('<h2>Delete workout ' + e.n + '?</h2><p>' + esc(fmtLong(e.orig)) + ': ' + plural(done, 'set', 'sets') + ', +' + Math.round(e.km) + ' km. ' +
-      'Its sets, km and your reactions to it are removed, and everything after it recalculates.' + (e.photo ? ' Her photo stays in Drive.' : '') +
+      (role() === 'coach' ? 'Its sets, km and your reactions to it are removed, and everything after it recalculates.' + (e.photo ? ' Her photo stays in Drive.' : '')
+        : 'Its sets, km and ' + esc(who()) + '\'s reactions to it are removed, and your weights, goals and km after it update. ' + esc(who()) + ' gets a short note.') +
       ' This can\'t be undone.</p>' +
       '<div class="row"><button class="btn ghost" data-act="ewBack">Keep it</button><button class="btn warnbtn" data-act="ewDeleteYes">Delete</button></div>');
   }

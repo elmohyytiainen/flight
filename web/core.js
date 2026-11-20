@@ -563,7 +563,7 @@ var FlightCore = (function () {
   function clip(s, n) { return str(s).slice(0, n); }
 
   var ROLE_OPS = {
-    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer', 'answerReact', 'love'],
+    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer', 'answerReact', 'love', 'editSession', 'deleteSession'],
     coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto', 'answer', 'answerReact', 'editSession', 'deleteSession']
   };
 
@@ -652,13 +652,16 @@ var FlightCore = (function () {
       var erow = {};
       for (var ek in cur) erow[ek] = cur[ek];
       erow.id = str(cur.id); erow.date = ed; erow.setsJson = JSON.stringify(esets);
+      var eold = parseSets(cur.setsJson), eod = str(cur.date).slice(0, 10);
       upsert('Sessions', 'id', erow);
       logSets(erow, esets);
       recompute();
+      if (role === 'athlete') notify = editNote(data, eod, ed, eold, esets);
     } else if (op.type === 'deleteSession') {
       // the coach deletes a saved workout with its sets and his reactions to it. Everything after it recalculates.
       var did = str(op.id);
       if (!findSession(did)) bad('no such workout');
+      var drow = findSession(did);
       data.sessions = data.sessions.filter(function (r) { return str(r.id) !== did; });
       writes.push({ tab: 'Sessions', kind: 'deleteWhere', col: 'id', value: did });
       data.sets = data.sets.filter(function (r) { return str(r.sessionId) !== did; });
@@ -667,7 +670,13 @@ var FlightCore = (function () {
         data.reactions = data.reactions.filter(function (r) { return str(r.sessionId) !== did; });
         writes.push({ tab: 'Reactions', kind: 'deleteWhere', col: 'sessionId', value: did });
       }
-      recompute();
+      var dres = recompute();
+      if (role === 'athlete') {
+        var dsets = parseSets(drow.setsJson).filter(function (x) { return x.done && !x.skip; });
+        notify = { subject: '🗑 ' + (str(data.settings.herName) || 'She') + ' deleted a workout',
+          body: 'The workout of ' + str(drow.date).slice(0, 10) + ' (' + dsets.length + (dsets.length === 1 ? ' set' : ' sets') + ') is gone. ' +
+            'Weights, goals and km after it are recalculated.\n' + Math.max(0, Math.round(dres.settings.routeKm - dres.cumKm)) + ' km to LUX now.' };
+      }
     } else if (op.type === 'stamp') {
       if (!isDate(op.date) || ['ballet', 'run'].indexOf(op.stampType) < 0) bad('invalid stamp');
       var has = data.stamps.some(function (r) { return str(r.date).slice(0, 10) === op.date && r.type === op.stampType; });
@@ -761,6 +770,23 @@ var FlightCore = (function () {
       append('Overrides', { date: str(nowIso).slice(0, 10), exercise: str(op.ex), kg: Number(op.kg), note: clip(op.note, 200) });
     }
     return { writes: writes, notify: notify, photo: photo };
+  }
+
+  /** The email to the coach when she fixes a saved workout: what changed, set by set. */
+  function editNote(data, oldDate, newDate, oldSets, newSets) {
+    var names = {}, lines = [], who = str(data.settings.herName) || 'She';
+    data.exercises.forEach(function (e) { names[str(e.id)] = str(e.name); });
+    var nm = function (id) { return names[id] || (FlightEngine.EXTRA_BY_ID[id] ? FlightEngine.EXTRA_BY_ID[id].name : id); };
+    if (oldDate !== newDate) lines.push('Moved from ' + oldDate + ' to ' + newDate + '.');
+    newSets.forEach(function (x, i) {
+      var o = oldSets[i];
+      if (!o || !o.done || o.skip) return;
+      var label = nm(x.ex) + ' set ' + x.set + ': ';
+      if (!x.done) lines.push(label + 'taken out (' + o.reps + ' × ' + o.kg + ' kg).');
+      else if (Number(o.kg) !== x.kg || Number(o.reps) !== x.reps) lines.push(label + o.reps + ' × ' + o.kg + ' kg → ' + x.reps + ' × ' + x.kg + ' kg.');
+    });
+    if (!lines.length) return null;
+    return { subject: '✏️ ' + who + ' fixed her workout of ' + oldDate, body: lines.join('\n') + '\n\nWeights, goals and km after it are recalculated.' };
   }
 
   /** The workout email. retro = she logged it afterwards for a past day. */

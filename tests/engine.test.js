@@ -538,16 +538,37 @@ test('love milestones: 50, 100, 250 … and the daily email says when she passed
 // ---------- the coach fixes or deletes a saved workout ----------
 const coachFix = (data, op, now) => C.applyOp(data, op, 'coach', now || '2026-12-01T10:00:00Z');
 
-test('only the coach can edit or delete a workout, and only one that exists', () => {
+test('edit and delete: only a workout that exists, never empty, never in the future', () => {
   const data = newData();
   doSession(data, '2026-11-23');
   const sets = C.toEngineInput(data).sessions[0].sets;
-  assert.throws(() => C.applyOp(data, { type: 'deleteSession', id: '2026-11-23' }, 'athlete', '2026-12-01T10:00:00Z'), /not allowed/);
-  assert.throws(() => C.applyOp(data, { type: 'editSession', id: '2026-11-23', sets }, 'athlete', '2026-12-01T10:00:00Z'), /not allowed/);
-  assert.throws(() => coachFix(data, { type: 'deleteSession', id: 'nope' }), /no such workout/);
-  assert.throws(() => coachFix(data, { type: 'editSession', id: 'nope', sets }), /no such workout/);
-  assert.throws(() => coachFix(data, { type: 'editSession', id: '2026-11-23', sets: sets.map(x => Object.assign({}, x, { done: false })) }), /delete the workout instead/);
-  assert.throws(() => coachFix(data, { type: 'editSession', id: '2026-11-23', date: '2026-12-09', sets }), /future/);
+  for (const who of ['coach', 'athlete']) {
+    assert.throws(() => C.applyOp(data, { type: 'deleteSession', id: 'nope' }, who, '2026-12-01T10:00:00Z'), /no such workout/);
+    assert.throws(() => C.applyOp(data, { type: 'editSession', id: 'nope', sets }, who, '2026-12-01T10:00:00Z'), /no such workout/);
+    assert.throws(() => C.applyOp(data, { type: 'editSession', id: '2026-11-23', sets: sets.map(x => Object.assign({}, x, { done: false })) }, who, '2026-12-01T10:00:00Z'), /delete the workout instead/);
+    assert.throws(() => C.applyOp(data, { type: 'editSession', id: '2026-11-23', date: '2026-12-09', sets }, who, '2026-12-01T10:00:00Z'), /future/);
+  }
+});
+
+test('she can fix or delete her own workout too, and the coach gets a note saying what changed', () => {
+  const data = newData();
+  doSession(data, '2026-11-23');
+  doSession(data, '2026-11-27');
+  const sets = C.toEngineInput(data).sessions[0].sets;
+  const i = sets.findIndex(x => x.ex === 'back-squat' && x.set === 2), j = sets.findIndex(x => x.ex === 'lat-pulldown' && x.set === 3);
+  const fixed = sets.map((x, k) => k === i ? Object.assign({}, x, { kg: x.kg + 2.5, reps: 9 }) : k === j ? Object.assign({}, x, { done: false }) : x);
+  const out = C.applyOp(data, { type: 'editSession', id: '2026-11-23', date: '2026-11-22', sets: fixed }, 'athlete', '2026-12-01T10:00:00Z');
+  assert.ok(out.notify && /fixed her workout of 2026-11-23/.test(out.notify.subject), out.notify && out.notify.subject);
+  assert.ok(/Moved from 2026-11-23 to 2026-11-22/.test(out.notify.body), out.notify.body);
+  assert.ok(/Back squat set 2: .+ → 9 × /.test(out.notify.body), out.notify.body);
+  assert.ok(/Lat pulldown set 3: taken out/.test(out.notify.body), out.notify.body);
+  // nothing changed: no email
+  const again = C.toEngineInput(data).sessions.find(s => s.id === '2026-11-23');
+  assert.strictEqual(C.applyOp(data, { type: 'editSession', id: '2026-11-23', sets: again.sets }, 'athlete', '2026-12-01T10:00:00Z').notify, null);
+  // she deletes one: the coach hears about it
+  const del = C.applyOp(data, { type: 'deleteSession', id: '2026-11-27' }, 'athlete', '2026-12-01T10:00:00Z');
+  assert.ok(del.notify && /deleted a workout/.test(del.notify.subject) && /2026-11-27/.test(del.notify.body) && /km to LUX now/.test(del.notify.body), del.notify && del.notify.body);
+  assert.deepStrictEqual(result(data).sessions.map(s => s.id), ['2026-11-23']);
 });
 
 test('deleting a workout: its sets and reactions go, km and the Sheet columns after it recalculate', () => {
