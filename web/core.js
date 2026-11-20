@@ -175,6 +175,8 @@ var FlightCore = (function () {
     coachPhoto: 'Your profile photo (set from the coach console in the app). Small JPEG data, leave it alone',
     herPhoto: 'Her profile photo (she sets it in the app). Small JPEG data, leave it alone',
     defaultCover: 'Cover photo for postcards that have no cover of their own: a Google Drive share link (Anyone with the link can view). Blank = the drawn cover',
+    herSeen: 'Hints and banners she has seen or closed (set by the app, leave it alone; clear it to show them all again)',
+    coachSeen: 'Hints and banners you have seen or closed in the coach view (set by the app, leave it alone)',
     loveReportedDay: 'The last day whose hearts were in the daily love email. Set by the app, leave it alone',
     goals: 'Goal milestones: exercise id : kg (assistance for assisted lifts), optional x reps. Example: incline-db-press:20, lat-pulldown:40, back-squat:60x5'
   };
@@ -520,6 +522,12 @@ var FlightCore = (function () {
   var PUBLIC_SETTINGS = ['herName', 'travellerName', 'flightNo', 'dayAName', 'dayBName', 'startDate', 'introWeeks',
     'trainingWeekdays', 'routeKm', 'kmPerRep', 'goals', 'coachPhoto', 'herPhoto'];
 
+  /** The hints and banners this role has seen or closed (Settings herSeen / coachSeen, JSON). */
+  function seenMap(data, role) {
+    try { var m = JSON.parse(str(data.settings[role === 'coach' ? 'coachSeen' : 'herSeen']) || '{}'); return m && typeof m === 'object' && !Array.isArray(m) ? m : {}; }
+    catch (e) { return {}; }
+  }
+
   function buildState(data, role, today) {
     var input = toEngineInput(data);
     var result = FlightEngine.replay(input);
@@ -556,6 +564,7 @@ var FlightCore = (function () {
       }),
       twoAnswers: twoAnswers(data, role, today),
       qaStreak: qaStreak(data, today),
+      seen: seenMap(data, role),
       love: loveSummary(data, today), // both see the running total (she sees hers on Progress and in the toast)
       summary: { cumKm: cum, completed: result.completedCount, reps: result.totalReps, landedOn: result.landedOn }
     };
@@ -567,8 +576,8 @@ var FlightCore = (function () {
   function clip(s, n) { return str(s).slice(0, n); }
 
   var ROLE_OPS = {
-    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer', 'answerReact', 'love', 'editSession', 'deleteSession'],
-    coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto', 'answer', 'answerReact', 'editSession', 'deleteSession']
+    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer', 'answerReact', 'love', 'editSession', 'deleteSession', 'seen'],
+    coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto', 'answer', 'answerReact', 'editSession', 'deleteSession', 'seen']
   };
 
   function applyOp(data, op, role, nowIso) {
@@ -747,6 +756,19 @@ var FlightCore = (function () {
       if (!lid || !isDate(ld) || lsz < 1 || lsz > 3) bad('invalid love');
       if (ld > FlightEngine.addDays(str(nowIso).slice(0, 10), 1)) bad('love can\'t be from the future');
       if (!data.love.some(function (r) { return str(r.id) === lid; })) append('Love', { id: lid, date: ld, at: nowIso, size: lsz }); // sent twice: once
+    } else if (op.type === 'seen') {
+      // hints and banners this person has seen or closed, kept per role in Settings (herSeen / coachSeen) so they follow her across phones
+      var skey = role === 'coach' ? 'coachSeen' : 'herSeen', sm = seenMap(data, role), sset = op.set || {}, sn = 0;
+      Object.keys(sset).forEach(function (k) {
+        var v = sset[k];
+        if (!/^[A-Za-z][\w:.-]{0,59}$/.test(k) || (typeof v !== 'number' && typeof v !== 'string') || String(v).length > 40) return;
+        sm[k] = v; sn++;
+      });
+      if (!sn) bad('invalid seen');
+      var sjson = JSON.stringify(sm);
+      if (sjson.length > 45000) bad('seen list full');
+      data.settings[skey] = sjson;
+      writes.push({ tab: 'Settings', kind: 'setting', key: skey, value: sjson });
     } else if (op.type === 'profilePhoto') {
       // a small square JPEG kept in the Settings tab (a Sheet cell holds at most 50,000 characters); '' removes it
       var pu = str(op.dataUrl), pkey = role === 'coach' ? 'coachPhoto' : 'herPhoto';

@@ -252,6 +252,9 @@
       var s = op.session;
       st.sessions = st.sessions.filter(function (x) { return x.id !== s.id; });
       st.sessions.push({ id: s.id, date: s.date, day: s.day, minutes: s.minutes, effort: s.effort, note: s.note, savedAt: nowIso(), sets: s.sets });
+    } else if (op.type === 'seen') {
+      st.seen = st.seen || {};
+      for (var sk in op.set) st.seen[sk] = op.set[sk];
     } else if (op.type === 'editSession') {
       st.sessions.forEach(function (x) { if (x.id === op.id) { if (op.date) x.date = op.date; x.sets = op.sets; } });
     } else if (op.type === 'deleteSession') {
@@ -300,6 +303,27 @@
     S.state = st;
     S.queue.forEach(localApply); // keep unsent changes visible
     store.set('state', S.state);
+    syncSeen();
+  }
+
+  // ---------- seen hints and banners: kept in the Sheet per role (Settings herSeen / coachSeen) ----------
+  // pc:, re:, ch: are only quick local marks: the Sheet already has openedAt / seenAt for postcards, reactions and cheers.
+  function localOnly(k) { return /^(pc|re|ch):/.test(k); }
+  /** S.seen = the Sheet's list plus this phone's quick local marks. */
+  function syncSeen() {
+    var m = {}, k, srv = (S.state && S.state.seen) || {};
+    for (k in S.seen) if (localOnly(k)) m[k] = S.seen[k];
+    for (k in srv) m[k] = srv[k];
+    S.seen = m;
+    store.set('seen', S.seen);
+  }
+  /** Marks a hint or banner as seen: at once on this phone, and in the Sheet (unless the Sheet tracks it already). */
+  function markSeen(k, v) {
+    S.seen[k] = v === undefined ? 1 : v;
+    store.set('seen', S.seen);
+    if (localOnly(k)) return;
+    var set = {}; set[k] = S.seen[k];
+    enqueue({ type: 'seen', set: set });
   }
 
   function enqueue(op) {
@@ -1387,7 +1411,7 @@
     if (!L || role() !== 'coach' || S.view !== 'coach') return;
     var seen = Number(S.seen.love || 0);
     if (L.total <= seen) return;
-    S.seen.love = L.total; store.set('seen', S.seen);
+    markSeen('love', L.total);
     var card = document.getElementById('lovecard');
     if (card) floatHearts(card, Math.min(12, (L.total - seen) * 2 + 2));
   }
@@ -1438,7 +1462,7 @@
   /** The first heart from the labelled pill folds it into the round heart, for good on this phone. */
   function foldLoveLabel(el) {
     if (S.seen.lovelabel) return;
-    S.seen.lovelabel = 1; store.set('seen', S.seen);
+    markSeen('lovelabel');
     if (!el || !el.classList.contains('lbl')) return;
     el.style.width = el.offsetWidth + 'px';
     el.classList.remove('lbl'); el.classList.add('folding');
@@ -1449,7 +1473,7 @@
   function sendLove(el, size) {
     if (el && el.id === 'lovefab') foldLoveLabel(el);
     var tips = Number(S.seen.loveTips) || 0, tip = size === 1 && tips < 3; // her first few taps: tell her about holding
-    if (size > 1 || tip) { S.seen.loveTips = size > 1 ? 3 : tips + 1; store.set('seen', S.seen); }
+    if (size > 1 || tip) markSeen('loveTips', size > 1 ? 3 : tips + 1);
     enqueue({ type: 'love', id: 'l' + Date.now().toString(36) + uid(), date: todayStr(), size: size });
     var total = S.state && S.state.love ? S.state.love.total : 0;
     buzz(size > 1 ? 18 : 10);
@@ -1484,6 +1508,7 @@
       document.body.appendChild(b);
     }
     if (b) b.hidden = !show;
+    if (b && !b.classList.contains('folding')) b.classList.toggle('lbl', !S.seen.lovelabel); // the Sheet may know she already sent one
     document.body.classList.toggle('hasfab', show);
   }
   // hold the heart to make it bigger: tap = 1, held 0.6 s = big, held 1.5 s = huge
@@ -1658,8 +1683,7 @@
     S.pcId = c.id; S.pcEmoji = c.replyEmoji || '';
     showModal(h, true);
     if (role() === 'athlete' && !c.openedAt && !S.seen['pc:' + c.id]) {
-      S.seen['pc:' + c.id] = 1;
-      store.set('seen', S.seen);
+      markSeen('pc:' + c.id);
       enqueue({ type: 'postcardOpened', id: c.id });
     }
   }
@@ -1673,7 +1697,7 @@
     var undev = t.querySelector('.pol.undev');
     if (undev && t.classList.contains('flipped') && !undev.classList.contains('dev')) {
       setTimeout(function () { undev.classList.add('dev'); }, 650); // once the card has turned
-      S.seen['dev:' + S.pcId] = 1; store.set('seen', S.seen);
+      markSeen('dev:' + S.pcId);
     }
   }
 
@@ -2200,7 +2224,7 @@
         store.set('draft', d); render(); break;
       }
       case 'overview': overview(); break;
-      case 'mainnoteHide': S.seen.mainnote = 1; store.set('seen', S.seen); render(); break;
+      case 'mainnoteHide': markSeen('mainnote'); render(); break;
       case 'addExtra': S.xPick = null; S.xQuery = ''; extraSheet(); break;
       case 'xPick': {
         var lx = lastExtra(t.dataset.id);
@@ -2267,9 +2291,9 @@
       }
       case 'polClose': { var pb = document.getElementById('polBig'); if (pb) pb.remove(); break; }
       case 'closeModal': closeModal(); break;
-      case 'cheerSeen': S.seen['ch:' + t.dataset.id] = 1; store.set('seen', S.seen); enqueue({ type: 'cheerSeen', id: t.dataset.id }); render(); break;
+      case 'cheerSeen': markSeen('ch:' + t.dataset.id); enqueue({ type: 'cheerSeen', id: t.dataset.id }); render(); break;
       case 'deload': enqueue({ type: 'deload', date: todayStr() }); render(); break;
-      case 'fatigueLater': S.seen['fat:' + t.dataset.id] = 1; store.set('seen', S.seen); render(); break;
+      case 'fatigueLater': markSeen('fat:' + t.dataset.id); render(); break;
       case 'day': daySheet(t.dataset.date); break;
       case 'mapToggle': S.mapOpen = !S.mapOpen; render(); break;
       case 'profile': profileSheet(); break;
@@ -2346,7 +2370,7 @@
         if (S.reactEmoji || tx2.trim()) enqueue({ type: 'react', sessionId: S.reactFor.id, emoji: S.reactEmoji, text: tx2.trim() });
         S.reactDraft = ''; closeModal(); break;
       }
-      case 'reactionSeen': S.seen['re:' + t.dataset.id] = 1; store.set('seen', S.seen); enqueue({ type: 'reactionSeen', id: t.dataset.id }); render(); break;
+      case 'reactionSeen': markSeen('re:' + t.dataset.id); enqueue({ type: 'reactionSeen', id: t.dataset.id }); render(); break;
       case 'saveOverride': {
         var v = Number(document.getElementById('ovKg').value);
         if (isFinite(v) && v >= 0) enqueue({ type: 'override', ex: t.dataset.ex, kg: v });
@@ -2451,6 +2475,13 @@
   if (S.draft && !S.draft.blocks) { S.draft = null; store.del('draft'); } // a draft from the old version
   if (S.draft) S.view = S.draft.finishedAt ? 'landing' : 'flight';
   render();
+  // once per phone: hand the marks this phone already had over to the Sheet, so nothing shows up again
+  if ((DEMO || KEY) && !store.get('seenMoved', false)) {
+    var moved = {}, mk, mn = 0;
+    for (mk in S.seen) if (!localOnly(mk)) { moved[mk] = S.seen[mk]; mn++; }
+    if (mn) enqueue({ type: 'seen', set: moved });
+    store.set('seenMoved', true);
+  }
   if (DEMO || KEY) flush();
   window.FlightApp = { S: S, render: render };
 })();
