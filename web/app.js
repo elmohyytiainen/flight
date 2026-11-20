@@ -1418,7 +1418,7 @@
     if (!L) return '';
     var coach = role() === 'coach', her = S.state.settings.herName || 'her';
     return '<div class="stat lovestat"><span class="lvh">' + IC.heart + '</span><div><b>' + L.total.toLocaleString('en-GB') + '</b><span>' +
-      (coach ? 'Hearts from ' + esc(her) : 'Hearts sent to ' + esc(who())) + (L.today ? ', ' + L.today + ' today' : '') + '</span></div></div>';
+      (coach ? 'Hearts from ' + esc(her) : 'Love hearts sent to the coach :)') + (L.today ? ' <small>(' + L.today + ' today)</small>' : '') + '</span></div></div>';
   }
   /** New hearts since the coach last looked: let a few float up from the card, once. */
   function loveArrived() {
@@ -1517,7 +1517,7 @@
       b.id = 'lovefab'; b.className = 'lovebtn lovefab'; b.setAttribute('data-act', 'love');
       b.setAttribute('role', 'button'); b.tabIndex = 0;
       b.setAttribute('aria-label', 'Send ' + who() + ' love. Hold for a bigger one');
-      b.innerHTML = '<span class="lh">' + IC.heart + '</span><span class="ll">Send the coach 🤍</span>' +
+      b.innerHTML = '<span class="lh">' + IC.heart + '</span><span class="ll">Send to the coach ;)</span>' +
         '<input type="checkbox" switch class="haptic" tabindex="-1" aria-hidden="true">';
       if (!S.seen.lovelabel) b.classList.add('lbl'); // a pill with a label until her first heart, then just the heart
       document.body.appendChild(b);
