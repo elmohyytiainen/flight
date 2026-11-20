@@ -33,7 +33,8 @@
     });
   }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
-  function todayStr() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function localDate(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function todayStr() { return localDate(new Date()); }
   function nowIso() { return new Date().toISOString(); }
   function uid() { return Math.random().toString(36).slice(2, 8); }
   function km(n) { return Math.round(n).toLocaleString('en-GB'); }
@@ -124,7 +125,8 @@
       settings.startDate = start;
       settings.herName = 'Her name';
       var data = { settings: settings, slots: C.seedSlots(), exercises: C.seedExercises(), choices: [], sessions: [], sets: [],
-        overrides: [], stamps: [], postcards: C.seedPostcards(), cheers: [], reactions: [] };
+        overrides: [], stamps: [], postcards: C.seedPostcards(), cheers: [], reactions: [],
+        moods: [{ role: 'coach', mood: 'missing', note: 'Counting the days', at: new Date(Date.now() - 2 * 3600e3).toISOString() }] };
       data.postcards[0].message = 'Example note: this is where your coach writes to you.\n\nYou already did the hardest part: you started. Proud of you!';
       data.postcards[1].message = 'Example note from Salo. Keep the hips high and the chin tucked :)';
       data.postcards[2].message = 'Example note. This is where a childhood photo from here goes :)';
@@ -252,6 +254,9 @@
       var s = op.session;
       st.sessions = st.sessions.filter(function (x) { return x.id !== s.id; });
       st.sessions.push({ id: s.id, date: s.date, day: s.day, minutes: s.minutes, effort: s.effort, note: s.note, savedAt: nowIso(), sets: s.sets });
+    } else if (op.type === 'mood') {
+      st.moods = st.moods || { mine: null, theirs: null };
+      st.moods.mine = op.mood ? { mood: op.mood, note: (op.note || '').trim().slice(0, 80), at: nowIso() } : null;
     } else if (op.type === 'seen') {
       st.seen = st.seen || {};
       for (var sk in op.set) st.seen[sk] = op.set[sk];
@@ -392,9 +397,13 @@
     if (S.queue.length && S.sync !== 'offline' && S.sync !== 'error') return ['pending', 'Saving'];
     if (S.sync === 'offline') return ['offline', S.queue.length ? 'Offline, saved on phone' : 'Offline'];
     if (S.sync === 'error') return ['error', S.queue.length ? 'Not synced yet, saved on phone' : 'Can\'t reach the Sheet'];
-    return ['', DEMO ? (demoEmpty() ? 'Demo' : 'Demo, example data') : 'Synced'];
+    return ['', DEMO ? 'Demo, example data' : 'Synced'];
   }
-  function syncHTML() { var l = syncLabel(); return '<span class="sync ' + l[0] + '" id="sync"><i></i>' + esc(l[1]) + '</span>'; }
+  /** All good = just the green dot (room for the two photos); a word only when something needs attention. */
+  function syncHTML() {
+    var l = syncLabel(), calm = !l[0];
+    return '<span class="sync ' + l[0] + '" id="sync" title="' + esc(l[1]) + '"' + (calm ? ' role="status" aria-label="' + esc(l[1]) + '"' : '') + '><i></i>' + (calm ? '' : esc(l[1])) + '</span>';
+  }
   function paintSync() { var el = document.getElementById('sync'); if (el) el.outerHTML = syncHTML(); }
 
   // ---------- map ----------
@@ -538,12 +547,54 @@
   /** Marks a hint as done when she uses the thing it points to. */
   function hintUsed(key) { if (!S.seen[key]) markSeen(key); }
   function topHTML(title, sub) {
-    var me = role() === 'coach' ? 'coach' : 'her';
+    var me = role() === 'coach' ? 'coach' : 'her', peer = me === 'coach' ? 'her' : 'coach';
     // no photo yet: a pink ring and a small tag until she opens the photo sheet once
     var nudge = !S.state.settings[me === 'coach' ? 'coachPhoto' : 'herPhoto'] && !S.seen.photohint;
+    var mine = moodNow('mine'), theirs = moodNow('theirs'), fresh = theirs && S.seen.moodSeen !== theirs.at;
+    var mhint = !nudge && !S.seen.moodhint; // one tag at a time
     return '<header class="top"><div class="who"><h1>' + esc(title) + '</h1><div class="small muted">' + esc(sub) + '</div></div>' +
-      '<div class="topr">' + syncHTML() + '<button class="avbtn' + (nudge ? ' nudge' : '') + '" data-act="profile" aria-label="Your profile photo">' + avatarHTML(me, 'av-44') +
+      '<div class="topr">' + syncHTML() +
+      '<button class="avbtn peer' + (fresh ? ' fresh' : '') + '" data-act="moods" aria-label="' + esc(peerName()) + (theirs ? ' ' + esc(moodOf(theirs).say) : '') + '. Moods">' +
+      '<span class="avwrap">' + avatarHTML(peer, 'av-32') + (theirs ? '<i class="avbadge">' + moodOf(theirs).e + '</i>' : '') + '</span>' +
+      (mhint ? '<span class="phint">Share your mood :)</span>' : '') + '</button>' +
+      '<button class="avbtn' + (nudge ? ' nudge' : '') + '" data-act="profile" aria-label="Your profile photo"><span class="avwrap">' + avatarHTML(me, 'av-44') +
+      (mine ? '<i class="avbadge">' + moodOf(mine).e + '</i>' : '') + '</span>' +
       (nudge ? '<span class="phint">Add your photo :)</span>' : '') + '</button></div></header>';
+  }
+
+  // ---------- moods: each sets their own, the other sees it in the top bar for 12 hours ----------
+  function moodList() { return (window.FlightCore && window.FlightCore.MOODS) || []; }
+  function moodOf(m) { return moodList().filter(function (x) { return x.id === m.mood; })[0] || { e: '🙂', label: m.mood, say: 'shared a mood' }; }
+  /** 'mine' or 'theirs', or null when unset, cleared or older than MOOD_HOURS. */
+  function moodNow(which) {
+    var m = S.state.moods && S.state.moods[which], h = (window.FlightCore && window.FlightCore.MOOD_HOURS) || 12;
+    if (!m || !m.mood || !m.at) return null;
+    return Date.now() - Date.parse(m.at) < h * 3600e3 ? m : null;
+  }
+  function peerName() { return role() === 'coach' ? (S.state.settings.herName || 'Her') : who(); }
+  function moodTime(at) {
+    var d = new Date(at), t = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    return localDate(d) === todayStr() ? 'since ' + t : 'since yesterday ' + t;
+  }
+  function moodSheet(keepNote) {
+    var mine = moodNow('mine'), theirs = moodNow('theirs'), name = peerName(), coach = role() === 'coach';
+    if (S.moodPick === undefined) S.moodPick = mine ? mine.mood : '';
+    var note = keepNote !== undefined ? keepNote : mine ? mine.note : '';
+    if (theirs && S.seen.moodSeen !== theirs.at) markSeen('moodSeen', theirs.at);
+    hintUsed('moodhint');
+    var h = '<h2>Moods</h2><div class="moodpeer"><span class="avwrap">' + avatarHTML(coach ? 'her' : 'coach', 'av-56') +
+      (theirs ? '<i class="avbadge">' + moodOf(theirs).e + '</i>' : '') + '</span><div>' +
+      (theirs ? '<b>' + esc(name) + ' ' + esc(moodOf(theirs).say) + '</b>' + (theirs.note ? '<p>“' + esc(theirs.note) + '”</p>' : '') +
+        '<span class="small muted">' + esc(moodTime(theirs.at)) + '</span>'
+        : '<b>' + esc(name) + '</b><p class="small muted">No mood shared right now.</p>') + '</div></div>';
+    h += '<h3 class="moodh">Your mood</h3><div class="moodgrid">' + moodList().map(function (m) {
+      return '<button class="moodchip' + (S.moodPick === m.id ? ' on' : '') + '" data-act="moodPick" data-v="' + m.id + '"><span>' + m.e + '</span>' + esc(m.label) + '</button>';
+    }).join('') + '</div>' +
+      '<input class="field" id="moodNote" maxlength="80" placeholder="A few words (optional)" value="' + esc(note) + '">' +
+      '<p class="small muted moodfoot">Shows on ' + esc(coach ? (S.state.settings.herName || 'her') : who()) + '\'s screen for 12 hours, or until you change it.</p>' +
+      '<div class="row"><button class="btn ghost" data-act="closeModal">Close</button><button class="btn taxi" data-act="moodSave">Share my mood</button></div>' +
+      (mine ? '<button class="linkbtn discard" data-act="moodClear">Clear my mood</button>' : '');
+    showModal(h, false, true);
   }
 
   // ---------- two answers ----------
@@ -2267,6 +2318,17 @@
       case 'overview': overview(); break;
       case 'mainnoteHide': markSeen('mainnote'); render(); break;
       case 'hintHide': markSeen(t.dataset.k); render(); break;
+      case 'moods': S.moodPick = undefined; moodSheet(); break;
+      case 'moodPick': { var mn = document.getElementById('moodNote'); S.moodPick = S.moodPick === t.dataset.v ? '' : t.dataset.v; moodSheet(mn ? mn.value : ''); break; }
+      case 'moodSave': {
+        var mnote = document.getElementById('moodNote');
+        if (!S.moodPick) { closeModal(); break; }
+        enqueue({ type: 'mood', mood: S.moodPick, note: mnote ? mnote.value.trim().slice(0, 80) : '' });
+        var pm = moodOf({ mood: S.moodPick });
+        closeModal(); loveToast(pm.e + ' Mood shared with ' + peerName());
+        break;
+      }
+      case 'moodClear': enqueue({ type: 'mood', mood: '' }); closeModal(); break;
       case 'addExtra': hintUsed('flighthint'); S.xPick = null; S.xQuery = ''; extraSheet(); break;
       case 'xPick': {
         var lx = lastExtra(t.dataset.id);
