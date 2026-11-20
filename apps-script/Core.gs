@@ -29,15 +29,32 @@ var FlightCore = (function () {
     Questions: ['question', 'date', 'active'],
     Answers: ['date', 'role', 'text', 'question', 'at'],
     AnswerReactions: ['date', 'to', 'emoji', 'by', 'at'], // a reaction bubble on the other's answer; the latest row per date+to wins, '' removes it
-    Love: ['id', 'date', 'at', 'size'] // hearts she sends Elmo from the top bar: size 1 tap, 2 big, 3 huge (held); emailed as a daily total
+    Love: ['id', 'date', 'at', 'size'], // hearts she sends Elmo from the top bar: size 1 tap, 2 big, 3 huge (held); emailed as a daily total
+    Moods: ['role', 'mood', 'note', 'at'] // each sets their own mood; the latest row per role wins, '' clears it; shown for MOOD_HOURS
   };
   var KEY = { Settings: 'settings', Slots: 'slots', Exercises: 'exercises', Choices: 'choices', Sessions: 'sessions',
     Sets: 'sets', Overrides: 'overrides', Stamps: 'stamps', Postcards: 'postcards', Cheers: 'cheers', Reactions: 'reactions',
-    Questions: 'questions', Answers: 'answers', AnswerReactions: 'answerReactions', Love: 'love' };
+    Questions: 'questions', Answers: 'answers', AnswerReactions: 'answerReactions', Love: 'love', Moods: 'moods' };
 
   // ---------- two answers: one question a day, both answer, answers show once both have ----------
   var Q_START = '2026-11-16';
-  var QA_EMOJIS = ['❤️', '🥰', '😂', '🥹', '😘', '🔥', '🌶️']; // reaction bubbles (same set as the postcard replies)
+  var QA_EMOJIS = ['🥰', '😂', '🥹', '😘', '🔥', '🌶️', '🫶', '🤔', '🫢']; // reaction bubbles on the daily answers (🫶 instead of ❤️, plus 🤔 and 🫢)
+  // moods: each of them sets their own, the other sees it for MOOD_HOURS (or until it's changed or cleared).
+  // `say` completes "<name> …"; `mail`: the moods worth a heads-up, Elmo gets an email when she picks one of them
+  var MOODS = [
+    { id: 'happy', e: '😊', label: 'Happy', say: 'is happy' },
+    { id: 'missing', e: '🥺', label: 'Missing you', say: 'is missing you', mail: true },
+    { id: 'hug', e: '🤗', label: 'Need a hug', say: 'needs a hug', mail: true },
+    { id: 'spicy', e: '🌶️', label: 'In the mood', say: 'is in the mood', mail: true },
+    { id: 'pumped', e: '💪', label: 'Pumped', say: 'is pumped' },
+    { id: 'chill', e: '😌', label: 'Chill', say: 'is chilling' },
+    { id: 'sleepy', e: '😴', label: 'Sleepy', say: 'is sleepy' },
+    { id: 'stressed', e: '🤯', label: 'Stressed / busy', say: 'is stressed and busy', mail: true },
+    { id: 'sick', e: '🤒', label: 'Feeling sick', say: 'is feeling sick', mail: true }
+  ];
+  var MOOD_BY_ID = {};
+  MOODS.forEach(function (m) { MOOD_BY_ID[m.id] = m; });
+  var MOOD_HOURS = 12;
   var QUESTIONS = [
     'What\'s a small thing I do that makes you feel loved?',
     'Best meal we\'ve ever had together?',
@@ -523,6 +540,13 @@ var FlightCore = (function () {
   var PUBLIC_SETTINGS = ['herName', 'travellerName', 'flightNo', 'dayAName', 'dayBName', 'startDate', 'introWeeks',
     'trainingWeekdays', 'routeKm', 'kmPerRep', 'goals', 'coachPhoto', 'herPhoto'];
 
+  /** Each one's latest mood row ({ mood, note, at }, or null when cleared or never set). Expiry (MOOD_HOURS) is applied by the app, which knows the time. */
+  function latestMood(data, role) {
+    var last = null;
+    (data.moods || []).forEach(function (r) { if (str(r.role) === role && (!last || str(r.at) >= str(last.at))) last = r; });
+    return last && MOOD_BY_ID[str(last.mood)] ? { mood: str(last.mood), note: str(last.note), at: str(last.at) } : null;
+  }
+
   /** The hints and banners this role has seen or closed (Settings herSeen / coachSeen, JSON). */
   function seenMap(data, role) {
     try { var m = JSON.parse(str(data.settings[role === 'coach' ? 'coachSeen' : 'herSeen']) || '{}'); return m && typeof m === 'object' && !Array.isArray(m) ? m : {}; }
@@ -566,6 +590,7 @@ var FlightCore = (function () {
       twoAnswers: twoAnswers(data, role, today),
       qaStreak: qaStreak(data, today),
       seen: seenMap(data, role),
+      moods: { mine: latestMood(data, role), theirs: latestMood(data, role === 'coach' ? 'athlete' : 'coach') },
       love: loveSummary(data, today), // both see the running total (she sees hers on Progress and in the toast)
       summary: { cumKm: cum, completed: result.completedCount, reps: result.totalReps, landedOn: result.landedOn }
     };
@@ -577,13 +602,14 @@ var FlightCore = (function () {
   function clip(s, n) { return str(s).slice(0, n); }
 
   var ROLE_OPS = {
-    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer', 'answerReact', 'love', 'editSession', 'deleteSession', 'seen'],
-    coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto', 'answer', 'answerReact', 'editSession', 'deleteSession', 'seen']
+    athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer', 'answerReact', 'love', 'editSession', 'deleteSession', 'seen', 'mood'],
+    coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto', 'answer', 'answerReact', 'editSession', 'deleteSession', 'seen', 'mood']
   };
 
   function applyOp(data, op, role, nowIso) {
     if (!data.reactions) data.reactions = [];
     if (!data.love) data.love = [];
+    if (!data.moods) data.moods = [];
     if (!op || !op.type) bad('missing op');
     if ((ROLE_OPS[role] || []).indexOf(op.type) < 0) bad('not allowed: ' + op.type);
     var writes = [], notify = null, photo = null;
@@ -757,6 +783,17 @@ var FlightCore = (function () {
       if (!lid || !isDate(ld) || lsz < 1 || lsz > 3) bad('invalid love');
       if (ld > FlightEngine.addDays(str(nowIso).slice(0, 10), 1)) bad('love can\'t be from the future');
       if (!data.love.some(function (r) { return str(r.id) === lid; })) append('Love', { id: lid, date: ld, at: nowIso, size: lsz }); // sent twice: once
+    } else if (op.type === 'mood') {
+      // a mood for the other to see (12 h in the app); '' clears it. Elmo gets an email when she picks a heads-up mood.
+      var mid = str(op.mood), mprev = latestMood(data, role);
+      if (mid && !MOOD_BY_ID[mid]) bad('invalid mood');
+      var mnote = mid ? clip(op.note, 80).trim() : '';
+      append('Moods', { role: role, mood: mid, note: mnote, at: nowIso });
+      var mm = MOOD_BY_ID[mid];
+      if (role === 'athlete' && mm && mm.mail && (!mprev || mprev.mood !== mid)) {
+        var mhn = str(data.settings.herName) || 'She';
+        notify = { subject: mm.e + ' ' + mhn + ' ' + mm.say, body: (mnote ? '"' + mnote + '"\n\n' : '') + 'Her mood in the app (shows for ' + MOOD_HOURS + ' hours).' };
+      }
     } else if (op.type === 'seen') {
       // hints and banners this person has seen or closed, kept per role in Settings (herSeen / coachSeen) so they follow her across phones
       var skey = role === 'coach' ? 'coachSeen' : 'herSeen', sm = seenMap(data, role), sset = op.set || {}, sn = 0;
@@ -864,7 +901,7 @@ var FlightCore = (function () {
   }
 
   return {
-    QA_EMOJIS: QA_EMOJIS, TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises, programSync: programSync,
+    QA_EMOJIS: QA_EMOJIS, MOODS: MOODS, MOOD_HOURS: MOOD_HOURS, TABS: TABS, KEY: KEY, seedSettings: seedSettings, seedSlots: seedSlots, seedExercises: seedExercises, programSync: programSync,
     PROGRAM_VERSION: PROGRAM_VERSION,
     seedPostcards: seedPostcards, postcardSync: postcardSync, upgradePlan: upgradePlan, exerciseSync: exerciseSync, toEngineInput: toEngineInput, buildState: buildState,
     applyOp: applyOp, loveDigest: loveDigest, loveSummary: loveSummary, isLoveMilestone: isLoveMilestone, photoUrl: photoUrl, teaserUrl: teaserUrl, seedQuestions: seedQuestions, questionFor: questionFor, QUESTIONS: QUESTIONS

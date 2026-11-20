@@ -333,7 +333,7 @@ test('both workouts are called "Workout": Upgrade renames untouched defaults onl
 test('reaction bubbles: only once both answered, on the other\'s answer, latest wins, the same one again removes it', () => {
   const data = newData(), today = '2026-11-20', at = h => today + 'T' + h + ':00:00Z';
   C.applyOp(data, { type: 'answer', date: today, text: 'Pasta' }, 'coach', at('09'));
-  assert.throws(() => C.applyOp(data, { type: 'answerReact', date: today, emoji: '❤️' }, 'coach', at('09')), /answer first/);
+  assert.throws(() => C.applyOp(data, { type: 'answerReact', date: today, emoji: '🫶' }, 'coach', at('09')), /answer first/);
   C.applyOp(data, { type: 'answer', date: today, text: 'Pizza' }, 'athlete', at('10'));
   assert.throws(() => C.applyOp(data, { type: 'answerReact', date: today, emoji: '💩' }, 'athlete', at('10')), /invalid reaction/);
 
@@ -344,9 +344,9 @@ test('reaction bubbles: only once both answered, on the other\'s answer, latest 
 
   const back = C.applyOp(data, { type: 'answerReact', date: today, emoji: '🥹' }, 'coach', at('12'));
   assert.ok(!back || !back.notify, 'no email for his own reaction');
-  C.applyOp(data, { type: 'answerReact', date: today, emoji: '❤️' }, 'athlete', at('13'));   // she changes hers
+  C.applyOp(data, { type: 'answerReact', date: today, emoji: '🫶' }, 'athlete', at('13'));   // she changes hers
   her = C.buildState(data, 'athlete', today).twoAnswers[0];
-  assert.deepStrictEqual([her.theirsReaction, her.mineReaction], ['❤️', '🥹']);
+  assert.deepStrictEqual([her.theirsReaction, her.mineReaction], ['🫶', '🥹']);
   C.applyOp(data, { type: 'answerReact', date: today, emoji: '' }, 'athlete', at('14'));     // and takes it away
   assert.strictEqual(C.buildState(data, 'coach', today).twoAnswers[0].mineReaction, '');
 });
@@ -678,4 +678,31 @@ test('seen hints are kept in the Sheet per role, merged, and each sees only thei
   assert.strictEqual(C.buildState(data, 'athlete', '2026-11-28').settings.herSeen, undefined, 'not sent as a setting');
   assert.throws(() => her({ 'bad key!': 1 }), /invalid seen/);
   assert.throws(() => her({ ok: { nested: true } }), /invalid seen/);
+});
+
+test('moods: each sets their own, the other sees it; the latest wins, empty clears; heads-up moods email Elmo once', () => {
+  const data = newData();
+  const set = (role, mood, note, at) => C.applyOp(data, { type: 'mood', mood, note }, role, at);
+  assert.deepStrictEqual(C.buildState(data, 'athlete', '2026-11-28').moods, { mine: null, theirs: null });
+  const a = set('athlete', 'missing', '  counting the days  ', '2026-11-28T08:00:00Z');
+  assert.ok(a.writes.some(w => w.tab === 'Moods' && w.kind === 'append'));
+  assert.ok(a.notify && /is missing you/.test(a.notify.subject) && /counting the days/.test(a.notify.body), a.notify && a.notify.subject);
+  assert.strictEqual(set('athlete', 'missing', 'still', '2026-11-28T09:00:00Z').notify, null, 'same mood again: no second email');
+  assert.strictEqual(set('athlete', 'happy', '', '2026-11-28T10:00:00Z').notify, null, 'everyday moods: no email');
+  assert.strictEqual(set('coach', 'stressed', 'long day', '2026-11-28T11:00:00Z').notify, null, 'his moods never email');
+  const her = C.buildState(data, 'athlete', '2026-11-28').moods, his = C.buildState(data, 'coach', '2026-11-28').moods;
+  assert.deepStrictEqual(her.mine, { mood: 'happy', note: '', at: '2026-11-28T10:00:00Z' });
+  assert.deepStrictEqual(her.theirs, { mood: 'stressed', note: 'long day', at: '2026-11-28T11:00:00Z' });
+  assert.deepStrictEqual(his.theirs, her.mine);
+  set('athlete', '', 'ignored', '2026-11-28T12:00:00Z');
+  assert.strictEqual(C.buildState(data, 'coach', '2026-11-28').moods.theirs, null, 'cleared');
+  assert.ok(set('athlete', 'hug', '', '2026-11-28T13:00:00Z').notify, 'after a clear, a heads-up mood emails again');
+  assert.throws(() => set('athlete', 'grumpy', '', '2026-11-28T14:00:00Z'), /invalid mood/);
+  assert.ok(/🌶️ .+ is in the mood/.test(set('athlete', 'spicy', '', '2026-11-28T15:00:00Z').notify.subject));
+  assert.deepStrictEqual(C.MOODS.map(m => m.e), ['😊', '🥺', '🤗', '🌶️', '💪', '😌', '😴', '🤯', '🤒']);
+  assert.ok(C.MOODS.length === 9 && C.MOOD_HOURS === 12);
+});
+
+test('answer reactions: 🫶 replaces ❤️, plus 🤔 and 🫢', () => {
+  assert.deepStrictEqual(C.QA_EMOJIS, ['🥰', '😂', '🥹', '😘', '🔥', '🌶️', '🫶', '🤔', '🫢']);
 });
