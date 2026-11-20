@@ -551,12 +551,14 @@
     // no photo yet: a pink ring and a small tag until she opens the photo sheet once
     var nudge = !S.state.settings[me === 'coach' ? 'coachPhoto' : 'herPhoto'] && !S.seen.photohint;
     var mine = moodNow('mine'), theirs = moodNow('theirs'), fresh = theirs && S.seen.moodSeen !== theirs.at;
-    var mhint = !nudge && !S.seen.moodhint; // one tag at a time
+    // one tag at a time: a new mood from the other goes first (until the mood sheet has been opened once), then the photo tag, then "Share your mood"
+    var mtag = S.seen.moodhint ? '' : fresh ? esc(peerName()) + (me === 'coach' ? ' shared her mood :)' : ' shared his mood :)') : nudge ? '' : 'Share your mood :)';
+    if (mtag) nudge = false;
     return '<header class="top"><div class="who"><h1>' + esc(title) + '</h1><div class="small muted">' + esc(sub) + '</div></div>' +
       '<div class="topr">' + syncHTML() +
       '<button class="avbtn peer' + (fresh ? ' fresh' : '') + '" data-act="moods" aria-label="' + esc(peerName()) + (theirs ? ' ' + esc(moodOf(theirs).say) : '') + '. Moods">' +
       '<span class="avwrap">' + avatarHTML(peer, 'av-32') + (theirs ? '<i class="avbadge">' + moodOf(theirs).e + '</i>' : '') + '</span>' +
-      (mhint ? '<span class="phint">Share your mood :)</span>' : '') + '</button>' +
+      (mtag ? '<span class="phint">' + mtag + '</span>' : '') + '</button>' +
       '<button class="avbtn' + (nudge ? ' nudge' : '') + '" data-act="profile" aria-label="Your profile photo"><span class="avwrap">' + avatarHTML(me, 'av-44') +
       (mine ? '<i class="avbadge">' + moodOf(mine).e + '</i>' : '') + '</span>' +
       (nudge ? '<span class="phint">Add your photo :)</span>' : '') + '</button></div></header>';
