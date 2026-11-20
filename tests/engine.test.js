@@ -689,14 +689,16 @@ test('moods: each sets their own, the other sees it; the latest wins, empty clea
   assert.ok(a.notify && /is missing you/.test(a.notify.subject) && /counting the days/.test(a.notify.body), a.notify && a.notify.subject);
   assert.strictEqual(set('athlete', 'missing', 'still', '2026-11-28T09:00:00Z').notify, null, 'same mood again: no second email');
   assert.strictEqual(set('athlete', 'happy', '', '2026-11-28T10:00:00Z').notify, null, 'everyday moods: no email');
-  assert.strictEqual(set('coach', 'rough', 'long day', '2026-11-28T11:00:00Z').notify, null, 'his moods never email');
+  assert.strictEqual(set('coach', 'stressed', 'long day', '2026-11-28T11:00:00Z').notify, null, 'his moods never email');
   const her = C.buildState(data, 'athlete', '2026-11-28').moods, his = C.buildState(data, 'coach', '2026-11-28').moods;
   assert.deepStrictEqual(her.mine, { mood: 'happy', note: '', at: '2026-11-28T10:00:00Z' });
-  assert.deepStrictEqual(her.theirs, { mood: 'rough', note: 'long day', at: '2026-11-28T11:00:00Z' });
+  assert.deepStrictEqual(her.theirs, { mood: 'stressed', note: 'long day', at: '2026-11-28T11:00:00Z' });
   assert.deepStrictEqual(his.theirs, her.mine);
   set('athlete', '', 'ignored', '2026-11-28T12:00:00Z');
   assert.strictEqual(C.buildState(data, 'coach', '2026-11-28').moods.theirs, null, 'cleared');
   assert.ok(set('athlete', 'hug', '', '2026-11-28T13:00:00Z').notify, 'after a clear, a heads-up mood emails again');
   assert.throws(() => set('athlete', 'grumpy', '', '2026-11-28T14:00:00Z'), /invalid mood/);
+  assert.ok(/🌶️ .+ is in the mood/.test(set('athlete', 'spicy', '', '2026-11-28T15:00:00Z').notify.subject));
+  assert.deepStrictEqual(C.MOODS.map(m => m.e), ['😊', '🥺', '🤗', '🌶️', '💪', '😌', '😴', '😩', '🤒']);
   assert.ok(C.MOODS.length === 9 && C.MOOD_HOURS === 12);
 });

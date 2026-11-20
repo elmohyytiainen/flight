@@ -37,18 +37,18 @@ var FlightCore = (function () {
 
   // ---------- two answers: one question a day, both answer, answers show once both have ----------
   var Q_START = '2026-11-16';
-  var QA_EMOJIS = ['❤️', '🥰', '😂', '🥹', '😘', '🔥', '🌶️']; // reaction bubbles (same set as the postcard replies)
+  var QA_EMOJIS = ['❤️', '🥰', '😂', '🥹', '😘', '🔥', '🌶️', '🫶', '🤔']; // reaction bubbles on the daily answers (the postcard set plus 🫶 and 🤔)
   // moods: each of them sets their own, the other sees it for MOOD_HOURS (or until it's changed or cleared).
   // `say` completes "<name> …"; `mail`: the moods worth a heads-up, Elmo gets an email when she picks one of them
   var MOODS = [
     { id: 'happy', e: '😊', label: 'Happy', say: 'is happy' },
-    { id: 'missing', e: '🥰', label: 'Missing you', say: 'is missing you', mail: true },
+    { id: 'missing', e: '🥺', label: 'Missing you', say: 'is missing you', mail: true },
     { id: 'hug', e: '🤗', label: 'Need a hug', say: 'needs a hug', mail: true },
+    { id: 'spicy', e: '🌶️', label: 'In the mood', say: 'is in the mood', mail: true },
     { id: 'pumped', e: '💪', label: 'Pumped', say: 'is pumped' },
     { id: 'chill', e: '😌', label: 'Chill', say: 'is chilling' },
     { id: 'sleepy', e: '😴', label: 'Sleepy', say: 'is sleepy' },
-    { id: 'busy', e: '🤯', label: 'Busy busy', say: 'is busy busy' },
-    { id: 'rough', e: '😩', label: 'Rough day', say: 'is having a rough day', mail: true },
+    { id: 'stressed', e: '😩', label: 'Busy / stressed', say: 'is busy and stressed', mail: true },
     { id: 'sick', e: '🤒', label: 'Feeling sick', say: 'is feeling sick', mail: true }
   ];
   var MOOD_BY_ID = {};

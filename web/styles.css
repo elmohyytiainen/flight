@@ -932,3 +932,6 @@ body.hasfab #app { padding-bottom: calc(150px + var(--safe-b)); }
 #moodNote { width: 100%; margin-top: 12px; }
 .moodfoot { margin: 8px 0 0; }
 .topr .sync { white-space: normal; max-width: 86px; text-align: right; line-height: 1.2; }
+/* nine reactions on one row (the postcard set + 🫶 🤔) */
+.qpick { flex-wrap: nowrap; gap: 4px; justify-content: space-between; }
+.qemo { width: auto; flex: 1 1 0; max-width: 40px; height: auto; aspect-ratio: 1; min-width: 0; font-size: clamp(15px, 4.6vw, 20px); padding: 0; }
