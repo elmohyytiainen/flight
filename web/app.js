@@ -529,10 +529,21 @@
   }
 
   // ---------- small pieces ----------
+  /** A quiet pink one-time hint with an ×; `key` is remembered in the Sheet once closed or once she uses what it points to. */
+  function hintHTML(key, inner) {
+    if (S.seen[key]) return '';
+    return '<div class="mainnote hint"><span class="bang" aria-hidden="true">!</span><p>' + inner + '</p>' +
+      '<button class="mnx" data-act="hintHide" data-k="' + key + '" aria-label="Hide this hint">' + IC.close + '</button></div>';
+  }
+  /** Marks a hint as done when she uses the thing it points to. */
+  function hintUsed(key) { if (!S.seen[key]) markSeen(key); }
   function topHTML(title, sub) {
     var me = role() === 'coach' ? 'coach' : 'her';
+    // no photo yet: a pink ring and a small tag until she opens the photo sheet once
+    var nudge = !S.state.settings[me === 'coach' ? 'coachPhoto' : 'herPhoto'] && !S.seen.photohint;
     return '<header class="top"><div class="who"><h1>' + esc(title) + '</h1><div class="small muted">' + esc(sub) + '</div></div>' +
-      '<div class="topr">' + syncHTML() + '<button class="avbtn" data-act="profile" aria-label="Your profile photo">' + avatarHTML(me, 'av-44') + '</button></div></header>';
+      '<div class="topr">' + syncHTML() + '<button class="avbtn' + (nudge ? ' nudge' : '') + '" data-act="profile" aria-label="Your profile photo">' + avatarHTML(me, 'av-44') +
+      (nudge ? '<span class="phint">Add your photo :)</span>' : '') + '</button></div></header>';
   }
 
   // ---------- two answers ----------
@@ -570,7 +581,8 @@
         '<button class="btn taxi wide" data-act="qaSend" data-date="' + q.date + '" data-ta="' + id + '"' + (inSheet ? ' data-sheet="1"' : '') + '>Answer</button>';
     } else {
       h += qaRow(me, 'You', q.mine || '…', { bubble: q.mineReaction });
-      h += q.theirs ? qaRow(o.who, o.name, q.theirs, { bubble: q.theirsReaction, react: q.date, open: S.qaPick === q.date, sheet: inSheet })
+      h += q.theirs ? qaRow(o.who, o.name, q.theirs, { bubble: q.theirsReaction, react: q.date, open: S.qaPick === q.date, sheet: inSheet }) +
+          (!inSheet && !q.theirsReaction ? hintHTML('qahint', 'Tap <b>🙂+</b> on ' + esc(o.name) + '\'s answer to react ;)') : '')
         : '<div class="qwait">' + avatarHTML(o.who, 'av-24') + (q.theirsAnswered ? 'Revealing…' : 'Waiting for ' + esc(o.name) + '. You\'ll see both answers once you both have.') + '</div>';
     }
     return h;
@@ -1032,6 +1044,7 @@
     });
     h += '</div>' + (d.retro ? '<span class="clock retro">' + esc(fmtDate(d.date)) + '</span>' : '<span class="clock" id="clock">' + elapsed() + '</span>') + '</div>';
     if (d.retro) h += '<div class="retronote">Logging a workout for <b>' + esc(fmtLong(d.date)) + '</b>. Just fill in what you did, no rest timer :)</div>';
+    else h += hintHTML('flighthint', 'Machine busy? Tap <b>Do this later</b>. Want more? <b>+ Add an exercise</b> at the bottom :)');
 
     h += '<div class="strip">' + routeBar(d.retro ? pv.result.cumKm : c.cumKm, st.routeKm) + '<div class="striptext"><span><b>+' + kgFmt(c.km) + ' km</b> this workout, ' + (c.reps - (c.extraReps || 0)) + ' reps' +
       (c.extraReps ? ' + ' + c.extraReps + ' extra' : '') + '</span></div></div>';
@@ -1201,7 +1214,9 @@
   function viewLog() {
     var res = calc(), st = res.settings, ws = weekStats(res);
     var h = '<div class="screen">' + topHTML('Progress', plural(res.completedCount, 'workout', 'workouts') + ' so far');
-    h += streakHTML(res) + calendarHTML(res);
+    h += streakHTML(res);
+    if (role() === 'athlete') h += hintHTML('calhint', 'Tap a day to add <b>ballet</b> or a <b>run</b>, log a workout you forgot, or fix one :)');
+    h += calendarHTML(res);
     h += strengthSummary(res);
     h += '<div class="pcards">' + progressCard(res, 'Legs', 'legs') + progressCard(res, 'Push', 'chest') + progressCard(res, 'Pull', 'lats') + '</div>';
     var ms = res.milestones.slice().reverse();
@@ -2225,7 +2240,8 @@
       }
       case 'overview': overview(); break;
       case 'mainnoteHide': markSeen('mainnote'); render(); break;
-      case 'addExtra': S.xPick = null; S.xQuery = ''; extraSheet(); break;
+      case 'hintHide': markSeen(t.dataset.k); render(); break;
+      case 'addExtra': hintUsed('flighthint'); S.xPick = null; S.xQuery = ''; extraSheet(); break;
       case 'xPick': {
         var lx = lastExtra(t.dataset.id);
         S.xPick = { id: t.dataset.id, sets: lx ? Math.min(6, lx.sets) : 3, reps: lx ? lx.reps : 10 };
@@ -2245,8 +2261,8 @@
       case 'unskipBlock': d.sets.forEach(function (o) { if (d.blocks[+t.dataset.i].slots.indexOf(o.slot) >= 0) o.skip = false; }); store.set('draft', d); overview(); render(); break;
       case 'viewBlock': d.view = +t.dataset.i; store.set('draft', d); closeModal(); window.scrollTo(0, 0); break;
       case 'toCurrent': d.view = null; store.set('draft', d); render(); break;
-      case 'doNow': doNow(+t.dataset.i); closeModal(); window.scrollTo(0, 0); break;
-      case 'doLater': doLater(+t.dataset.i); render(); window.scrollTo(0, 0); break;
+      case 'doNow': hintUsed('flighthint'); doNow(+t.dataset.i); closeModal(); window.scrollTo(0, 0); break;
+      case 'doLater': hintUsed('flighthint'); doLater(+t.dataset.i); render(); window.scrollTo(0, 0); break;
       case 'lastRound': {
         var nx = nextStep(d), firstAcc = -1;
         d.blocks.forEach(function (b, bi) { if (firstAcc < 0 && b.paired && d.sets.some(function (o) { return b.slots.indexOf(o.slot) >= 0 && open(o); })) firstAcc = bi; });
@@ -2294,11 +2310,11 @@
       case 'cheerSeen': markSeen('ch:' + t.dataset.id); enqueue({ type: 'cheerSeen', id: t.dataset.id }); render(); break;
       case 'deload': enqueue({ type: 'deload', date: todayStr() }); render(); break;
       case 'fatigueLater': markSeen('fat:' + t.dataset.id); render(); break;
-      case 'day': daySheet(t.dataset.date); break;
+      case 'day': if (role() === 'athlete') hintUsed('calhint'); daySheet(t.dataset.date); break;
       case 'mapToggle': S.mapOpen = !S.mapOpen; render(); break;
-      case 'profile': profileSheet(); break;
+      case 'profile': hintUsed('photohint'); profileSheet(); break;
       case 'qaPast': S.qaPick = null; qaPastSheet(); break;
-      case 'qaPick': S.qaPick = S.qaPick === t.dataset.date ? null : t.dataset.date; if (t.dataset.sheet) qaPastSheet(); else render(); break;
+      case 'qaPick': hintUsed('qahint'); S.qaPick = S.qaPick === t.dataset.date ? null : t.dataset.date; if (t.dataset.sheet) qaPastSheet(); else render(); break;
       case 'qaReact': {
         var qd = (S.state.twoAnswers || []).filter(function (x) { return x.date === t.dataset.date; })[0];
         var qe = qd && qd.theirsReaction === t.dataset.emoji ? '' : t.dataset.emoji; // the same one again takes it away
