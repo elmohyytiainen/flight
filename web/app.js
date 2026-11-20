@@ -58,6 +58,7 @@
     envelope: '<svg viewBox="0 0 40 40" class="ic" aria-hidden="true"><rect x="4" y="9" width="32" height="22" rx="3" fill="var(--taxi)" stroke="var(--ink)" stroke-width="2"/><path d="M5 11l15 11 15-11" fill="none" stroke="var(--ink)" stroke-width="2"/></svg>',
     cheer: '<svg viewBox="0 0 40 40" class="ic" aria-hidden="true"><circle cx="20" cy="20" r="17" fill="var(--ink)"/><path d="M20 9l3.2 7.3 7.8.7-5.9 5.2 1.8 7.8L20 26l-6.9 4 1.8-7.8L9 17l7.8-.7Z" fill="var(--taxi)"/></svg>',
     dumbbell: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 9.5v5M6.5 7v10M17.5 7v10M20.5 9.5v5M6.5 12h11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     undo: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 7L4 12l5 5M4 12h10a6 6 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 -3)"/></svg>',
     list: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
     camera: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 8h3l1.6-2.2h6.8L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="13.2" r="3.4" fill="none" stroke="currentColor" stroke-width="1.9"/></svg>',
@@ -247,6 +248,11 @@
       var s = op.session;
       st.sessions = st.sessions.filter(function (x) { return x.id !== s.id; });
       st.sessions.push({ id: s.id, date: s.date, day: s.day, minutes: s.minutes, effort: s.effort, note: s.note, savedAt: nowIso(), sets: s.sets });
+    } else if (op.type === 'editSession') {
+      st.sessions.forEach(function (x) { if (x.id === op.id) { if (op.date) x.date = op.date; x.sets = op.sets; } });
+    } else if (op.type === 'deleteSession') {
+      st.sessions = st.sessions.filter(function (x) { return x.id !== op.id; });
+      st.reactions = (st.reactions || []).filter(function (r) { return r.sessionId !== op.id; });
     } else if (op.type === 'stamp') {
       st.stamps = st.stamps.filter(function (x) { return !(x.date === op.date && x.type === op.stampType); });
       if (op.on) st.stamps.push({ date: op.date, type: op.stampType });
@@ -1547,7 +1553,8 @@
         (x.prs.length ? '<div class="l2">🏅 Personal best: ' + esc(x.prs.map(function (p) { return exName(p.ex) + ' ' + kgFmt(p.kg) + ' kg × ' + p.reps; }).join(', ')) + '</div>' : '') +
         reactionsFor(x.id).map(function (r) { return '<div class="rx">You: ' + esc(reactionText(r)) + (r.seenAt ? ' <span class="small muted">seen</span>' : '') + '</div>'; }).join('') +
         '<div class="row2">' + (x.photo ? '<button class="btn ghost small" data-act="showPhoto" data-id="' + esc(x.id) + '">' + IC.camera + 'See her photo</button>' : '') +
-        '<button class="btn ghost small" data-act="react" data-id="' + esc(x.id) + '" data-n="' + (n - i) + '">React</button></div></div>';
+        '<button class="btn ghost small" data-act="react" data-id="' + esc(x.id) + '" data-n="' + (n - i) + '">React</button>' +
+        '<button class="btn ghost small" data-act="editW" data-id="' + esc(x.id) + '">Edit</button></div></div>';
     });
     h += '</div>';
     if (DEMO) h += demoLinks();
@@ -1626,13 +1633,13 @@
   }
 
   // ---------- modals ----------
-  function showModal(inner, center) {
+  function showModal(inner, center, noFocus) {
     var m = document.getElementById('modal');
     m.className = (center ? 'center' : '') + (inner.indexOf('postcard-modal') >= 0 ? ' dark' : '');
     m.innerHTML = inner.indexOf('postcard-modal') >= 0 ? inner : '<div class="sheet" role="dialog" aria-modal="true">' + inner + '</div>';
     m.hidden = false;
     var f = m.querySelector('input, textarea, button');
-    if (f && f.tagName !== 'BUTTON') setTimeout(function () { f.focus(); }, 50);
+    if (f && f.tagName !== 'BUTTON' && !noFocus) setTimeout(function () { f.focus(); }, 50);
   }
   function closeModal() { var m = document.getElementById('modal'); m.hidden = true; m.innerHTML = ''; render(); }
 
@@ -1670,7 +1677,10 @@
     var w = res.sessions.filter(function (s) { return s.date === ds; });
     var has = function (t) { return S.state.stamps.some(function (s) { return s.date === ds && s.type === t; }); };
     var h = '<h2>' + esc(fmtLong(ds)) + '</h2>';
-    w.forEach(function (f) { h += dayWorkoutHTML(res, f); });
+    w.forEach(function (f) {
+      h += dayWorkoutHTML(res, f);
+      if (role() === 'coach') h += '<button class="btn ghost wide editwbtn" data-act="editW" data-id="' + esc(f.id) + '">' + IC.edit + 'Edit or delete this workout</button>';
+    });
     if (!w.length) {
       var pl = plannedMap(res, ds)[ds];
       if (pl) h += '<p class="muted">' + esc(workoutOf(pl)) + ' planned :)</p>';
@@ -1890,6 +1900,81 @@
     showModal('<h2>' + esc(name) + '</h2><p class="muted">Set the weight for her next workouts on both days. Progression continues from there.</p>' +
       '<input class="field" id="ovKg" type="number" inputmode="decimal" step="any" min="0" value="' + esc(kg) + '" aria-label="Weight in kg">' +
       '<div class="row"><button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn" data-act="saveOverride" data-ex="' + esc(ex) + '">Save weight</button></div>', true);
+  }
+
+  // ---------- the coach fixes or deletes a saved workout ----------
+  /** Opens the edit sheet for one saved workout: weight and reps per set, take a set out, move the date. */
+  function editWorkout(id) {
+    var res = calc(), n = 0, f = null;
+    res.sessions.forEach(function (x, i) { if (x.id === id) { f = x; n = i + 1; } });
+    var raw = S.state.sessions.filter(function (x) { return x.id === id; })[0];
+    if (!f || !raw) return;
+    var sets = JSON.parse(JSON.stringify(raw.sets || []));
+    S.edit = { id: id, n: n, date: raw.date, orig: raw.date, sets: sets, km: f.km, photo: !!raw.photo,
+      show: sets.map(function (x, i) { return x.done && !x.skip ? i : -1; }).filter(function (i) { return i >= 0; }),
+      before: JSON.stringify({ d: raw.date, s: sets }) };
+    editSheet();
+  }
+  /** Copies what's typed in the sheet into S.edit (before any re-render or save). */
+  function editSync() {
+    var e = S.edit;
+    if (!e) return;
+    document.querySelectorAll('#modal [data-ef]').forEach(function (el) {
+      var v = Number(String(el.value).replace(',', '.'));
+      if (!isFinite(v) || v < 0) return;
+      e.sets[+el.dataset.ei][el.dataset.ef] = el.dataset.ef === 'reps' ? Math.round(v) : Math.round(v * 100) / 100;
+    });
+    var d = document.getElementById('ewDate');
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d.value)) e.date = d.value;
+  }
+  function editSheet(msg) {
+    var e = S.edit, res = calc(), groups = [], idx = {};
+    e.show.forEach(function (i) {
+      var x = e.sets[i];
+      if (!(x.ex in idx)) { idx[x.ex] = groups.length; groups.push({ ex: x.ex, sets: [] }); }
+      groups[idx[x.ex]].sets.push(i);
+    });
+    var h = '<h2>Edit workout ' + e.n + '</h2><p class="small muted">Fix a weight or reps, take a set out, or move it to another day. ' +
+      'Her weights, goals, km and streak after it recalculate. She isn\'t emailed.</p>' +
+      '<label class="ewdate"><span>Date</span><input class="field" id="ewDate" type="date" value="' + esc(e.date) + '" min="' + esc(res.settings.startDate) +
+      '" max="' + todayStr() + '"></label>';
+    groups.forEach(function (g) {
+      var ex = res.prog.exById[g.ex], xe = E.EXTRA_BY_ID[g.ex], unit = ex ? ex.kgLabel : xe ? xe.kgLabel : 'kg';
+      h += '<div class="ewex"><div class="ewh"><b>' + esc(exName(g.ex)) + '</b>' + (xe && !ex ? '<span class="small muted">extra</span>' : '') + '</div>';
+      g.sets.forEach(function (i, k) {
+        var x = e.sets[i], on = !!x.done;
+        h += '<div class="ewset' + (on ? '' : ' off') + '"><span class="ewn">' + (k + 1) + '</span>' +
+          '<label><input type="number" inputmode="decimal" step="any" min="0" data-ei="' + i + '" data-ef="kg" value="' + esc(x.kg) + '"' + (on ? '' : ' disabled') +
+          ' aria-label="Set ' + (k + 1) + ' weight"><small>' + esc(unit) + '</small></label>' +
+          '<label><input type="number" inputmode="numeric" step="1" min="0" data-ei="' + i + '" data-ef="reps" value="' + esc(x.reps) + '"' + (on ? '' : ' disabled') +
+          ' aria-label="Set ' + (k + 1) + ' reps"><small>reps</small></label>' +
+          '<button class="ib ewx" data-act="ewToggle" data-i="' + i + '" aria-label="' + (on ? 'Take set ' + (k + 1) + ' out' : 'Put set ' + (k + 1) + ' back') + '">' +
+          (on ? '×' : '↺') + '</button></div>';
+      });
+      h += '</div>';
+    });
+    if (msg) h += '<p class="small ewmsg">' + esc(msg) + '</p>';
+    h += '<div class="row"><button class="btn ghost" data-act="closeModal">Cancel</button><button class="btn taxi" data-act="ewSave">Save changes</button></div>' +
+      '<button class="linkbtn discard" data-act="ewDelete">Delete this workout</button>';
+    showModal(h, false, true); // no keyboard or date picker popping up on open
+  }
+  function editSave() {
+    editSync();
+    var e = S.edit;
+    if (!e) return;
+    if (!e.sets.some(function (x) { return x.done && !x.skip; })) return editSheet('Every set is taken out. Put one back, or delete the workout below.');
+    if (e.date > todayStr()) return editSheet('That day hasn\'t come yet.');
+    if (JSON.stringify({ d: e.date, s: e.sets }) !== e.before) enqueue({ type: 'editSession', id: e.id, date: e.date, sets: e.sets });
+    S.edit = null;
+    closeModal();
+  }
+  function editDeleteAsk() {
+    editSync();
+    var e = S.edit, done = e.show.length;
+    showModal('<h2>Delete workout ' + e.n + '?</h2><p>' + esc(fmtLong(e.orig)) + ': ' + plural(done, 'set', 'sets') + ', +' + Math.round(e.km) + ' km. ' +
+      'Its sets, km and your reactions to it are removed, and everything after it recalculates.' + (e.photo ? ' Her photo stays in Drive.' : '') +
+      ' This can\'t be undone.</p>' +
+      '<div class="row"><button class="btn ghost" data-act="ewBack">Keep it</button><button class="btn warnbtn" data-act="ewDeleteYes">Delete</button></div>');
   }
 
   // ---------- rest timer, sound, wake lock, confetti ----------
@@ -2191,6 +2276,12 @@
         if (tx && tx.value.trim()) { enqueue({ type: 'cheer', text: tx.value.trim() }); tx.value = ''; render(); }
         break;
       }
+      case 'editW': editWorkout(t.dataset.id); break;
+      case 'ewToggle': { editSync(); var es = S.edit.sets[+t.dataset.i]; es.done = !es.done; editSheet(); break; }
+      case 'ewSave': editSave(); break;
+      case 'ewDelete': editDeleteAsk(); break;
+      case 'ewBack': editSheet(); break;
+      case 'ewDeleteYes': enqueue({ type: 'deleteSession', id: S.edit.id }); S.edit = null; closeModal(); break;
       case 'override': overrideSheet(t.dataset.ex, t.dataset.kg, t.dataset.name); break;
       case 'react': S.reactDraft = ''; reactSheet(t.dataset.id, t.dataset.n); break;
       case 'reactEmoji': { var rt = document.getElementById('reactText'); S.reactDraft = rt ? rt.value : ''; S.reactEmoji = t.dataset.v; reactSheet(S.reactFor.id, S.reactFor.n); break; }

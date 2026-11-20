@@ -564,7 +564,7 @@ var FlightCore = (function () {
 
   var ROLE_OPS = {
     athlete: ['saveSession', 'stamp', 'postcardOpened', 'postcardReply', 'cheerSeen', 'choice', 'deload', 'photo', 'reactionSeen', 'profilePhoto', 'answer', 'answerReact', 'love'],
-    coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto', 'answer', 'answerReact']
+    coach: ['cheer', 'override', 'choice', 'deload', 'react', 'profilePhoto', 'answer', 'answerReact', 'editSession', 'deleteSession']
   };
 
   function applyOp(data, op, role, nowIso) {
@@ -589,19 +589,15 @@ var FlightCore = (function () {
     }
     function append(tab, row) { data[KEY[tab]].push(row); writes.push({ tab: tab, kind: 'append', row: row }); }
 
-    if (op.type === 'saveSession') {
-      var s = op.session || {};
-      if (!s.id || !isDate(s.date) || (s.day !== 'A' && s.day !== 'B')) bad('invalid session');
-      if (s.date > FlightEngine.addDays(nowIso.slice(0, 10), 1)) bad('a workout can\'t be in the future'); // past days are fine (logged afterwards)
-      var sets = (s.sets || []).slice(0, 200).map(function (x) {
-        return { slot: clip(x.slot, 40), ex: clip(x.ex, 60), set: Number(x.set) || 0, kg: Number(x.kg) || 0,
-          reps: Number(x.reps) || 0, done: !!x.done, fb: ['easy', 'ok', 'hard'].indexOf(x.fb) >= 0 ? x.fb : '', skip: !!x.skip,
+    function cleanSets(list) {
+      return (list || []).slice(0, 200).map(function (x) {
+        return { slot: clip(x.slot, 40), ex: clip(x.ex, 60), set: Number(x.set) || 0, kg: Math.max(0, Number(x.kg) || 0),
+          reps: Math.max(0, Math.round(Number(x.reps) || 0)), done: !!x.done, fb: ['easy', 'ok', 'hard'].indexOf(x.fb) >= 0 ? x.fb : '', skip: !!x.skip,
           rir: clip(x.rir, 6), target: Number(x.target) || 0 };
       });
-      var row = { id: clip(s.id, 60), date: s.date, day: s.day, week: '', minutes: Number(s.minutes) || '',
-        effort: s.effort ? Number(s.effort) : '', note: clip(s.note, 2000), reps: '', km: '', cumKm: '', volumeKg: '',
-        upgrades: '', completed: '', savedAt: nowIso, setsJson: JSON.stringify(sets) };
-      var isNew = upsert('Sessions', 'id', row);
+    }
+    // the Sets tab is a readable log of the done sets; rewritten whenever a workout changes
+    function logSets(row, sets) {
       data.sets = data.sets.filter(function (r) { return str(r.sessionId) !== row.id; });
       writes.push({ tab: 'Sets', kind: 'deleteWhere', col: 'sessionId', value: row.id });
       sets.filter(function (x) { return x.done; }).forEach(function (x) {
@@ -609,6 +605,9 @@ var FlightCore = (function () {
           exerciseName: exById[x.ex] ? exById[x.ex].name : FlightEngine.EXTRA_BY_ID[x.ex] ? 'Extra: ' + FlightEngine.EXTRA_BY_ID[x.ex].name : x.ex, set: x.set, kg: x.kg, reps: x.reps, done: x.done,
           feedback: x.fb === 'easy' ? 'Too easy' : x.fb === 'ok' ? 'Just right' : x.fb === 'hard' ? 'Too hard' : '' });
       });
+    }
+    // replays every workout and patches the derived Sessions columns (km, cumKm, completed…) that changed
+    function recompute() {
       var result = FlightEngine.replay(toEngineInput(data));
       result.sessions.forEach(function (c) {
         var p = { week: c.week, reps: c.reps, km: c.km, cumKm: c.cumKm, volumeKg: c.volume,
@@ -620,7 +619,55 @@ var FlightCore = (function () {
         for (var k in p) if (str(cur[k]) !== str(p[k])) changed = true;
         if (changed) patch('Sessions', 'id', c.id, p);
       });
+      return result;
+    }
+    function findSession(id) {
+      var found = null;
+      data.sessions.forEach(function (r) { if (str(r.id) === str(id)) found = r; });
+      return found;
+    }
+
+    if (op.type === 'saveSession') {
+      var s = op.session || {};
+      if (!s.id || !isDate(s.date) || (s.day !== 'A' && s.day !== 'B')) bad('invalid session');
+      if (s.date > FlightEngine.addDays(nowIso.slice(0, 10), 1)) bad('a workout can\'t be in the future'); // past days are fine (logged afterwards)
+      var sets = cleanSets(s.sets);
+      var prev = findSession(clip(s.id, 60));
+      var row = { id: clip(s.id, 60), date: s.date, day: s.day, week: '', minutes: Number(s.minutes) || '',
+        effort: s.effort ? Number(s.effort) : '', note: clip(s.note, 2000), reps: '', km: '', cumKm: '', volumeKg: '',
+        upgrades: '', completed: '', savedAt: nowIso, setsJson: JSON.stringify(sets), photo: prev ? prev.photo : '' };
+      var isNew = upsert('Sessions', 'id', row);
+      logSets(row, sets);
+      var result = recompute();
       if (isNew) notify = report(data, result, row.id, !!s.retro);
+    } else if (op.type === 'editSession') {
+      // the coach fixes a saved workout: weight and reps per set, a set taken out, or the date. Everything after it recalculates.
+      var cur = findSession(op.id);
+      if (!cur) bad('no such workout');
+      var ed = op.date === undefined || op.date === '' ? str(cur.date).slice(0, 10) : str(op.date);
+      if (!isDate(ed)) bad('invalid date');
+      if (ed > FlightEngine.addDays(str(nowIso).slice(0, 10), 1)) bad('a workout can\'t be in the future');
+      var esets = cleanSets(op.sets);
+      if (!esets.some(function (x) { return x.done && !x.skip; })) bad('no sets left: delete the workout instead');
+      var erow = {};
+      for (var ek in cur) erow[ek] = cur[ek];
+      erow.id = str(cur.id); erow.date = ed; erow.setsJson = JSON.stringify(esets);
+      upsert('Sessions', 'id', erow);
+      logSets(erow, esets);
+      recompute();
+    } else if (op.type === 'deleteSession') {
+      // the coach deletes a saved workout with its sets and his reactions to it. Everything after it recalculates.
+      var did = str(op.id);
+      if (!findSession(did)) bad('no such workout');
+      data.sessions = data.sessions.filter(function (r) { return str(r.id) !== did; });
+      writes.push({ tab: 'Sessions', kind: 'deleteWhere', col: 'id', value: did });
+      data.sets = data.sets.filter(function (r) { return str(r.sessionId) !== did; });
+      writes.push({ tab: 'Sets', kind: 'deleteWhere', col: 'sessionId', value: did });
+      if (data.reactions.some(function (r) { return str(r.sessionId) === did; })) {
+        data.reactions = data.reactions.filter(function (r) { return str(r.sessionId) !== did; });
+        writes.push({ tab: 'Reactions', kind: 'deleteWhere', col: 'sessionId', value: did });
+      }
+      recompute();
     } else if (op.type === 'stamp') {
       if (!isDate(op.date) || ['ballet', 'run'].indexOf(op.stampType) < 0) bad('invalid stamp');
       var has = data.stamps.some(function (r) { return str(r.date).slice(0, 10) === op.date && r.type === op.stampType; });
