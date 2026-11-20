@@ -637,7 +637,8 @@ test('postcard captions: kept from her until the card is delivered, like the pho
   const data = newData();
   data.postcards.forEach((p, i) => { p.message = 'note ' + i; p.photo = 'https://example.com/p' + i + '.jpg'; p.caption = 'me, ' + (6 + i); });
   doSession(data, '2026-11-23');
-  const her = C.buildState(data, 'athlete', '2026-11-24').postcards, coach = C.buildState(data, 'coach', '2026-11-24').postcards;
+  doSession(data, '2026-11-27'); // the first card is at 90 km
+  const her = C.buildState(data, 'athlete', '2026-11-28').postcards, coach = C.buildState(data, 'coach', '2026-11-28').postcards;
   const got = her.filter(c => c.delivered), sealed = her.filter(c => !c.delivered);
   assert.ok(got.length >= 1 && sealed.length >= 1);
   assert.ok(got.every(c => /^me, \d+$/.test(c.caption) && c.photo));
