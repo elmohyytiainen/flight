@@ -632,3 +632,36 @@ test('saving a workout again keeps its photo link', () => {
   assert.strictEqual(data.sessions[0].photo, 'drive-file-id');
   assert.ok(out.notify);
 });
+
+test('postcard captions: kept from her until the card is delivered, like the photo', () => {
+  const data = newData();
+  data.postcards.forEach((p, i) => { p.message = 'note ' + i; p.photo = 'https://example.com/p' + i + '.jpg'; p.caption = 'me, ' + (6 + i); });
+  doSession(data, '2026-11-23');
+  doSession(data, '2026-11-27'); // the first card is at 90 km
+  const her = C.buildState(data, 'athlete', '2026-11-28').postcards, coach = C.buildState(data, 'coach', '2026-11-28').postcards;
+  const got = her.filter(c => c.delivered), sealed = her.filter(c => !c.delivered);
+  assert.ok(got.length >= 1 && sealed.length >= 1);
+  assert.ok(got.every(c => /^me, \d+$/.test(c.caption) && c.photo));
+  assert.ok(sealed.every(c => c.caption === undefined && c.photo === undefined));
+  assert.ok(coach.every(c => c.caption));
+});
+
+test('postcard covers: a card\'s own Drive link, else the default from Settings, else none (the drawn cover); numbered on the route', () => {
+  const data = newData();
+  data.postcards.forEach((p, i) => { p.message = 'note ' + i; });
+  data.postcards[0].cover = 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/view?usp=sharing';
+  const coach = () => C.buildState(data, 'coach', '2026-11-28').postcards;
+  assert.strictEqual(coach()[0].cover, 'https://drive.google.com/thumbnail?id=1AbCdEfGhIjKlMnOpQrStUvWxYz012345&sz=w1200');
+  assert.strictEqual(coach()[1].cover, '');
+  data.settings.defaultCover = 'https://drive.google.com/open?id=9ZyXwVuTsRqPoNmLkJiHgFeDcBa98765';
+  const c = coach();
+  assert.ok(c[0].cover.indexOf('1AbCd') > 0, 'its own cover wins');
+  assert.ok(c.slice(1).every(x => x.cover.indexOf('9ZyXw') > 0), 'the rest get the default');
+  assert.deepStrictEqual(c.map(x => x.no), c.map((x, i) => i + 1));
+  assert.ok(c.every(x => x.of === c.length));
+  // her: no cover until the card is delivered
+  assert.ok(C.buildState(data, 'athlete', '2026-11-28').postcards.every(x => !x.delivered && x.cover === undefined));
+  // Upgrade adds the setting to an older Sheet
+  const old = newData(); delete old.settings.defaultCover;
+  assert.ok(C.upgradePlan(old).settings.some(s => s.key === 'defaultCover' && s.add));
+});

@@ -23,7 +23,7 @@ var FlightCore = (function () {
     Sets: ['sessionId', 'date', 'day', 'slot', 'exercise', 'exerciseName', 'set', 'kg', 'reps', 'done', 'feedback'],
     Overrides: ['date', 'exercise', 'kg', 'note'],
     Stamps: ['date', 'type'],
-    Postcards: ['id', 'km', 'over', 'from', 'place', 'photo', 'message', 'openedAt', 'replyEmoji', 'replyText', 'repliedAt'],
+    Postcards: ['id', 'km', 'over', 'from', 'place', 'photo', 'message', 'openedAt', 'replyEmoji', 'replyText', 'repliedAt', 'caption', 'cover'],
     Cheers: ['id', 'createdAt', 'text', 'seenAt'],
     Reactions: ['id', 'at', 'sessionId', 'emoji', 'text', 'seenAt'],
     Questions: ['question', 'date', 'active'],
@@ -175,6 +175,7 @@ var FlightCore = (function () {
     coachKey: 'Secret key in your coach link',
     coachPhoto: 'Your profile photo (set from the coach console in the app). Small JPEG data, leave it alone',
     herPhoto: 'Her profile photo (she sets it in the app). Small JPEG data, leave it alone',
+    defaultCover: 'Cover photo for postcards that have no cover of their own: a Google Drive share link (Anyone with the link can view). Blank = the drawn cover',
     loveReportedDay: 'The last day whose hearts were in the daily love email. Set by the app, leave it alone',
     goals: 'Goal milestones: exercise id : kg (assistance for assisted lifts), optional x reps. Example: incline-db-press:20, lat-pulldown:40, back-squat:60x5'
   };
@@ -188,7 +189,7 @@ var FlightCore = (function () {
       ['dayAName', 'Workout'], ['dayBName', 'Workout'], ['startDate', '2026-11-23'], ['introWeeks', 0],
       ['trainingWeekdays', '1,5'], ['routeKm', 1697], ['kmPerRep', FlightEngine.DEFAULTS.kmPerRep],
       ['coachEmail', keys.coachEmail || ''], ['appUrl', keys.appUrl || ''],
-      ['athleteKey', keys.athleteKey], ['coachKey', keys.coachKey], ['goals', GOALS], ['programVersion', PROGRAM_VERSION]
+      ['athleteKey', keys.athleteKey], ['coachKey', keys.coachKey], ['goals', GOALS], ['programVersion', PROGRAM_VERSION], ['defaultCover', '']
     ].map(function (r) { return { key: r[0], value: r[1], note: SETTING_NOTES[r[0]] || '' }; });
   }
 
@@ -422,6 +423,7 @@ var FlightCore = (function () {
     want('introWeeks', 0, ['1']); // no test week since Nov 2026 (Hyde): only an untouched 1 changes
     want('kmPerRep', FlightEngine.DEFAULTS.kmPerRep);
     want('goals', GOALS, OLD_GOALS);
+    want('defaultCover', '');
     ['passengerName', 'layoverWeek', 'kmCruise', 'kmTailwind', 'jetPerUpgrade', 'jetCap', 'vBaseA', 'vBaseB'].forEach(function (k) {
       if (s[k] !== undefined) out.unused.push(k);
     });
@@ -529,11 +531,13 @@ var FlightCore = (function () {
       for (var i = 0; i < result.sessions.length; i++) if (result.sessions[i].cumKm >= km) return result.sessions[i].date;
       return '';
     }
-    var cards = data.postcards.slice().sort(function (a, b) { return Number(a.km) - Number(b.km); }).map(function (p) {
+    var defCover = str(data.settings.defaultCover).trim();
+    var cards = data.postcards.slice().sort(function (a, b) { return Number(a.km) - Number(b.km); }).map(function (p, i, all) {
       var km = Number(p.km), written = str(p.message).trim() !== '', delivered = written && cum >= km;
       var c = { id: str(p.id), km: km, over: str(p.over), from: str(p.from), place: str(p.place),
-        delivered: delivered, deliveredOn: delivered ? crossedOn(km) : '', openedAt: str(p.openedAt) };
-      if (delivered || role === 'coach') { c.message = str(p.message); c.photo = photoUrl(p.photo); }
+        delivered: delivered, deliveredOn: delivered ? crossedOn(km) : '', openedAt: str(p.openedAt), no: i + 1, of: all.length };
+      if (delivered || role === 'coach') { c.message = str(p.message); c.photo = photoUrl(p.photo); c.caption = clip(p.caption, 60).trim();
+        c.cover = photoUrl(str(p.cover).trim() || defCover); } // own cover, else the default from Settings, else the drawn one
       if (delivered) { c.replyEmoji = str(p.replyEmoji); c.replyText = str(p.replyText); c.repliedAt = str(p.repliedAt); }
       if (role === 'coach') c.written = written;
       c._photo = p.photo;
