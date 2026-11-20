@@ -313,10 +313,6 @@ textarea { width: 100%; min-height: 84px; border-radius: 14px; border: 0; backgr
 .pc-front .cap { position: absolute; left: 16px; right: 16px; bottom: 12px; font-family: var(--display); font-weight: 700; font-size: 30px; line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,.5); }
 .pc-front .cap small { display: block; font-family: var(--text); font-size: 14px; font-weight: 500; margin-bottom: 4px; }
 .pc-back { transform: rotateY(180deg); background: #FFFDF8; color: #1B264F; padding: 12px; }
-.pc-back::before {
-  content: ""; position: absolute; inset: 0; border: 7px solid transparent; border-radius: 12px;
-  border-image: repeating-linear-gradient(-45deg, var(--mail-red) 0 12px, #FFFDF8 12px 18px, var(--mail-blue) 18px 30px, #FFFDF8 30px 36px) 7;
-}
 .pc-back .inner { position: absolute; inset: 14px; display: grid; grid-template-columns: 1fr 34%; gap: 10px; }
 .pc-back .msg { font-family: var(--hand); font-size: clamp(18px, 5.4vw, 25px); line-height: 1.12; overflow: auto; padding-right: 6px; border-right: 1.5px solid #d9d2c3; white-space: pre-wrap; }
 .pc-back .side { position: relative; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; }
@@ -736,7 +732,6 @@ h3.withav { display: flex; }
 .pcr-sent b { color: var(--ink-2); }
 .pcr-sent .linkbtn { color: var(--ink-2); }
 .pcr-none, .pcr-ok { color: var(--ink-2); }
-.pc-back::before { border-image: repeating-linear-gradient(-45deg, var(--pink) 0 12px, #FFFFFF 12px 18px, var(--taxi) 18px 30px, #FFFFFF 30px 36px) 7; }
 
 /* ---------- extra exercises ---------- */
 .addx { margin-top: 4px; }
@@ -843,8 +838,8 @@ body.hasfab #app { padding-bottom: calc(150px + var(--safe-b)); }
 /* postcards: the photo is a polaroid taped inside the back of the card */
 .postcard-modal { position: relative; }
 .pc-back .inner.haspol .msg { font-size: clamp(16px, 4.6vw, 22px); }
-.pol-spacer { float: right; width: 0; height: calc(100% - 132px); }
-.pol { float: right; clear: right; position: relative; width: clamp(84px, 26vw, 112px); margin: 8px -2px 0 8px; padding: 5px 5px 0; border: 0; border-radius: 2px;
+.pol-spacer { float: right; width: 0; height: calc(100% - 128px); }
+.pol { float: right; clear: right; position: relative; width: clamp(88px, 26vw, 116px); margin: 8px -2px 0 8px; padding: 5px 5px 0; border: 0; border-radius: 2px;
   background: #fff; box-shadow: 0 3px 10px rgba(28, 35, 64, .28); transform: rotate(-6deg); font: inherit; color: var(--ink); cursor: zoom-in; white-space: normal; }
 .pol .tape { position: absolute; top: -7px; left: 50%; width: 40px; height: 13px; margin-left: -20px; background: rgba(242, 92, 135, .38); transform: rotate(5deg); }
 .pol-ph { display: block; aspect-ratio: 1; overflow: hidden; background: #46443e; }
@@ -865,3 +860,19 @@ body.hasfab #app { padding-bottom: calc(150px + var(--safe-b)); }
 @media (prefers-reduced-motion: reduce) {
   .pol.undev.dev .pol-ph img, .pol-big, .pol.pol-l { transition: none; }
 }
+
+/* postcards, minimal back: no air-mail stripes, more room for the message and the polaroid */
+.pc-back { padding: 0; box-shadow: 0 22px 44px -22px rgba(64, 84, 229, .55), inset 0 0 0 1px var(--line); }
+.pc-back .inner { inset: 12px 12px 10px 14px; grid-template-columns: 1fr 29%; gap: 12px; }
+.pc-back .msg { padding-right: 10px; }
+.pc-back .stamp { width: 48px; height: 58px; }
+.pc-back .postmark { top: 30px; right: 30px; width: 70px; height: 70px; }
+.pc-back .addr { font-size: 16px; }
+
+/* postcards, cover photo on the front: one old-postcard look for every photo */
+.cvimg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: sepia(.22) saturate(.85) contrast(.96) brightness(1.04); }
+.cvtone { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(28, 35, 64, .4), rgba(28, 35, 64, 0) 34%, rgba(28, 35, 64, 0) 58%, rgba(28, 35, 64, .55)); }
+.pc-front.photo::after { content: ""; position: absolute; inset: 0; border: 6px solid #fff; border-radius: 12px; pointer-events: none; }
+.pc-front .greet { position: absolute; left: 16px; top: 10px; font-family: var(--hand); font-size: clamp(20px, 6vw, 26px); text-shadow: 0 1px 8px rgba(0, 0, 0, .45); }
+.pc-front .cvno { position: absolute; right: 16px; bottom: 14px; font-size: 11px; font-weight: 500; opacity: .9; text-shadow: 0 1px 4px rgba(0, 0, 0, .5); }
+.thumb .cvimg + .cvtone { background: linear-gradient(180deg, rgba(28, 35, 64, 0) 50%, rgba(28, 35, 64, .55)); }

@@ -11,7 +11,7 @@
  */
 
 var DATE_COLS = { Sessions: ['id', 'date', 'savedAt'], Sets: ['sessionId', 'date'], Overrides: ['date'], Stamps: ['date'],
-  Postcards: ['id', 'openedAt', 'caption'], Cheers: ['id', 'createdAt', 'seenAt'], Settings: ['value'], Choices: ['at'],
+  Postcards: ['id', 'openedAt', 'caption', 'cover'], Cheers: ['id', 'createdAt', 'seenAt'], Settings: ['value'], Choices: ['at'],
   Reactions: ['id', 'at', 'sessionId', 'seenAt'], Questions: ['date'], Answers: ['date', 'at'], AnswerReactions: ['date', 'at'], Love: ['id', 'date', 'at'] };
 
 // ---------- one-time setup ----------

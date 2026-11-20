@@ -133,6 +133,8 @@
         if (i !== 1) c.photo = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 30"><rect width="40" height="30" fill="#8CC3E8"/><rect y="17" width="40" height="13" fill="#2F6E9E"/><rect y="24" width="40" height="6" fill="#E9D6A8"/><circle cx="30" cy="7" r="4" fill="#FFD66B"/><rect x="13" y="13" width="5" height="11" rx="2" fill="#D9534F"/><circle cx="15.5" cy="11" r="2.6" fill="#F2C9A8"/></svg>');
       });
       data.postcards[0].caption = 'me, 6, Helaraitti';
+      data.postcards[0].cover = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200"><rect width="300" height="200" fill="#9CC9EC"/><rect y="120" width="300" height="80" fill="#3E7DB0"/><rect x="40" y="70" width="70" height="60" fill="#B5543A"/><rect x="120" y="50" width="50" height="80" fill="#C9653F"/><rect x="180" y="80" width="90" height="50" fill="#A84A33"/><rect x="138" y="20" width="12" height="40" fill="#7A3324"/><circle cx="250" cy="35" r="16" fill="#FFE08A"/></svg>');
+      data.settings.defaultCover = '';
       data.postcards[2].caption = 'summer cottage, 1999';
       var rnd = 7;
       function r() { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; }
@@ -827,7 +829,7 @@
     var cards = S.state.postcards, got = cards.filter(function (c) { return c.delivered; });
     var h = '<div class="section-h"><h2>Postcard box</h2><span class="small muted">' + got.length + ' of ' + cards.length + '</span></div><div class="box">';
     cards.forEach(function (c) {
-      if (c.delivered) h += '<button class="thumb" data-act="postcard" data-id="' + esc(c.id) + '">' + frontArt(c, true) + '<span>' + esc(c.place) + '</span>' +
+      if (c.delivered) h += '<button class="thumb" data-act="postcard" data-id="' + esc(c.id) + '">' + coverHTML(c, true) + '<span>' + esc(c.place) + '</span>' +
         (c.replyEmoji || c.replyText ? '<i class="rbadge" aria-label="Replied">' + esc(c.replyEmoji || '💬') + '</i>' : '') + '</button>';
       else h += '<div class="thumb sealed">Sealed ;)<br>' + km(c.km) + ' km</div>';
     });
@@ -1573,6 +1575,10 @@
   }
 
   // ---------- postcards ----------
+  /** The card's front: its cover photo (own, or the default from Settings) with the postcard tone, else the drawn place art. */
+  function coverHTML(c, small) {
+    return c.cover ? '<img class="cvimg" src="' + esc(c.cover) + '" alt="" loading="lazy"><i class="cvtone" aria-hidden="true"></i>' : frontArt(c, small);
+  }
   function frontArt(c, small) {
     var big = (c.from || 'Tampere');
     return '<svg class="ill" viewBox="0 0 300 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">' +
@@ -1622,8 +1628,10 @@
     var pol = c.photo ? '<span class="pol-spacer" aria-hidden="true"></span><button class="pol' + dev + '" data-act="polaroid" aria-label="See the photo' + (c.caption ? ': ' + esc(c.caption) : '') + '">' +
       '<i class="tape" aria-hidden="true"></i><span class="pol-ph"><img src="' + esc(c.photo) + '" alt=""></span><span class="pol-cap">' + esc(c.caption || '') + '</span></button>' : '';
     var h = '<div class="postcard-modal"><div class="pc-wrap"><div class="pc" id="pc" data-act="flip" role="button" tabindex="0" aria-label="Postcard, tap to turn over">' +
-      '<div class="pc-face pc-front">' + frontArt(c) +
-      '<div class="cap"><small>Greetings from ' + esc(c.from) + '</small>' + esc(c.place) + '</div></div>' +
+      '<div class="pc-face pc-front' + (c.cover ? ' photo' : '') + '">' + coverHTML(c) +
+      (c.cover ? '<div class="greet">Greetings from ' + esc(c.from) + '</div><div class="cap">' + esc(c.place) + '</div>'
+        : '<div class="cap"><small>Greetings from ' + esc(c.from) + '</small>' + esc(c.place) + '</div>') +
+      (c.no ? '<span class="cvno">No. ' + c.no + ' / ' + c.of + '</span>' : '') + '</div>' +
       '<div class="pc-face pc-back"><div class="inner' + (c.photo ? ' haspol' : '') + '"><div class="msg">' + pol + esc(c.message || '') + '</div><div class="side">' + stampSVG() + postmarkSVG(c.from, c.deliveredOn) +
       '<div class="addr">To ' + esc(name) + ',<br>from ' + esc(c.over) + '</div></div></div></div></div></div>' +
       '<p class="pc-hint" id="pcHint">' + (c.photo ? 'Turn it over, something\'s inside ;)' : 'Tap the card to turn it over') + '</p>' + (c.delivered ? '<div class="pcreply" id="pcReply">' + pcReplyHTML(c, false) + '</div>' : '') +
