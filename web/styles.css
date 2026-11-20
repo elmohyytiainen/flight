@@ -887,3 +887,13 @@ body.hasfab #app { padding-bottom: calc(150px + var(--safe-b)); }
 @media (prefers-reduced-motion: reduce) { .lovefab { transition: none; } }
 .lovetoast.two { text-align: center; border-radius: 18px; padding: 8px 16px; }
 .lovetoast.two small { display: block; font-size: 12px; font-weight: 500; color: var(--ink-2); margin-top: 1px; }
+
+/* one-time hints: the photo nudge on the avatar; the pink hints reuse .mainnote */
+.avbtn { position: relative; }
+.avbtn.nudge .av { box-shadow: 0 0 0 2.5px #fff, 0 0 0 5px var(--pink); }
+.phint { position: absolute; top: calc(100% + 6px); right: -2px; z-index: 5; white-space: nowrap; font-size: 12px; font-weight: 600;
+  color: #fff; background: var(--pink); padding: 4px 9px; border-radius: 999px; box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--pink) 70%, transparent); }
+.phint::before { content: ""; position: absolute; top: -4px; right: 18px; width: 8px; height: 8px; background: var(--pink); transform: rotate(45deg); }
+.mainnote.hint { margin: 10px 0; }
+.top { position: relative; z-index: 6; } /* the photo tag sits over the hero card */
+.flightview > .mainnote.hint { margin: 2px 18px 10px; }

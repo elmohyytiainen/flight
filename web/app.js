@@ -252,6 +252,9 @@
       var s = op.session;
       st.sessions = st.sessions.filter(function (x) { return x.id !== s.id; });
       st.sessions.push({ id: s.id, date: s.date, day: s.day, minutes: s.minutes, effort: s.effort, note: s.note, savedAt: nowIso(), sets: s.sets });
+    } else if (op.type === 'seen') {
+      st.seen = st.seen || {};
+      for (var sk in op.set) st.seen[sk] = op.set[sk];
     } else if (op.type === 'editSession') {
       st.sessions.forEach(function (x) { if (x.id === op.id) { if (op.date) x.date = op.date; x.sets = op.sets; } });
     } else if (op.type === 'deleteSession') {
@@ -300,6 +303,27 @@
     S.state = st;
     S.queue.forEach(localApply); // keep unsent changes visible
     store.set('state', S.state);
+    syncSeen();
+  }
+
+  // ---------- seen hints and banners: kept in the Sheet per role (Settings herSeen / coachSeen) ----------
+  // pc:, re:, ch: are only quick local marks: the Sheet already has openedAt / seenAt for postcards, reactions and cheers.
+  function localOnly(k) { return /^(pc|re|ch):/.test(k); }
+  /** S.seen = the Sheet's list plus this phone's quick local marks. */
+  function syncSeen() {
+    var m = {}, k, srv = (S.state && S.state.seen) || {};
+    for (k in S.seen) if (localOnly(k)) m[k] = S.seen[k];
+    for (k in srv) m[k] = srv[k];
+    S.seen = m;
+    store.set('seen', S.seen);
+  }
+  /** Marks a hint or banner as seen: at once on this phone, and in the Sheet (unless the Sheet tracks it already). */
+  function markSeen(k, v) {
+    S.seen[k] = v === undefined ? 1 : v;
+    store.set('seen', S.seen);
+    if (localOnly(k)) return;
+    var set = {}; set[k] = S.seen[k];
+    enqueue({ type: 'seen', set: set });
   }
 
   function enqueue(op) {
@@ -505,10 +529,21 @@
   }
 
   // ---------- small pieces ----------
+  /** A quiet pink one-time hint with an ×; `key` is remembered in the Sheet once closed or once she uses what it points to. */
+  function hintHTML(key, inner) {
+    if (S.seen[key]) return '';
+    return '<div class="mainnote hint"><span class="bang" aria-hidden="true">!</span><p>' + inner + '</p>' +
+      '<button class="mnx" data-act="hintHide" data-k="' + key + '" aria-label="Hide this hint">' + IC.close + '</button></div>';
+  }
+  /** Marks a hint as done when she uses the thing it points to. */
+  function hintUsed(key) { if (!S.seen[key]) markSeen(key); }
   function topHTML(title, sub) {
     var me = role() === 'coach' ? 'coach' : 'her';
+    // no photo yet: a pink ring and a small tag until she opens the photo sheet once
+    var nudge = !S.state.settings[me === 'coach' ? 'coachPhoto' : 'herPhoto'] && !S.seen.photohint;
     return '<header class="top"><div class="who"><h1>' + esc(title) + '</h1><div class="small muted">' + esc(sub) + '</div></div>' +
-      '<div class="topr">' + syncHTML() + '<button class="avbtn" data-act="profile" aria-label="Your profile photo">' + avatarHTML(me, 'av-44') + '</button></div></header>';
+      '<div class="topr">' + syncHTML() + '<button class="avbtn' + (nudge ? ' nudge' : '') + '" data-act="profile" aria-label="Your profile photo">' + avatarHTML(me, 'av-44') +
+      (nudge ? '<span class="phint">Add your photo :)</span>' : '') + '</button></div></header>';
   }
 
   // ---------- two answers ----------
@@ -546,7 +581,8 @@
         '<button class="btn taxi wide" data-act="qaSend" data-date="' + q.date + '" data-ta="' + id + '"' + (inSheet ? ' data-sheet="1"' : '') + '>Answer</button>';
     } else {
       h += qaRow(me, 'You', q.mine || '…', { bubble: q.mineReaction });
-      h += q.theirs ? qaRow(o.who, o.name, q.theirs, { bubble: q.theirsReaction, react: q.date, open: S.qaPick === q.date, sheet: inSheet })
+      h += q.theirs ? qaRow(o.who, o.name, q.theirs, { bubble: q.theirsReaction, react: q.date, open: S.qaPick === q.date, sheet: inSheet }) +
+          (!inSheet && !q.theirsReaction ? hintHTML('qahint', 'Tap <b>🙂+</b> on ' + esc(o.name) + '\'s answer to react ;)') : '')
         : '<div class="qwait">' + avatarHTML(o.who, 'av-24') + (q.theirsAnswered ? 'Revealing…' : 'Waiting for ' + esc(o.name) + '. You\'ll see both answers once you both have.') + '</div>';
     }
     return h;
@@ -1008,6 +1044,7 @@
     });
     h += '</div>' + (d.retro ? '<span class="clock retro">' + esc(fmtDate(d.date)) + '</span>' : '<span class="clock" id="clock">' + elapsed() + '</span>') + '</div>';
     if (d.retro) h += '<div class="retronote">Logging a workout for <b>' + esc(fmtLong(d.date)) + '</b>. Just fill in what you did, no rest timer :)</div>';
+    else h += hintHTML('flighthint', 'Machine busy? Tap <b>Do this later</b>. Want more? <b>+ Add an exercise</b> at the bottom :)');
 
     h += '<div class="strip">' + routeBar(d.retro ? pv.result.cumKm : c.cumKm, st.routeKm) + '<div class="striptext"><span><b>+' + kgFmt(c.km) + ' km</b> this workout, ' + (c.reps - (c.extraReps || 0)) + ' reps' +
       (c.extraReps ? ' + ' + c.extraReps + ' extra' : '') + '</span></div></div>';
@@ -1177,7 +1214,9 @@
   function viewLog() {
     var res = calc(), st = res.settings, ws = weekStats(res);
     var h = '<div class="screen">' + topHTML('Progress', plural(res.completedCount, 'workout', 'workouts') + ' so far');
-    h += streakHTML(res) + calendarHTML(res);
+    h += streakHTML(res);
+    if (role() === 'athlete') h += hintHTML('calhint', 'Tap a day to add <b>ballet</b> or a <b>run</b>, log a workout you forgot, or fix one :)');
+    h += calendarHTML(res);
     h += strengthSummary(res);
     h += '<div class="pcards">' + progressCard(res, 'Legs', 'legs') + progressCard(res, 'Push', 'chest') + progressCard(res, 'Pull', 'lats') + '</div>';
     var ms = res.milestones.slice().reverse();
@@ -1387,7 +1426,7 @@
     if (!L || role() !== 'coach' || S.view !== 'coach') return;
     var seen = Number(S.seen.love || 0);
     if (L.total <= seen) return;
-    S.seen.love = L.total; store.set('seen', S.seen);
+    markSeen('love', L.total);
     var card = document.getElementById('lovecard');
     if (card) floatHearts(card, Math.min(12, (L.total - seen) * 2 + 2));
   }
@@ -1438,7 +1477,7 @@
   /** The first heart from the labelled pill folds it into the round heart, for good on this phone. */
   function foldLoveLabel(el) {
     if (S.seen.lovelabel) return;
-    S.seen.lovelabel = 1; store.set('seen', S.seen);
+    markSeen('lovelabel');
     if (!el || !el.classList.contains('lbl')) return;
     el.style.width = el.offsetWidth + 'px';
     el.classList.remove('lbl'); el.classList.add('folding');
@@ -1449,7 +1488,7 @@
   function sendLove(el, size) {
     if (el && el.id === 'lovefab') foldLoveLabel(el);
     var tips = Number(S.seen.loveTips) || 0, tip = size === 1 && tips < 3; // her first few taps: tell her about holding
-    if (size > 1 || tip) { S.seen.loveTips = size > 1 ? 3 : tips + 1; store.set('seen', S.seen); }
+    if (size > 1 || tip) markSeen('loveTips', size > 1 ? 3 : tips + 1);
     enqueue({ type: 'love', id: 'l' + Date.now().toString(36) + uid(), date: todayStr(), size: size });
     var total = S.state && S.state.love ? S.state.love.total : 0;
     buzz(size > 1 ? 18 : 10);
@@ -1484,6 +1523,7 @@
       document.body.appendChild(b);
     }
     if (b) b.hidden = !show;
+    if (b && !b.classList.contains('folding')) b.classList.toggle('lbl', !S.seen.lovelabel); // the Sheet may know she already sent one
     document.body.classList.toggle('hasfab', show);
   }
   // hold the heart to make it bigger: tap = 1, held 0.6 s = big, held 1.5 s = huge
@@ -1658,8 +1698,7 @@
     S.pcId = c.id; S.pcEmoji = c.replyEmoji || '';
     showModal(h, true);
     if (role() === 'athlete' && !c.openedAt && !S.seen['pc:' + c.id]) {
-      S.seen['pc:' + c.id] = 1;
-      store.set('seen', S.seen);
+      markSeen('pc:' + c.id);
       enqueue({ type: 'postcardOpened', id: c.id });
     }
   }
@@ -1673,7 +1712,7 @@
     var undev = t.querySelector('.pol.undev');
     if (undev && t.classList.contains('flipped') && !undev.classList.contains('dev')) {
       setTimeout(function () { undev.classList.add('dev'); }, 650); // once the card has turned
-      S.seen['dev:' + S.pcId] = 1; store.set('seen', S.seen);
+      markSeen('dev:' + S.pcId);
     }
   }
 
@@ -2200,8 +2239,9 @@
         store.set('draft', d); render(); break;
       }
       case 'overview': overview(); break;
-      case 'mainnoteHide': S.seen.mainnote = 1; store.set('seen', S.seen); render(); break;
-      case 'addExtra': S.xPick = null; S.xQuery = ''; extraSheet(); break;
+      case 'mainnoteHide': markSeen('mainnote'); render(); break;
+      case 'hintHide': markSeen(t.dataset.k); render(); break;
+      case 'addExtra': hintUsed('flighthint'); S.xPick = null; S.xQuery = ''; extraSheet(); break;
       case 'xPick': {
         var lx = lastExtra(t.dataset.id);
         S.xPick = { id: t.dataset.id, sets: lx ? Math.min(6, lx.sets) : 3, reps: lx ? lx.reps : 10 };
@@ -2221,8 +2261,8 @@
       case 'unskipBlock': d.sets.forEach(function (o) { if (d.blocks[+t.dataset.i].slots.indexOf(o.slot) >= 0) o.skip = false; }); store.set('draft', d); overview(); render(); break;
       case 'viewBlock': d.view = +t.dataset.i; store.set('draft', d); closeModal(); window.scrollTo(0, 0); break;
       case 'toCurrent': d.view = null; store.set('draft', d); render(); break;
-      case 'doNow': doNow(+t.dataset.i); closeModal(); window.scrollTo(0, 0); break;
-      case 'doLater': doLater(+t.dataset.i); render(); window.scrollTo(0, 0); break;
+      case 'doNow': hintUsed('flighthint'); doNow(+t.dataset.i); closeModal(); window.scrollTo(0, 0); break;
+      case 'doLater': hintUsed('flighthint'); doLater(+t.dataset.i); render(); window.scrollTo(0, 0); break;
       case 'lastRound': {
         var nx = nextStep(d), firstAcc = -1;
         d.blocks.forEach(function (b, bi) { if (firstAcc < 0 && b.paired && d.sets.some(function (o) { return b.slots.indexOf(o.slot) >= 0 && open(o); })) firstAcc = bi; });
@@ -2267,14 +2307,14 @@
       }
       case 'polClose': { var pb = document.getElementById('polBig'); if (pb) pb.remove(); break; }
       case 'closeModal': closeModal(); break;
-      case 'cheerSeen': S.seen['ch:' + t.dataset.id] = 1; store.set('seen', S.seen); enqueue({ type: 'cheerSeen', id: t.dataset.id }); render(); break;
+      case 'cheerSeen': markSeen('ch:' + t.dataset.id); enqueue({ type: 'cheerSeen', id: t.dataset.id }); render(); break;
       case 'deload': enqueue({ type: 'deload', date: todayStr() }); render(); break;
-      case 'fatigueLater': S.seen['fat:' + t.dataset.id] = 1; store.set('seen', S.seen); render(); break;
-      case 'day': daySheet(t.dataset.date); break;
+      case 'fatigueLater': markSeen('fat:' + t.dataset.id); render(); break;
+      case 'day': if (role() === 'athlete') hintUsed('calhint'); daySheet(t.dataset.date); break;
       case 'mapToggle': S.mapOpen = !S.mapOpen; render(); break;
-      case 'profile': profileSheet(); break;
+      case 'profile': hintUsed('photohint'); profileSheet(); break;
       case 'qaPast': S.qaPick = null; qaPastSheet(); break;
-      case 'qaPick': S.qaPick = S.qaPick === t.dataset.date ? null : t.dataset.date; if (t.dataset.sheet) qaPastSheet(); else render(); break;
+      case 'qaPick': hintUsed('qahint'); S.qaPick = S.qaPick === t.dataset.date ? null : t.dataset.date; if (t.dataset.sheet) qaPastSheet(); else render(); break;
       case 'qaReact': {
         var qd = (S.state.twoAnswers || []).filter(function (x) { return x.date === t.dataset.date; })[0];
         var qe = qd && qd.theirsReaction === t.dataset.emoji ? '' : t.dataset.emoji; // the same one again takes it away
@@ -2346,7 +2386,7 @@
         if (S.reactEmoji || tx2.trim()) enqueue({ type: 'react', sessionId: S.reactFor.id, emoji: S.reactEmoji, text: tx2.trim() });
         S.reactDraft = ''; closeModal(); break;
       }
-      case 'reactionSeen': S.seen['re:' + t.dataset.id] = 1; store.set('seen', S.seen); enqueue({ type: 'reactionSeen', id: t.dataset.id }); render(); break;
+      case 'reactionSeen': markSeen('re:' + t.dataset.id); enqueue({ type: 'reactionSeen', id: t.dataset.id }); render(); break;
       case 'saveOverride': {
         var v = Number(document.getElementById('ovKg').value);
         if (isFinite(v) && v >= 0) enqueue({ type: 'override', ex: t.dataset.ex, kg: v });
@@ -2451,6 +2491,13 @@
   if (S.draft && !S.draft.blocks) { S.draft = null; store.del('draft'); } // a draft from the old version
   if (S.draft) S.view = S.draft.finishedAt ? 'landing' : 'flight';
   render();
+  // once per phone: hand the marks this phone already had over to the Sheet, so nothing shows up again
+  if ((DEMO || KEY) && !store.get('seenMoved', false)) {
+    var moved = {}, mk, mn = 0;
+    for (mk in S.seen) if (!localOnly(mk)) { moved[mk] = S.seen[mk]; mn++; }
+    if (mn) enqueue({ type: 'seen', set: moved });
+    store.set('seenMoved', true);
+  }
   if (DEMO || KEY) flush();
   window.FlightApp = { S: S, render: render };
 })();

@@ -665,3 +665,17 @@ test('postcard covers: a card\'s own Drive link, else the default from Settings,
   const old = newData(); delete old.settings.defaultCover;
   assert.ok(C.upgradePlan(old).settings.some(s => s.key === 'defaultCover' && s.add));
 });
+
+test('seen hints are kept in the Sheet per role, merged, and each sees only their own', () => {
+  const data = newData();
+  const her = set => C.applyOp(data, { type: 'seen', set }, 'athlete', '2026-11-28T10:00:00Z');
+  const out = her({ lovelabel: 1, loveTips: 2 });
+  assert.ok(out.writes.some(w => w.kind === 'setting' && w.key === 'herSeen'));
+  her({ loveTips: 3, 'dev:p1': 1 });
+  C.applyOp(data, { type: 'seen', set: { love: 42 } }, 'coach', '2026-11-28T10:00:00Z');
+  assert.deepStrictEqual(C.buildState(data, 'athlete', '2026-11-28').seen, { lovelabel: 1, loveTips: 3, 'dev:p1': 1 });
+  assert.deepStrictEqual(C.buildState(data, 'coach', '2026-11-28').seen, { love: 42 });
+  assert.strictEqual(C.buildState(data, 'athlete', '2026-11-28').settings.herSeen, undefined, 'not sent as a setting');
+  assert.throws(() => her({ 'bad key!': 1 }), /invalid seen/);
+  assert.throws(() => her({ ok: { nested: true } }), /invalid seen/);
+});
