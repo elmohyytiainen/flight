@@ -632,3 +632,15 @@ test('saving a workout again keeps its photo link', () => {
   assert.strictEqual(data.sessions[0].photo, 'drive-file-id');
   assert.ok(out.notify);
 });
+
+test('postcard captions: kept from her until the card is delivered, like the photo', () => {
+  const data = newData();
+  data.postcards.forEach((p, i) => { p.message = 'note ' + i; p.photo = 'https://example.com/p' + i + '.jpg'; p.caption = 'me, ' + (6 + i); });
+  doSession(data, '2026-11-23');
+  const her = C.buildState(data, 'athlete', '2026-11-24').postcards, coach = C.buildState(data, 'coach', '2026-11-24').postcards;
+  const got = her.filter(c => c.delivered), sealed = her.filter(c => !c.delivered);
+  assert.ok(got.length >= 1 && sealed.length >= 1);
+  assert.ok(got.every(c => /^me, \d+$/.test(c.caption) && c.photo));
+  assert.ok(sealed.every(c => c.caption === undefined && c.photo === undefined));
+  assert.ok(coach.every(c => c.caption));
+});

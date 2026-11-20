@@ -839,3 +839,29 @@ body.hasfab #app { padding-bottom: calc(150px + var(--safe-b)); }
 .ewset.off .ewn { opacity: .35; }
 .ewx { font-size: 20px; line-height: 1; color: var(--ink-2); }
 .ewmsg { color: var(--warn); margin: 12px 0 0; }
+
+/* postcards: the photo is a polaroid taped inside the back of the card */
+.postcard-modal { position: relative; }
+.pc-back .inner.haspol .msg { font-size: clamp(16px, 4.6vw, 22px); }
+.pol-spacer { float: right; width: 0; height: calc(100% - 132px); }
+.pol { float: right; clear: right; position: relative; width: clamp(84px, 26vw, 112px); margin: 8px -2px 0 8px; padding: 5px 5px 0; border: 0; border-radius: 2px;
+  background: #fff; box-shadow: 0 3px 10px rgba(28, 35, 64, .28); transform: rotate(-6deg); font: inherit; color: var(--ink); cursor: zoom-in; white-space: normal; }
+.pol .tape { position: absolute; top: -7px; left: 50%; width: 40px; height: 13px; margin-left: -20px; background: rgba(242, 92, 135, .38); transform: rotate(5deg); }
+.pol-ph { display: block; aspect-ratio: 1; overflow: hidden; background: #46443e; }
+.pol-ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pol-cap { display: block; min-height: 20px; padding: 3px 0 4px; font-family: var(--hand); font-size: 14px; line-height: 1.1; text-align: center; color: var(--ink); }
+/* developing: dark film first, the picture fades in after the first turn */
+.pol.undev .pol-ph img { opacity: 0; filter: sepia(.9) contrast(.55) brightness(1.35); }
+.pol.undev.dev .pol-ph img { opacity: 1; filter: none; transition: opacity 3.2s ease-in, filter 4.8s ease-out; }
+.pol-big { position: absolute; inset: -8px; z-index: 5; display: flex; justify-content: center; align-items: flex-start; padding-top: 12px;
+  background: rgba(28, 35, 64, .38); border-radius: 16px; opacity: 0; transition: opacity .25s; cursor: zoom-out; }
+.pol-big.on { opacity: 1; }
+.pol.pol-l { float: none; margin: 0; width: min(80vw, 360px); padding: 12px 12px 0; transform: rotate(-2deg) scale(.88); transition: transform .3s cubic-bezier(.2,.7,.2,1); cursor: zoom-out; }
+.pol-big.on .pol-l { transform: rotate(-2deg) scale(1); }
+.pol.pol-l .tape { width: 70px; height: 20px; margin-left: -35px; top: -10px; }
+.pol.pol-l .pol-cap { font-size: 24px; min-height: 30px; padding: 10px 0 14px; }
+.teaser-pol { flex: none; width: 40px; padding: 4px 4px 11px; background: #fff; border-radius: 2px; box-shadow: 0 2px 6px rgba(28, 35, 64, .25); transform: rotate(-6deg); }
+.teaser-pol i { display: block; aspect-ratio: 1; background: #46443e; }
+@media (prefers-reduced-motion: reduce) {
+  .pol.undev.dev .pol-ph img, .pol-big, .pol.pol-l { transition: none; }
+}

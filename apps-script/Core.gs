@@ -23,7 +23,7 @@ var FlightCore = (function () {
     Sets: ['sessionId', 'date', 'day', 'slot', 'exercise', 'exerciseName', 'set', 'kg', 'reps', 'done', 'feedback'],
     Overrides: ['date', 'exercise', 'kg', 'note'],
     Stamps: ['date', 'type'],
-    Postcards: ['id', 'km', 'over', 'from', 'place', 'photo', 'message', 'openedAt', 'replyEmoji', 'replyText', 'repliedAt'],
+    Postcards: ['id', 'km', 'over', 'from', 'place', 'photo', 'message', 'openedAt', 'replyEmoji', 'replyText', 'repliedAt', 'caption'],
     Cheers: ['id', 'createdAt', 'text', 'seenAt'],
     Reactions: ['id', 'at', 'sessionId', 'emoji', 'text', 'seenAt'],
     Questions: ['question', 'date', 'active'],
@@ -533,7 +533,7 @@ var FlightCore = (function () {
       var km = Number(p.km), written = str(p.message).trim() !== '', delivered = written && cum >= km;
       var c = { id: str(p.id), km: km, over: str(p.over), from: str(p.from), place: str(p.place),
         delivered: delivered, deliveredOn: delivered ? crossedOn(km) : '', openedAt: str(p.openedAt) };
-      if (delivered || role === 'coach') { c.message = str(p.message); c.photo = photoUrl(p.photo); }
+      if (delivered || role === 'coach') { c.message = str(p.message); c.photo = photoUrl(p.photo); c.caption = clip(p.caption, 60).trim(); }
       if (delivered) { c.replyEmoji = str(p.replyEmoji); c.replyText = str(p.replyText); c.repliedAt = str(p.repliedAt); }
       if (role === 'coach') c.written = written;
       c._photo = p.photo;

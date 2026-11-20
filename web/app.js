@@ -130,8 +130,10 @@
       data.postcards[2].message = 'Example note. This is where a childhood photo from here goes :)';
       // a stand-in "photo" so the demo shows the blurred teaser of the next card
       data.postcards.forEach(function (c, i) {
-        if (i >= 3) c.photo = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 30"><rect width="40" height="30" fill="#8CC3E8"/><rect y="17" width="40" height="13" fill="#2F6E9E"/><rect y="24" width="40" height="6" fill="#E9D6A8"/><circle cx="30" cy="7" r="4" fill="#FFD66B"/><rect x="13" y="13" width="5" height="11" rx="2" fill="#D9534F"/><circle cx="15.5" cy="11" r="2.6" fill="#F2C9A8"/></svg>');
+        if (i !== 1) c.photo = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 30"><rect width="40" height="30" fill="#8CC3E8"/><rect y="17" width="40" height="13" fill="#2F6E9E"/><rect y="24" width="40" height="6" fill="#E9D6A8"/><circle cx="30" cy="7" r="4" fill="#FFD66B"/><rect x="13" y="13" width="5" height="11" rx="2" fill="#D9534F"/><circle cx="15.5" cy="11" r="2.6" fill="#F2C9A8"/></svg>');
       });
+      data.postcards[0].caption = 'me, 6, Helaraitti';
+      data.postcards[2].caption = 'summer cottage, 1999';
       var rnd = 7;
       function r() { rnd = (rnd * 16807) % 2147483647; return rnd / 2147483647; }
       var n = 0;
@@ -637,7 +639,7 @@
     if (next && !eta.landed) {
       var line = 'Next postcard from <b>' + esc(next.from) + '</b> in <b>' + km(next.km - res.cumKm) + ' km</b> ;)';
       h += next.teaser
-        ? '<div class="teaser"><span class="teaser-pic" aria-hidden="true"><img src="' + esc(next.teaser) + '" alt=""></span><p class="nextcard">' + line + '<span class="small muted">There\'s a photo inside. No peeking ;)</span></p></div>'
+        ? '<div class="teaser"><span class="teaser-pol" aria-hidden="true"><i></i></span><p class="nextcard">' + line + '<span class="small muted">There\'s a photo inside. No peeking ;)</span></p></div>'
         : '<p class="nextcard">' + line + '</p>';
     }
     return h;
@@ -825,7 +827,7 @@
     var cards = S.state.postcards, got = cards.filter(function (c) { return c.delivered; });
     var h = '<div class="section-h"><h2>Postcard box</h2><span class="small muted">' + got.length + ' of ' + cards.length + '</span></div><div class="box">';
     cards.forEach(function (c) {
-      if (c.delivered) h += '<button class="thumb" data-act="postcard" data-id="' + esc(c.id) + '">' + (c.photo ? '<img src="' + esc(c.photo) + '" alt="" loading="lazy">' : frontArt(c, true)) + '<span>' + esc(c.place) + '</span>' +
+      if (c.delivered) h += '<button class="thumb" data-act="postcard" data-id="' + esc(c.id) + '">' + frontArt(c, true) + '<span>' + esc(c.place) + '</span>' +
         (c.replyEmoji || c.replyText ? '<i class="rbadge" aria-label="Replied">' + esc(c.replyEmoji || '💬') + '</i>' : '') + '</button>';
       else h += '<div class="thumb sealed">Sealed ;)<br>' + km(c.km) + ' km</div>';
     });
@@ -1616,12 +1618,15 @@
     var c = S.state.postcards.filter(function (x) { return x.id === id; })[0];
     if (!c) return;
     var name = S.state.settings.herName || 'you';
+    var dev = c.photo && !S.seen['dev:' + c.id] ? ' undev' : '';
+    var pol = c.photo ? '<span class="pol-spacer" aria-hidden="true"></span><button class="pol' + dev + '" data-act="polaroid" aria-label="See the photo' + (c.caption ? ': ' + esc(c.caption) : '') + '">' +
+      '<i class="tape" aria-hidden="true"></i><span class="pol-ph"><img src="' + esc(c.photo) + '" alt=""></span><span class="pol-cap">' + esc(c.caption || '') + '</span></button>' : '';
     var h = '<div class="postcard-modal"><div class="pc-wrap"><div class="pc" id="pc" data-act="flip" role="button" tabindex="0" aria-label="Postcard, tap to turn over">' +
-      '<div class="pc-face pc-front">' + (c.photo ? '<img src="' + esc(c.photo) + '" alt="' + esc(c.place) + '">' : frontArt(c)) +
+      '<div class="pc-face pc-front">' + frontArt(c) +
       '<div class="cap"><small>Greetings from ' + esc(c.from) + '</small>' + esc(c.place) + '</div></div>' +
-      '<div class="pc-face pc-back"><div class="inner"><div class="msg">' + esc(c.message || '') + '</div><div class="side">' + stampSVG() + postmarkSVG(c.from, c.deliveredOn) +
+      '<div class="pc-face pc-back"><div class="inner' + (c.photo ? ' haspol' : '') + '"><div class="msg">' + pol + esc(c.message || '') + '</div><div class="side">' + stampSVG() + postmarkSVG(c.from, c.deliveredOn) +
       '<div class="addr">To ' + esc(name) + ',<br>from ' + esc(c.over) + '</div></div></div></div></div></div>' +
-      '<p class="pc-hint" id="pcHint">Tap the card to turn it over</p>' + (c.delivered ? '<div class="pcreply" id="pcReply">' + pcReplyHTML(c, false) + '</div>' : '') +
+      '<p class="pc-hint" id="pcHint">' + (c.photo ? 'Turn it over, something\'s inside ;)' : 'Tap the card to turn it over') + '</p>' + (c.delivered ? '<div class="pcreply" id="pcReply">' + pcReplyHTML(c, false) + '</div>' : '') +
       '<button class="btn ghost wide pc-close" data-act="closeModal">Close</button></div>';
     S.pcId = c.id; S.pcEmoji = c.replyEmoji || '';
     showModal(h, true);
@@ -1629,6 +1634,19 @@
       S.seen['pc:' + c.id] = 1;
       store.set('seen', S.seen);
       enqueue({ type: 'postcardOpened', id: c.id });
+    }
+  }
+
+  /** Turns the postcard over; the first time, the polaroid on the back develops. */
+  function flipCard(t) {
+    t.classList.toggle('flipped');
+    var hint = document.getElementById('pcHint');
+    if (hint) hint.textContent = !t.classList.contains('flipped') ? 'Tap the card to turn it over'
+      : t.querySelector('.pol') ? 'Tap the photo to see it big' : 'Tap the card to see the front';
+    var undev = t.querySelector('.pol.undev');
+    if (undev && t.classList.contains('flipped') && !undev.classList.contains('dev')) {
+      setTimeout(function () { undev.classList.add('dev'); }, 650); // once the card has turned
+      S.seen['dev:' + S.pcId] = 1; store.set('seen', S.seen);
     }
   }
 
@@ -2206,12 +2224,21 @@
       case 'restAdd': restEnd = Math.max(restEnd, Date.now()) + 15000; break;
       case 'restSkip': stopRest(); break;
       case 'postcard': openPostcard(t.dataset.id); break;
-      case 'flip': {
-        t.classList.toggle('flipped');
-        var hint = document.getElementById('pcHint');
-        if (hint) hint.textContent = t.classList.contains('flipped') ? 'Tap the card to see the front' : 'Tap the card to turn it over';
+      case 'flip': flipCard(t); break;
+      case 'polaroid': {
+        var card = document.getElementById('pc');
+        if (card && !card.classList.contains('flipped')) { flipCard(card); break; } // tapped through the front: just turn it
+        var pc0 = S.state.postcards.filter(function (x) { return x.id === S.pcId; })[0];
+        var wrap = document.querySelector('.postcard-modal');
+        if (!pc0 || !wrap || document.getElementById('polBig')) break;
+        var big = document.createElement('div');
+        big.id = 'polBig'; big.className = 'pol-big'; big.setAttribute('data-act', 'polClose'); big.setAttribute('role', 'button'); big.setAttribute('aria-label', 'Close the photo');
+        big.innerHTML = '<div class="pol pol-l"><i class="tape" aria-hidden="true"></i><span class="pol-ph"><img src="' + esc(pc0.photo) + '" alt="' + esc(pc0.caption || pc0.place) + '"></span><span class="pol-cap">' + esc(pc0.caption || '') + '</span></div>';
+        wrap.appendChild(big);
+        requestAnimationFrame(function () { big.classList.add('on'); });
         break;
       }
+      case 'polClose': { var pb = document.getElementById('polBig'); if (pb) pb.remove(); break; }
       case 'closeModal': closeModal(); break;
       case 'cheerSeen': S.seen['ch:' + t.dataset.id] = 1; store.set('seen', S.seen); enqueue({ type: 'cheerSeen', id: t.dataset.id }); render(); break;
       case 'deload': enqueue({ type: 'deload', date: todayStr() }); render(); break;
@@ -2305,6 +2332,7 @@
   });
   document.addEventListener('keydown', function (ev) {
     if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.id === 'pc') { ev.preventDefault(); ev.target.click(); }
+    if (ev.key === 'Escape' && document.getElementById('polBig')) { document.getElementById('polBig').remove(); return; }
     if (ev.key === 'Escape' && !document.getElementById('modal').hidden) closeModal();
   });
   function closeModalSilently() { var m = document.getElementById('modal'); m.hidden = true; m.innerHTML = ''; }
