@@ -534,3 +534,101 @@ test('love milestones: 50, 100, 250 … and the daily email says when she passed
   assert.strictEqual(d.note.subject, '🎉 💗 Pinja sent you 3 hearts yesterday');
   assert.ok(d.note.body.startsWith('🎉 Pinja passed 50 hearts!\n\n3 hearts 💗 yesterday.'), d.note.body);
 });
+
+// ---------- the coach fixes or deletes a saved workout ----------
+const coachFix = (data, op, now) => C.applyOp(data, op, 'coach', now || '2026-12-01T10:00:00Z');
+
+test('edit and delete: only a workout that exists, never empty, never in the future', () => {
+  const data = newData();
+  doSession(data, '2026-11-23');
+  const sets = C.toEngineInput(data).sessions[0].sets;
+  for (const who of ['coach', 'athlete']) {
+    assert.throws(() => C.applyOp(data, { type: 'deleteSession', id: 'nope' }, who, '2026-12-01T10:00:00Z'), /no such workout/);
+    assert.throws(() => C.applyOp(data, { type: 'editSession', id: 'nope', sets }, who, '2026-12-01T10:00:00Z'), /no such workout/);
+    assert.throws(() => C.applyOp(data, { type: 'editSession', id: '2026-11-23', sets: sets.map(x => Object.assign({}, x, { done: false })) }, who, '2026-12-01T10:00:00Z'), /delete the workout instead/);
+    assert.throws(() => C.applyOp(data, { type: 'editSession', id: '2026-11-23', date: '2026-12-09', sets }, who, '2026-12-01T10:00:00Z'), /future/);
+  }
+});
+
+test('she can fix or delete her own workout too, and the coach gets a note saying what changed', () => {
+  const data = newData();
+  doSession(data, '2026-11-23');
+  doSession(data, '2026-11-27');
+  const sets = C.toEngineInput(data).sessions[0].sets;
+  const i = sets.findIndex(x => x.ex === 'back-squat' && x.set === 2), j = sets.findIndex(x => x.ex === 'lat-pulldown' && x.set === 3);
+  const fixed = sets.map((x, k) => k === i ? Object.assign({}, x, { kg: x.kg + 2.5, reps: 9 }) : k === j ? Object.assign({}, x, { done: false }) : x);
+  const out = C.applyOp(data, { type: 'editSession', id: '2026-11-23', date: '2026-11-22', sets: fixed }, 'athlete', '2026-12-01T10:00:00Z');
+  assert.ok(out.notify && /fixed her workout of 2026-11-23/.test(out.notify.subject), out.notify && out.notify.subject);
+  assert.ok(/Moved from 2026-11-23 to 2026-11-22/.test(out.notify.body), out.notify.body);
+  assert.ok(/Back squat set 2: .+ → 9 × /.test(out.notify.body), out.notify.body);
+  assert.ok(/Lat pulldown set 3: taken out/.test(out.notify.body), out.notify.body);
+  // nothing changed: no email
+  const again = C.toEngineInput(data).sessions.find(s => s.id === '2026-11-23');
+  assert.strictEqual(C.applyOp(data, { type: 'editSession', id: '2026-11-23', sets: again.sets }, 'athlete', '2026-12-01T10:00:00Z').notify, null);
+  // she deletes one: the coach hears about it
+  const del = C.applyOp(data, { type: 'deleteSession', id: '2026-11-27' }, 'athlete', '2026-12-01T10:00:00Z');
+  assert.ok(del.notify && /deleted a workout/.test(del.notify.subject) && /2026-11-27/.test(del.notify.body) && /km to LUX now/.test(del.notify.body), del.notify && del.notify.body);
+  assert.deepStrictEqual(result(data).sessions.map(s => s.id), ['2026-11-23']);
+});
+
+test('deleting a workout: its sets and reactions go, km and the Sheet columns after it recalculate', () => {
+  const data = newData();
+  doSession(data, '2026-11-23');
+  doSession(data, '2026-11-27');
+  C.applyOp(data, { type: 'react', sessionId: '2026-11-23', emoji: '🔥' }, 'coach', '2026-11-23T20:00:00Z');
+  const before = result(data);
+  assert.strictEqual(before.sessions.length, 2);
+  const out = coachFix(data, { type: 'deleteSession', id: '2026-11-23' });
+  const after = result(data);
+  assert.deepStrictEqual(after.sessions.map(s => s.id), ['2026-11-27']);
+  assert.strictEqual(after.sessions[0].day, 'B', 'the stored A/B of the other workout is kept');
+  assert.ok(after.cumKm < before.cumKm);
+  assert.ok(!data.sets.some(r => r.sessionId === '2026-11-23'));
+  assert.ok(!data.reactions.some(r => r.sessionId === '2026-11-23'));
+  assert.ok(out.writes.some(w => w.tab === 'Sessions' && w.kind === 'deleteWhere' && w.value === '2026-11-23'));
+  assert.ok(out.writes.some(w => w.tab === 'Sets' && w.kind === 'deleteWhere'));
+  assert.ok(out.writes.some(w => w.tab === 'Reactions' && w.kind === 'deleteWhere'));
+  // the Sheet's derived columns follow: the 27th is now the only workout, so its cumKm is its own km
+  const row = data.sessions.find(r => r.id === '2026-11-27');
+  assert.strictEqual(Number(row.cumKm), after.sessions[0].km);
+  assert.strictEqual(out.notify, null, 'no email for a coach fix');
+});
+
+test('editing a workout: a typo in the weight is fixed and the next goals follow; the date can move; other fields are kept', () => {
+  const data = newData();
+  doSession(data, '2026-11-23');
+  const raw = data.sessions[0];
+  raw.photo = 'drive-file-id'; raw.note = 'felt good';
+  const sets = C.toEngineInput(data).sessions[0].sets;
+  const pulldown = sets.filter(x => x.ex === 'lat-pulldown');
+  const fixed = sets.map(x => x.ex === 'lat-pulldown' && x.set === 1 ? Object.assign({}, x, { kg: 400 }) : x); // a typo: 400 kg
+  coachFix(data, { type: 'editSession', id: '2026-11-23', sets: fixed });
+  const typo = E.plan(result(data), '2026-11-27').items.find(it => it.exercise.id === 'lat-pulldown');
+  // fix it back: the plan returns to what the real weights give
+  coachFix(data, { type: 'editSession', id: '2026-11-23', sets });
+  const ok = E.plan(result(data), '2026-11-27').items.find(it => it.exercise.id === 'lat-pulldown');
+  assert.ok(typo.kg !== ok.kg || typo.targets.join() !== ok.targets.join(), 'the typo changed the next plan, the fix undid it');
+  assert.strictEqual(ok.kg, pulldown[0].kg);
+  // take a set out and move the date
+  const fewer = sets.map(x => x.ex === 'lat-pulldown' && x.set === 3 ? Object.assign({}, x, { done: false }) : x);
+  coachFix(data, { type: 'editSession', id: '2026-11-23', date: '2026-11-24', sets: fewer });
+  const s = result(data).sessions[0];
+  assert.strictEqual(s.date, '2026-11-24');
+  assert.strictEqual(s.done, sets.filter(x => x.done).length - 1);
+  assert.strictEqual(data.sets.filter(r => r.sessionId === '2026-11-23').length, s.done);
+  assert.ok(data.sets.every(r => r.sessionId !== '2026-11-23' || r.date === '2026-11-24'));
+  const row = data.sessions[0];
+  assert.strictEqual(row.photo, 'drive-file-id');
+  assert.strictEqual(row.note, 'felt good');
+  assert.strictEqual(row.day, 'A');
+});
+
+test('saving a workout again keeps its photo link', () => {
+  const data = newData();
+  const { out } = doSession(data, '2026-11-23');
+  data.sessions[0].photo = 'drive-file-id';
+  const s = C.toEngineInput(data).sessions[0];
+  C.applyOp(data, { type: 'saveSession', session: { id: s.id, date: s.date, day: s.day, effort: 3, sets: s.sets } }, 'athlete', '2026-11-23T18:05:00Z');
+  assert.strictEqual(data.sessions[0].photo, 'drive-file-id');
+  assert.ok(out.notify);
+});
