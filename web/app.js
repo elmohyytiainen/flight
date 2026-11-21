@@ -127,6 +127,11 @@
       var data = { settings: settings, slots: C.seedSlots(), exercises: C.seedExercises(), choices: [], sessions: [], sets: [],
         overrides: [], stamps: [], postcards: C.seedPostcards(), cheers: [], reactions: [],
         moods: [{ role: 'coach', mood: 'missing', note: 'Counting the days', at: new Date(Date.now() - 2 * 3600e3).toISOString() }] };
+      // her mood, which Elmo has seen and replied to (her view shows the reply tag and the seen receipt)
+      var hm = new Date(Date.now() - 3600e3).toISOString();
+      data.moods.push({ role: 'athlete', mood: 'thinking', note: '', at: hm });
+      data.moodReplies = [{ to: 'athlete', moodAt: hm, mood: 'thinking', reply: 'Thinking of you too 🥰', by: 'coach', at: new Date(Date.now() - 40 * 60e3).toISOString() }];
+      settings.coachSeen = JSON.stringify({ moodSeen: hm, moodSeenAt: new Date(Date.now() - 45 * 60e3).toISOString() });
       data.postcards[0].message = 'Example note: this is where your coach writes to you.\n\nYou already did the hardest part: you started. Proud of you!';
       data.postcards[1].message = 'Example note from Salo. Keep the hips high and the chin tucked :)';
       data.postcards[2].message = 'Example note. This is where a childhood photo from here goes :)';
@@ -256,7 +261,10 @@
       st.sessions.push({ id: s.id, date: s.date, day: s.day, minutes: s.minutes, effort: s.effort, note: s.note, savedAt: nowIso(), sets: s.sets });
     } else if (op.type === 'mood') {
       st.moods = st.moods || { mine: null, theirs: null };
-      st.moods.mine = op.mood ? { mood: op.mood, note: (op.note || '').trim().slice(0, 80), at: nowIso() } : null;
+      st.moods.mine = op.mood ? { mood: op.mood, note: (op.note || '').trim().slice(0, 80), at: nowIso(), seen: false, seenAt: '', reply: null } : null;
+    } else if (op.type === 'moodReply') {
+      var tmood = st.moods && st.moods.theirs;
+      if (tmood && tmood.at === op.moodAt && !tmood.replied) tmood.replied = { text: moodOf(tmood).reply, at: nowIso() };
     } else if (op.type === 'seen') {
       st.seen = st.seen || {};
       for (var sk in op.set) st.seen[sk] = op.set[sk];
@@ -328,6 +336,12 @@
     store.set('seen', S.seen);
     if (localOnly(k)) return;
     var set = {}; set[k] = S.seen[k];
+    enqueue({ type: 'seen', set: set });
+  }
+  /** Several marks in one go (one op), e.g. the mood seen and when. */
+  function markSeenAll(set) {
+    for (var k in set) S.seen[k] = set[k];
+    store.set('seen', S.seen);
     enqueue({ type: 'seen', set: set });
   }
 
@@ -551,12 +565,18 @@
     // no photo yet: a pink ring and a small tag until she opens the photo sheet once
     var nudge = !S.state.settings[me === 'coach' ? 'coachPhoto' : 'herPhoto'] && !S.seen.photohint;
     var mine = moodNow('mine'), theirs = moodNow('theirs'), fresh = theirs && S.seen.moodSeen !== theirs.at;
-    // one tag at a time: a new mood from the other goes first (until the mood sheet has been opened once), then the photo tag, then "Share your mood"
-    var mtag = S.seen.moodhint ? '' : fresh ? esc(peerName()) + (me === 'coach' ? ' shared her mood :)' : ' shared his mood :)') : nudge ? '' : 'Share your mood :)';
+    var reply = mine && mine.reply && S.seen.moodReplySeen !== mine.reply.at ? mine.reply : null;
+    // "Share your mood": until the mood sheet has been opened once, then once a day from 7:00 when you have no mood up
+    var share = !mine && (!S.seen.moodhint || (S.seen.moodNudge !== todayStr() && new Date().getHours() >= 7));
+    // one tag at a time: their reply to your mood, a new mood from them (until the mood sheet has been opened once),
+    // then the photo tag, then "Share your mood"
+    var mtag = reply ? esc(peerName()) + ': ' + esc(reply.text)
+      : fresh && !S.seen.moodhint ? esc(peerName()) + (me === 'coach' ? ' shared her mood :)' : ' shared his mood :)')
+      : nudge ? '' : share ? 'Share your mood :)' : '';
     if (mtag) nudge = false;
     return '<header class="top"><div class="who"><h1>' + esc(title) + '</h1><div class="small muted">' + esc(sub) + '</div></div>' +
       '<div class="topr">' + syncHTML() +
-      '<button class="avbtn peer' + (fresh ? ' fresh' : '') + '" data-act="moods" aria-label="' + esc(peerName()) + (theirs ? ' ' + esc(moodOf(theirs).say) : '') + '. Moods">' +
+      '<button class="avbtn peer' + (fresh || reply ? ' fresh' : '') + '" data-act="moods" aria-label="' + esc(peerName()) + (theirs ? ' ' + esc(moodOf(theirs).say) : '') + (reply ? '. Replied to your mood' : '') + '. Moods">' +
       '<span class="avwrap">' + avatarHTML(peer, 'av-32') + (theirs ? '<i class="avbadge">' + moodOf(theirs).e + '</i>' : '') + '</span>' +
       (mtag ? '<span class="phint">' + mtag + '</span>' : '') + '</button>' +
       '<button class="avbtn' + (nudge ? ' nudge' : '') + '" data-act="profile" aria-label="Your profile photo"><span class="avwrap">' + avatarHTML(me, 'av-44') +
@@ -564,36 +584,67 @@
       (nudge ? '<span class="phint">Add your photo :)</span>' : '') + '</button></div></header>';
   }
 
-  // ---------- moods: each sets their own, the other sees it in the top bar for 12 hours ----------
+  // ---------- moods: each sets their own, the other sees it in the top bar for that mood's hours ----------
   function moodList() { return (window.FlightCore && window.FlightCore.MOODS) || []; }
-  function moodOf(m) { return moodList().filter(function (x) { return x.id === m.mood; })[0] || { e: '🙂', label: m.mood, say: 'shared a mood' }; }
-  /** 'mine' or 'theirs', or null when unset, cleared or older than MOOD_HOURS. */
+  function moodOf(m) { return moodList().filter(function (x) { return x.id === m.mood; })[0] || { e: '🙂', label: m.mood, say: 'shared a mood', reply: '❤️' }; }
+  function moodHours(id) { return moodOf({ mood: id }).hours || (window.FlightCore && window.FlightCore.MOOD_HOURS) || 12; }
+  /** 'mine' or 'theirs', or null when unset, cleared or older than that mood's hours. */
   function moodNow(which) {
-    var m = S.state.moods && S.state.moods[which], h = (window.FlightCore && window.FlightCore.MOOD_HOURS) || 12;
+    var m = S.state.moods && S.state.moods[which];
     if (!m || !m.mood || !m.at) return null;
-    return Date.now() - Date.parse(m.at) < h * 3600e3 ? m : null;
+    return Date.now() - Date.parse(m.at) < moodHours(m.mood) * 3600e3 ? m : null;
   }
   function peerName() { return role() === 'coach' ? (S.state.settings.herName || 'Her') : who(); }
-  function moodTime(at) {
-    var d = new Date(at), t = pad(d.getHours()) + ':' + pad(d.getMinutes());
-    return localDate(d) === todayStr() ? 'since ' + t : 'since yesterday ' + t;
+  /** "16:44", "yesterday 16:44" or "tomorrow 04:44" on this phone's clock. */
+  function moodClock(d) {
+    d = d instanceof Date ? d : new Date(d);
+    var t = pad(d.getHours()) + ':' + pad(d.getMinutes()), day = localDate(d), td = todayStr();
+    return day === td ? t : day === E.addDays(td, -1) ? 'yesterday ' + t : day === E.addDays(td, 1) ? 'tomorrow ' + t : t;
   }
+  function moodTime(at) { return 'since ' + moodClock(at); }
+  function moodUntil(m) { return 'until ' + moodClock(new Date(Date.parse(m.at) + moodHours(m.mood) * 3600e3)); }
+  function hoursText(n) { return n + (n === 1 ? ' hour' : ' hours'); }
   function moodSheet(keepNote) {
     var mine = moodNow('mine'), theirs = moodNow('theirs'), name = peerName(), coach = role() === 'coach';
     if (S.moodPick === undefined) S.moodPick = mine ? mine.mood : '';
     var note = keepNote !== undefined ? keepNote : mine ? mine.note : '';
-    if (theirs && S.seen.moodSeen !== theirs.at) markSeen('moodSeen', theirs.at);
-    hintUsed('moodhint');
+    // opening the sheet: their mood is seen (and when, for their receipt), your reply tag and today's nudge are done
+    var mark = {};
+    if (theirs && S.seen.moodSeen !== theirs.at) { mark.moodSeen = theirs.at; mark.moodSeenAt = nowIso(); }
+    if (mine && mine.reply && S.seen.moodReplySeen !== mine.reply.at) mark.moodReplySeen = mine.reply.at;
+    if (S.seen.moodNudge !== todayStr()) mark.moodNudge = todayStr();
+    if (!S.seen.moodhint) mark.moodhint = 1;
+    if (Object.keys(mark).length) markSeenAll(mark);
+    var tm = theirs && moodOf(theirs);
     var h = '<h2>Moods</h2><div class="moodpeer"><span class="avwrap">' + avatarHTML(coach ? 'her' : 'coach', 'av-56') +
-      (theirs ? '<i class="avbadge">' + moodOf(theirs).e + '</i>' : '') + '</span><div>' +
-      (theirs ? '<b>' + esc(name) + ' ' + esc(moodOf(theirs).say) + '</b>' + (theirs.note ? '<p>“' + esc(theirs.note) + '”</p>' : '') +
-        '<span class="small muted">' + esc(moodTime(theirs.at)) + '</span>'
+      (theirs ? '<i class="avbadge">' + tm.e + '</i>' : '') + '</span><div>' +
+      (theirs ? '<b>' + esc(name) + ' ' + esc(tm.say) + '</b>' + (theirs.note ? '<p>“' + esc(theirs.note) + '”</p>' : '') +
+        '<span class="small muted">' + esc(moodTime(theirs.at)) + '</span>' +
+        (theirs.replied
+          ? '<span class="moodsent">' + IC.check + 'You replied “' + esc(theirs.replied.text) + '”</span>'
+          : '<button class="moodreply" data-act="moodReply">' + esc(tm.reply) + '</button>')
         : '<b>' + esc(name) + '</b><p class="small muted">No mood shared right now.</p>') + '</div></div>';
-    h += '<h3 class="moodh">Your mood</h3><div class="moodgrid">' + moodList().map(function (m) {
+    h += '<h3 class="moodh">Your mood</h3>';
+    if (mine) {
+      // what you have up now: how long it stays, whether they have seen it, and their reply
+      var mm = moodOf(mine);
+      h += '<div class="moodme"><div class="mmnow"><span class="mme">' + mm.e + '</span><div><b>' + esc(mm.label) + '</b>' +
+        '<span class="small muted"> · ' + esc(moodUntil(mine)) + '</span>' +
+        (mine.note ? '<span class="mmnote">“' + esc(mine.note) + '”</span>' : '') +
+        (mine.seen ? '<span class="mmseen">' + IC.check + esc(name) + ' saw it' + (mine.seenAt ? ' ' + esc(moodClock(mine.seenAt)) : '') + '</span>'
+          : '<span class="mmseen no">Not seen yet</span>') +
+        '</div></div>' +
+        (mine.reply ? '<div class="mmreply ' + (coach ? 'her' : 'his') + '">' + avatarHTML(coach ? 'her' : 'coach', 'av-24') +
+          '<span><b>' + esc(mine.reply.text) + '</b><small>' + esc(moodClock(mine.reply.at)) + '</small></span></div>' : '') +
+        '</div>';
+    }
+    h += '<div class="moodgrid">' + moodList().map(function (m) {
       return '<button class="moodchip' + (S.moodPick === m.id ? ' on' : '') + '" data-act="moodPick" data-v="' + m.id + '"><span>' + m.e + '</span>' + esc(m.label) + '</button>';
     }).join('') + '</div>' +
       '<input class="field" id="moodNote" maxlength="80" placeholder="A few words (optional)" value="' + esc(note) + '">' +
-      '<p class="small muted moodfoot">Shows on ' + esc(coach ? (S.state.settings.herName || 'her') : who()) + '\'s screen for 12 hours, or until you change it.</p>' +
+      '<p class="small muted moodfoot">' + (S.moodPick
+        ? moodOf({ mood: S.moodPick }).e + ' shows on ' + esc(name) + '\'s screen for ' + hoursText(moodHours(S.moodPick)) + ', or until you change it.'
+        : 'Pick one to share it with ' + esc(name) + '.') + '</p>' +
       '<div class="row"><button class="btn ghost" data-act="closeModal">Close</button><button class="btn taxi" data-act="moodSave">Share my mood</button></div>' +
       (mine ? '<button class="linkbtn discard" data-act="moodClear">Clear my mood</button>' : '');
     showModal(h, false, true);
@@ -2331,6 +2382,15 @@
         break;
       }
       case 'moodClear': enqueue({ type: 'mood', mood: '' }); closeModal(); break;
+      case 'moodReply': {
+        // one tap answers their mood ("Missing you too 🥺"); the sheet stays open and shows it as sent
+        var rth = moodNow('theirs'), rnote = document.getElementById('moodNote');
+        if (!rth || rth.replied) break;
+        enqueue({ type: 'moodReply', moodAt: rth.at });
+        loveToast(moodOf(rth).e + ' Reply sent to ' + peerName());
+        moodSheet(rnote ? rnote.value : undefined);
+        break;
+      }
       case 'addExtra': hintUsed('flighthint'); S.xPick = null; S.xQuery = ''; extraSheet(); break;
       case 'xPick': {
         var lx = lastExtra(t.dataset.id);
