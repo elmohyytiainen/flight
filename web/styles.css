@@ -919,15 +919,35 @@ body.hasfab #app { padding-bottom: calc(150px + var(--safe-b)); }
 .avbtn.peer.fresh .av { box-shadow: 0 0 0 2px #fff, 0 0 0 4.5px var(--pink); }
 .topr .avwrap .avbadge { width: 20px; height: 20px; font-size: 12px; right: -5px; bottom: -3px; }
 .topr .avbtn:not(.peer) .avwrap .avbadge { width: 22px; height: 22px; font-size: 13px; }
-.moodpeer { display: flex; align-items: center; gap: 16px; padding: 14px; margin: 6px 0 4px; border-radius: 18px; background: var(--pink-soft); }
+.moodpeer { display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin: 6px 0 4px; border-radius: 18px; background: var(--pink-soft); }
 .moodpeer .avwrap .avbadge { width: 26px; height: 26px; font-size: 16px; }
 .moodpeer b { display: block; font-size: 16px; }
 .moodpeer p { margin: 2px 0; }
-.moodh { margin: 16px 0 8px; }
-.moodgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.moodchip { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px 8px; border: 0; border-radius: 14px;
+.moodh { margin: 14px 0 8px; }
+.moodgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.moodchip { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 7px 4px 6px; border: 0; border-radius: 14px;
   background: var(--steel); color: var(--ink); font: 500 12px/1.2 var(--text); cursor: pointer; }
-.moodchip span { font-size: 24px; line-height: 1.1; }
+.moodchip span { font-size: 21px; line-height: 1.1; }
+/* the one-tap reply to their mood, and "You replied" once sent */
+.moodreply { display: block; margin-top: 8px; padding: 7px 14px; border: 0; border-radius: 999px; background: #fff; color: var(--pink);
+  font: 600 13px/1.2 var(--text); box-shadow: 0 0 0 1.5px var(--pink), 0 3px 10px -4px color-mix(in srgb, var(--pink) 60%, transparent); cursor: pointer; }
+.moodreply:active { transform: scale(.97); }
+.moodsent, .mmseen { display: flex; align-items: center; gap: 4px; }
+.moodsent { margin-top: 6px; font-size: 13px; font-weight: 500; color: var(--pink); }
+.moodsent svg, .mmseen svg { width: 14px; height: 14px; flex: none; stroke: currentColor; }
+.mmseen { font-size: 13px; color: var(--go); font-weight: 500; }
+.mmseen.no { color: var(--ink-2); font-weight: 400; }
+/* your own mood: how long it stays up, seen or not, and their reply */
+.moodme { margin: 0 0 8px; padding: 9px 12px; border-radius: 16px; background: var(--steel); }
+.mmnow { display: flex; align-items: center; gap: 10px; }
+.mme { font-size: 24px; line-height: 1; flex: none; }
+.mmnow b { font-size: 14px; }
+.mmnote { display: block; font-size: 13px; color: var(--ink-2); }
+.mmreply { display: flex; align-items: center; gap: 8px; margin-top: 7px; padding: 5px 10px; border-radius: 14px 14px 14px 4px; background: #fff; }
+.mmreply.his { box-shadow: inset 3px 0 0 var(--taxi); }
+.mmreply.her { box-shadow: inset 3px 0 0 var(--pink); }
+.mmreply b { font-size: 14px; font-weight: 600; }
+.mmreply small { margin-left: 6px; font-size: 12px; color: var(--ink-2); }
 .moodchip.on { background: #fff; box-shadow: inset 0 0 0 2px var(--pink); color: var(--pink); }
 #moodNote { width: 100%; margin-top: 12px; }
 .moodfoot { margin: 8px 0 0; }

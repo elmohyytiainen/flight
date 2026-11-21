@@ -691,16 +691,61 @@ test('moods: each sets their own, the other sees it; the latest wins, empty clea
   assert.strictEqual(set('athlete', 'happy', '', '2026-11-28T10:00:00Z').notify, null, 'everyday moods: no email');
   assert.strictEqual(set('coach', 'stressed', 'long day', '2026-11-28T11:00:00Z').notify, null, 'his moods never email');
   const her = C.buildState(data, 'athlete', '2026-11-28').moods, his = C.buildState(data, 'coach', '2026-11-28').moods;
-  assert.deepStrictEqual(her.mine, { mood: 'happy', note: '', at: '2026-11-28T10:00:00Z' });
-  assert.deepStrictEqual(her.theirs, { mood: 'stressed', note: 'long day', at: '2026-11-28T11:00:00Z' });
-  assert.deepStrictEqual(his.theirs, her.mine);
+  assert.deepStrictEqual(her.mine, { mood: 'happy', note: '', at: '2026-11-28T10:00:00Z', seen: false, seenAt: '', reply: null });
+  assert.deepStrictEqual(her.theirs, { mood: 'stressed', note: 'long day', at: '2026-11-28T11:00:00Z', replied: null });
+  assert.deepStrictEqual([his.theirs.mood, his.theirs.note, his.theirs.at], [her.mine.mood, her.mine.note, her.mine.at]);
   set('athlete', '', 'ignored', '2026-11-28T12:00:00Z');
   assert.strictEqual(C.buildState(data, 'coach', '2026-11-28').moods.theirs, null, 'cleared');
   assert.ok(set('athlete', 'hug', '', '2026-11-28T13:00:00Z').notify, 'after a clear, a heads-up mood emails again');
   assert.throws(() => set('athlete', 'grumpy', '', '2026-11-28T14:00:00Z'), /invalid mood/);
-  assert.ok(/🌶️ .+ is in the mood/.test(set('athlete', 'spicy', '', '2026-11-28T15:00:00Z').notify.subject));
-  assert.deepStrictEqual(C.MOODS.map(m => m.e), ['😊', '🥺', '🤗', '🌶️', '💪', '😌', '😴', '🤯', '🤒']);
-  assert.ok(C.MOODS.length === 9 && C.MOOD_HOURS === 12);
+  const spicy = set('athlete', 'spicy', '', '2026-11-28T15:00:00Z').notify;
+  assert.ok(/🌶️ .+ is in the mood/.test(spicy.subject) && /3 hours/.test(spicy.body), 'the email says the mood\'s own hours');
+});
+
+test('moods v2: twelve moods in grid order, each with its own reply and hours; heads-up moods unchanged plus 📞', () => {
+  assert.deepStrictEqual(C.MOODS.map(m => m.e), ['😊', '🥰', '🥺', '🤗', '🌶️', '📞', '💪', '😌', '🥂', '😴', '🤯', '🤒']);
+  assert.deepStrictEqual(C.MOODS.filter(m => m.mail).map(m => m.id), ['missing', 'hug', 'spicy', 'call', 'stressed', 'sick']);
+  C.MOODS.forEach(m => assert.ok(m.reply && m.hours > 0 && m.say && m.label, m.id));
+  const hours = Object.fromEntries(C.MOODS.map(m => [m.id, m.hours]));
+  assert.deepStrictEqual([hours.call, hours.spicy, hours.sleepy, hours.sick, hours.happy], [2, 3, 10, 24, 12]);
+  const data = newData();
+  const out = C.applyOp(data, { type: 'mood', mood: 'call', note: 'after 8?' }, 'athlete', '2026-11-28T18:00:00Z');
+  assert.ok(/📞 .+ would love a call/.test(out.notify.subject) && /2 hours/.test(out.notify.body) && /Calling soon/.test(out.notify.body), out.notify.body);
+});
+
+test('mood replies: one tap answers the other\'s current mood, once; she emails Elmo; both see it', () => {
+  const data = newData();
+  const mood = (role, m, at) => C.applyOp(data, { type: 'mood', mood: m, note: m === 'missing' ? 'counting the days' : '' }, role, at);
+  const reply = (role, moodAt, at) => C.applyOp(data, { type: 'moodReply', moodAt }, role, at);
+  assert.throws(() => reply('coach', '2026-11-28T08:00:00Z', '2026-11-28T08:30:00Z'), /no mood to reply to/);
+  mood('athlete', 'missing', '2026-11-28T08:00:00Z');
+  assert.throws(() => reply('coach', '2026-11-28T07:00:00Z', '2026-11-28T08:30:00Z'), /that mood has changed/);
+  const his = reply('coach', '2026-11-28T08:00:00Z', '2026-11-28T08:30:00Z');
+  assert.ok(his.writes.some(w => w.tab === 'MoodReplies' && w.kind === 'append' && w.row.reply === 'Missing you too 🥺' && w.row.to === 'athlete'));
+  assert.strictEqual(his.notify, null, 'his replies never email');
+  assert.strictEqual(reply('coach', '2026-11-28T08:00:00Z', '2026-11-28T08:31:00Z').writes.length, 0, 'once per mood');
+  assert.deepStrictEqual(C.buildState(data, 'athlete', '2026-11-28').moods.mine.reply, { text: 'Missing you too 🥺', at: '2026-11-28T08:30:00Z' });
+  assert.deepStrictEqual(C.buildState(data, 'coach', '2026-11-28').moods.theirs.replied, { text: 'Missing you too 🥺', at: '2026-11-28T08:30:00Z' });
+  // her reply to his mood: an email to Elmo
+  mood('coach', 'hug', '2026-11-28T09:00:00Z');
+  const hers = reply('athlete', '2026-11-28T09:00:00Z', '2026-11-28T09:05:00Z');
+  assert.ok(/🤗 .+ replied: Sending a big hug 🤗/.test(hers.notify.subject) && /Need a hug/.test(hers.notify.body), hers.notify.subject);
+  // a new mood starts fresh: no reply yet, and the old reply doesn't carry over
+  mood('athlete', 'missing', '2026-11-28T10:00:00Z');
+  assert.strictEqual(C.buildState(data, 'athlete', '2026-11-28').moods.mine.reply, null);
+  assert.strictEqual(C.buildState(data, 'coach', '2026-11-28').moods.theirs.replied, null);
+});
+
+test('mood seen receipt: the other opening the sheet while the mood is up shows as seen, with the time', () => {
+  const data = newData();
+  C.applyOp(data, { type: 'mood', mood: 'sleepy' }, 'athlete', '2026-11-28T21:00:00Z');
+  assert.strictEqual(C.buildState(data, 'athlete', '2026-11-28').moods.mine.seen, false);
+  C.applyOp(data, { type: 'seen', set: { moodSeen: '2026-11-28T21:00:00Z', moodSeenAt: '2026-11-28T21:12:00Z' } }, 'coach', '2026-11-28T21:12:00Z');
+  const mine = C.buildState(data, 'athlete', '2026-11-28').moods.mine;
+  assert.deepStrictEqual([mine.seen, mine.seenAt], [true, '2026-11-28T21:12:00Z']);
+  assert.strictEqual(C.buildState(data, 'coach', '2026-11-28').moods.mine, null, 'his own: none set');
+  C.applyOp(data, { type: 'mood', mood: 'happy' }, 'athlete', '2026-11-29T07:30:00Z');
+  assert.strictEqual(C.buildState(data, 'athlete', '2026-11-29').moods.mine.seen, false, 'a new mood is unseen again');
 });
 
 test('answer reactions: 🫶 replaces ❤️, plus 🤔 and 🫢', () => {
